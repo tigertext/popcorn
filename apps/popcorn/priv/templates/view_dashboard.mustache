@@ -102,6 +102,22 @@
                       <h1>Alerts</h1>
                     </header>
                   </a>
+                  <table class="table table-striped full-section table-hover">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Event Count</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {{#alerts}}
+                        <tr>
+                          <td>{{name}}</td>
+                          <td>{{count}}</td>
+                        </tr>
+                      {{/alerts}}
+                    </tbody>
+                  </table>
                 </section>
 
                 <!-- Nodes
