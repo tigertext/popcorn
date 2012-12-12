@@ -22,14 +22,18 @@ try_start_authed_session(IP_Address, Username, Password) ->
     end.
 
 is_session_authed_and_valid(Req) ->
-    {Session_Key, _} = cowboy_req:cookie(<<"popcorn-session-key">>, Req),
-    case Session_Key of
-        undefined -> false;
-        _         -> io:format("Session_Key = ~p\n", [Session_Key]),
-                     case ets:lookup(current_connected_users, Session_Key) of
-                         [] -> false;
-                         _  -> true
-                     end
+    try cowboy_req:cookie(<<"popcorn-session-key">>, Req) of
+        {Session_Key, _} ->
+            case Session_Key of
+                undefined -> false;
+                _         -> io:format("Session_Key = ~p\n", [Session_Key]),
+                             case ets:lookup(current_connected_users, Session_Key) of
+                                 [] -> false;
+                                 _  -> true
+                             end
+            end
+    catch
+        _:_ -> false
     end.
 
 return_404(Req, State) ->
