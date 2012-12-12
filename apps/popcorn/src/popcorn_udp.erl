@@ -31,10 +31,9 @@ start_link() ->
 %% ------------------------------------------------------------------
 -record(state, {socket}).
 
-init(Params) ->
+init(_) ->
     {ok, Udp_Listen_Port} = application:get_env(popcorn, udp_listen_port),
     {ok, Socket} = gen_udp:open(Udp_Listen_Port, [binary, {active, once}, {recbuf, 524288}]),
-
     {ok, #state{socket = Socket}}.
 
 handle_call(_Request, _From, State) ->
@@ -46,6 +45,8 @@ handle_cast(_Msg, State) ->
 
 handle_info({udp, Socket, _Host, _Port, Bin}, State) ->
     {Popcorn_Node, Log_Message} = decode_protobuffs_message(Bin),
+
+    safe_notify({triage_event, Popcorn_Node, Log_Message}),
 
     %% create the node fsm, if necessary
     case ets:select_count(current_nodes, [{{'$1', '$2'}, [{'=:=', '$1', Popcorn_Node#popcorn_node.node_name}], [true]}]) of
@@ -61,7 +62,7 @@ handle_info({udp, Socket, _Host, _Port, Bin}, State) ->
         [{_, Running_Pid}] -> gen_fsm:send_event(Running_Pid, {log_message, Popcorn_Node, Log_Message})
     end,
 
-    %%Tags = get_tags(binary_to_list(Message)),
+   % _Tags = get_tags(binary_to_list(Message)),
 
     inet:setopts(Socket, [{active, once}]),
     {noreply, State};
@@ -79,14 +80,14 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 
-get_tags(Message) ->
-    Tags_List = lists:filter(fun(Word) ->
-          string:substr(Word, 1, 1) =:= "#"
-      end, string:tokens(Message, " ")),
-    Cleaned_Tags = lists:map(fun(Word) ->
-          string:substr(Word, 2, length(Word) - 1)
-      end, Tags_List),
-    string:join(Cleaned_Tags, ",").
+%get_tags(Message) ->
+%    Tags_List = lists:filter(fun(Word) ->
+%          string:substr(Word, 1, 1) =:= "#"
+%      end, string:tokens(Message, " ")),
+%    Cleaned_Tags = lists:map(fun(Word) ->
+%          string:substr(Word, 2, length(Word) - 1)
+%      end, Tags_List),
+%    string:join(Cleaned_Tags, ",").
 
 -spec decode_protobuffs_message(binary()) -> {#popcorn_node{}, #log_message{}}.
 decode_protobuffs_message(Encoded_Message) ->
@@ -100,16 +101,26 @@ decode_protobuffs_message(Encoded_Message) ->
     {{8, Line},  Rest8}        = protobuffs:decode(Rest7,           bytes),
     {{9, Pid},  <<>>}          = protobuffs:decode(Rest8,           bytes),
 
-    Popcorn_Node = #popcorn_node{node_name = Node,
-                                 role      = Node_Role,
-                                 version   = Node_Version},
+    Popcorn_Node = #popcorn_node{node_name = check_undefined(Node),
+                                 role      = check_undefined(Node_Role),
+                                 version   = check_undefined(Node_Version)},
 
     Log_Message  = #log_message{timestamp    = ?NOW,     %% this should be part of the protobuffs packet?
-                                severity     = Severity,
-                                message      = Message,
-                                log_module   = Module,
-                                log_function = Function,
-                                log_line     = Line,
-                                log_pid      = Pid},
+                                severity     = check_undefined(Severity),
+                                message      = check_undefined(Message),
+                                log_module   = check_undefined(Module),
+                                log_function = check_undefined(Function),
+                                log_line     = check_undefined(Line),
+                                log_pid      = check_undefined(Pid)},
 
     {Popcorn_Node, Log_Message}.
+
+check_undefined(<<>>) -> undefined;
+check_undefined(Value) -> Value.
+
+safe_notify(Event) ->
+    case whereis(triage_handler) of
+        undefined -> {error, no_error_triage};
+        Pid -> gen_event:sync_notify(Pid, Event)
+    end.
+    

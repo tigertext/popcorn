@@ -20,6 +20,9 @@ stop(_State) -> ok.
 init([]) ->
     io:format("CWD: ~p\n", [filename:absname("")]),
 
+    {ok, _} = gen_event:start({local, triage_handler}),
+    gen_event:add_handler(triage_handler, triage_handler, []),
+    
     io:format("Creating ets tables..."),
     ets:new(current_connected_users,  [named_table, set, public]),
     ets:new(current_nodes,            [named_table, set, public]),

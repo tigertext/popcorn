@@ -6,6 +6,7 @@
 -export([head_includes/0,
          node_count/0,
          event_count/0,
+         alerts/0,
          hashtag_count/0,
          mention_count/0,
          alert_count_today/0,
@@ -33,6 +34,14 @@ alert_count_today() -> 0.
 
 -spec alert_count() -> integer().
 alert_count() -> 0.
+
+alerts() ->
+    [begin
+        Node_Properties = [{'name',  Counter},
+                           {'count', Num}],
+        dict:from_list(Node_Properties)
+     end || {Counter, Num} <- gen_event:call(triage_handler, triage_handler, {alerts})
+    ].
 
 -spec known_nodes() -> list().
 known_nodes() ->
