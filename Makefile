@@ -1,7 +1,9 @@
 REBAR=./rebar
 CODE_DIR=apps/popcorn
 CT_LOG_DIR=apps/popcorn/ctest/*/logs
-SERVER := erl -pa apps/popcorn/ebin -pa deps/*/ebin -smp enable -s lager -setcookie POPCORN -config rel/files/sys.config ${ERL_ARGS}
+NODE?=popcorn
+CONFIG?=rel/files/sys.config
+SERVER := erl -pa apps/popcorn/ebin -pa deps/*/ebin -smp enable -s lager -setcookie POPCORN -config ${CONFIG} ${ERL_ARGS}
 
 all:
 	${REBAR} compile
@@ -47,9 +49,4 @@ xref:
 	${REBAR} skip_deps=true xref
 
 shell:
-		export FOLSOM_PORT=5566
-		if [ -n "${NODE}" ]; then ${SERVER} -name ${NODE}@`hostname` -boot start_sasl \
-			-s crypto -s popcorn; \
-		else ${SERVER} -name popcorn@`hostname` -boot start_sasl \
-			-s crypto -s popcorn; \
-		fi
+		FOLSOM_PORT=5566 ${SERVER} -name ${NODE}@`hostname` -boot start_sasl -s crypto -s popcorn
