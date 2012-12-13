@@ -37,11 +37,19 @@ alert_count() -> 0.
 
 alerts() ->
     [begin
-        Node_Properties = [{'name',  Counter},
-                           {'count', Num}],
+        [Counter_Name,Line] = string:tokens(Counter, ":"),
+        #alert{node=#popcorn_node{version=Version}} = gen_event:call(triage_handler, triage_handler, {data, "tt_support:220"}),
+        Node_Properties = [{'name',  Counter_Name},
+                           {'line',  Line},
+                           {'count', Num},
+                           {'node_name', list(Version)},
+                           {'node',  Num}],
         dict:from_list(Node_Properties)
      end || {Counter, Num} <- gen_event:call(triage_handler, triage_handler, {alerts})
     ].
+
+list(B) when is_binary(B) -> binary_to_list(B);
+list(_) -> "".
 
 -spec known_nodes() -> list().
 known_nodes() ->

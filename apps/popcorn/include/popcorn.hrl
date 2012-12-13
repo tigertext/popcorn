@@ -40,3 +40,4 @@
                       log_line     :: integer(),
                       log_pid      :: binary()}).
 
+-record(alert, {location, node, log}).
