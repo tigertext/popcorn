@@ -77,17 +77,17 @@ format_log_message(Log_Message) ->
                       "<label class='checkbox popover-label'><input type='checkbox'>Severity: " ++ binary_to_list(popcorn_util:number_to_severity(Log_Message#log_message.severity)) ++ "</label>" ++
                       "<label class='checkbox popover-label'><input type='checkbox'>Module: " ++ binary_to_list(opt(Log_Message#log_message.log_module, <<"Not set">>)) ++ "</label>" ++
                       "<label class='checkbox popover-label'><input type='checkbox'>Function: " ++ binary_to_list(opt(Log_Message#log_message.log_function, <<"Not set">>)) ++ "</label>" ++
-                      "<label class='checkbox popover-label'><input type='checkbox'>Line: " ++ binary_to_list(opt(Log_Message#log_message.log_line, <<"?">>)) ++ " in " ++ opt(binary_to_list(Log_Message#log_message.log_module), "not set") ++ "</label>" ++
+                      "<label class='checkbox popover-label'><input type='checkbox'>Line: " ++ binary_to_list(opt(Log_Message#log_message.log_line, <<"?">>)) ++ " in " ++ binary_to_list(opt(Log_Message#log_message.log_module, <<"not set">>)) ++ "</label>" ++
                       "<label class='checkbox popover-label'><input type='checkbox'>Pid: " ++ binary_to_list(opt(Log_Message#log_message.log_pid, <<"Not set">>)) ++ "</label><br />" ++
                       "<button class='btn btn-mini' type='button'>Apply Filter</button>",
 
   [{'time',             Formatted_Time},
    {'datetime',         Formatted_DateTime},
    {'find_more_html',   Find_More_Html},
-   {'log_module',       opt(binary_to_list(Log_Message#log_message.log_module), "Unknown")},
-   {'log_function',     opt(binary_to_list(Log_Message#log_message.log_function), "Unknown")},
-   {'log_line',         opt(binary_to_list(Log_Message#log_message.log_line), "??")},
-   {'log_pid',          opt(binary_to_list(Log_Message#log_message.log_pid), "?")},
+   {'log_module',       binary_to_list(opt(Log_Message#log_message.log_module, <<"Unknown">>))},
+   {'log_function',     binary_to_list(opt(Log_Message#log_message.log_function, <<"Unknown">>))},
+   {'log_line',         binary_to_list(opt(Log_Message#log_message.log_line, <<"??">>))},
+   {'log_pid',          binary_to_list(opt(Log_Message#log_message.log_pid, <<"?">>))},
    {'message_severity', binary_to_list(popcorn_util:number_to_severity(Log_Message#log_message.severity))},
    {'message',          binary_to_list(Log_Message#log_message.message)}].
 

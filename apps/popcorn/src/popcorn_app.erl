@@ -4,11 +4,24 @@
 
 %% Application callbacks
 -export([start/2, stop/1, init/1]).
+-export([load_known_nodes/0]).
 
 -include("include/popcorn.hrl").
 
 -define(MAX_RESTART,    5).
 -define(MAX_TIME,      60).
+
+load_known_nodes() ->
+    io:format("Reloading previously known nodes...\n"),
+    lists:foreach(fun(Known_Node) ->
+        io:format("Node: ~s\n", [binary_to_list(Known_Node)]),
+        Popcorn_Node = lists:nth(1, mnesia:dirty_read(known_nodes, Known_Node)),
+        {ok, Pid} = supervisor:start_child(node_sup, []),
+        ok = gen_fsm:sync_send_event(Pid, {deserialize_popcorn_node, Popcorn_Node}),
+        ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid})
+      end, mnesia:dirty_all_keys(known_nodes)),
+    io:format(" done!\n").
+
 
 %% ===================================================================
 %% Application callbacks
@@ -29,6 +42,20 @@ init([]) ->
     ets:new(current_log_streams,      [named_table, set, public, {keypos, #log_stream.stream_id}]),
     ets:new(current_roles,            [named_table, bag, public]),
     io:format(" done!\n"),
+
+    %% ensure we have a mnesia schema created
+    mnesia:stop(),
+    mnesia:create_schema([node()]),
+    mnesia:start(),
+
+    io:format("Ensuring required mnesia tables exist..."),
+    mnesia:create_table(known_nodes,  [{disc_copies, [node()]},
+                                       {record_name, popcorn_node},
+                                       {attributes,  record_info(fields, popcorn_node)}]),
+    io:format(" done!\n"),
+
+    %% ugh.  where can this move to?
+    timer:apply_after(1000, popcorn_app, load_known_nodes, []),
 
     io:format("Creating global metrics..."),
     folsom_metrics:new_counter(?TOTAL_EVENT_COUNTER),

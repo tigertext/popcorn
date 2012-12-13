@@ -132,9 +132,9 @@ handle_loop(Req, State) ->
         {cowboy_req, resp_sent} ->
             handle_loop(Req, State);
         {new_message, Log_Message} ->
-            Params = popcorn_util:format_log_message(Log_Message),
-            Json_Event = {struct, Params},
-            Event      = lists:flatten(mochijson:encode(Json_Event)),
+            Params      = popcorn_util:format_log_message(Log_Message),
+            Json_Event  = {struct, Params},
+            Event       = lists:flatten(mochijson:encode(Json_Event)),
             case cowboy_req:chunk(lists:flatten(["data: ", Event, "\n\n"]), Req) of
                 ok -> handle_loop(Req, State);
                 {error, closed} -> {ok, Req, State}
