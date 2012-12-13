@@ -45,8 +45,8 @@ handle_loop(Req, State) ->
             {ok, Req, State};
         {cowboy_req, resp_sent} ->
             handle_loop(Req, State);
-        {event_count, EventCount} ->
-            Json_Event  = {struct, [{<<"kind">>, <<"event_count">>}, {<<"data">>, EventCount}]},
+        {update_counters, NewCounters} ->
+            Json_Event  = {struct, [{<<"kind">>, <<"update_counters">>}, {<<"data">>, {struct, NewCounters}}]},
             Event       = lists:flatten(mochijson:encode(Json_Event)),
             case cowboy_req:chunk(lists:flatten(["data: ", Event, "\n\n"]), Req) of
                 ok -> handle_loop(Req, State);

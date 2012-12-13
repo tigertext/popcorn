@@ -25,7 +25,6 @@
     'STREAMING'/3]).
 
 -record(state, {stream                  :: #stream{},
-                event_count             :: non_neg_integer(),
                 idle_loops_disconnected :: integer()}).
 
 start_link() -> gen_fsm:start_link(?MODULE, [], []).
@@ -35,8 +34,7 @@ init([]) ->
 
     gen_fsm:start_timer(?IDLE_DISCONNECT_TIMER, idle_disconnect),
 
-    {ok, 'STARTING', #state{event_count             = folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER),
-                            idle_loops_disconnected = 0}}.
+    {ok, 'STARTING', #state{idle_loops_disconnected = 0}}.
 
 'STARTING'({connect, Stream}, State) ->
     %% add to the ets table
@@ -74,16 +72,15 @@ init([]) ->
 'STREAMING'(Other, _From, State) ->
     {noreply, undefined, 'STREAMING', State}.
 
-handle_event({new_message, _Message}, State_Name, State) ->
+handle_event({update_counters, _Counters} = Event, State_Name, State) ->
     Stream      = State#state.stream,
-    EventCount  = State#state.event_count + 1,
 
     case is_pid(Stream#stream.client_pid) of
         false -> ok;
-        true  -> Stream#stream.client_pid ! {event_count, EventCount}
+        true  -> Stream#stream.client_pid ! Event
     end,
 
-    {next_state, State_Name, State#state{event_count = EventCount}};
+    {next_state, State_Name, State};
 handle_event(Event, StateName, State)                 -> {stop, {StateName, undefined_event, Event}, State}.
 
 handle_sync_event(Event, _From, StateName, State)     -> {stop, {StateName, undefined_event, Event}, State}.

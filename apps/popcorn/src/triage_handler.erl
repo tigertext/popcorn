@@ -94,7 +94,18 @@ update_counter(Module,Line) ->
         true  -> ok
     end,
     folsom_metrics:notify({Day, {inc, 1}}),
-    folsom_metrics:notify({Counter, {inc, 1}}).
+    folsom_metrics:notify({Counter, {inc, 1}}),
+
+    Dashboard_Streams = ets:tab2list(current_dashboard_streams),
+    NewCounters =
+        [   {<<"event_count">>,       folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER)},
+            {<<"alert_count_today">>, folsom_metrics:get_metric_value(Day)},
+            {<<"alert_count">>,       folsom_metrics:get_metric_value("total_alerts")}],
+    lists:foreach(
+        fun(Dashboard_Stream) ->
+            gen_fsm:send_all_state_event(
+                Dashboard_Stream#stream.stream_pid, {update_counters, NewCounters})
+        end, Dashboard_Streams).
 
 new_metric(Counter) ->
     true = ets:insert(triage_error_keys, {key, Counter}),

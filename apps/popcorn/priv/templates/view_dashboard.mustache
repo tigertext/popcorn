@@ -84,11 +84,11 @@
                         <div><small>@mentions</small></div>
                     </div>
                     <div class="span2">
-                        <div class="kpi">{{alert_count_today}}</div>
+                        <div id="alert_count_today" class="kpi">{{alert_count_today}}</div>
                         <div><small>alerts today</small></div>
                     </div>
                     <div class="span2">
-                        <div class="kpi">{{alert_count}}</div>
+                        <div id="alert_count" class="kpi">{{alert_count}}</div>
                         <div><small>total alerts</small></div>
                     </div>
                   </div>
@@ -167,13 +167,14 @@
     <script type="text/javascript">
 
       var streamSource = new EventSource("/dashboard/stream/{{stream_id}}");
-      var event_count = {{event_count}};
 
       streamSource.onmessage = function(eventObject) {
         var event = JSON.parse(eventObject.data);
         switch(event.kind) {
-          case "event_count":
-            $('#event_count').text(event.data)
+          case "update_counters":
+            $('#event_count').text(event.data.event_count);
+            $('#alert_count_today').text(event.data.alert_count_today);
+            $('#alert_count').text(event.data.alert_count);
             break;
           default:
             console.log({"unknown event": event})
