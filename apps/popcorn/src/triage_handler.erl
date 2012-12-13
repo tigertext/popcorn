@@ -7,6 +7,7 @@
          handle_event/2,
          handle_info/2,
          terminate/2,
+         day_key/0,
          code_change/3
 ]).
 
@@ -29,6 +30,15 @@ handle_call({count, Counter}, State) ->
 %% gen_event:call(triage_handler, triage_handler, {total_alerts}).
 handle_call({total_alerts}, State) ->
     {ok, folsom_metrics:get_metric_value("total_alerts"), State};
+
+%% gen_event:call(triage_handler, triage_handler, {alerts_for_today}).
+handle_call({alerts_for_today}, State) ->
+    Day = day_key(),
+    Value = case folsom_metrics:metric_exists(Day) of
+        false -> folsom_metrics:new_counter(Day), 0;
+        true  -> folsom_metrics:get_metric_value(Day)
+    end,
+    {ok, Value, State};
 
 handle_call({data, Counter}, State) ->
     Match = ets:fun2ms(fun(#alert{location=Location} = Alert) when Location =:= Counter -> Alert end),
@@ -74,10 +84,16 @@ update_counter(_, undefined) -> ok;
 update_counter(Module,Line) ->
     folsom_metrics:notify({"total_alerts", {inc, 1}}),
     Counter = key(Module,Line),
+    Day = day_key(),
+    case folsom_metrics:metric_exists(Day) of
+        false -> new_metric(Day);
+        true  -> ok
+    end,
     case folsom_metrics:metric_exists(Counter) of
         false -> new_metric(Counter);
         true  -> ok
     end,
+    folsom_metrics:notify({Day, {inc, 1}}),
     folsom_metrics:notify({Counter, {inc, 1}}).
 
 new_metric(Counter) ->
@@ -85,3 +101,8 @@ new_metric(Counter) ->
     folsom_metrics:new_counter(Counter).
 
 key(Module,Line) -> binary_to_list(Module) ++ ":" ++ binary_to_list(Line).
+
+%% TODO: use the timestamp from the log
+day_key() ->
+        {{Year,Month,Day},_} = calendar:now_to_universal_time(erlang:now()),
+        integer_to_list(Year) ++ "-" ++ integer_to_list(Month) ++ "-" ++ integer_to_list(Day).

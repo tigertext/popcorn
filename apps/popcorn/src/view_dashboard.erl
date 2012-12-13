@@ -30,7 +30,7 @@ hashtag_count() -> 0.
 mention_count() -> 0.
 
 -spec alert_count_today() -> integer().
-alert_count_today() -> 0.
+alert_count_today() -> gen_event:call(triage_handler, triage_handler, {alerts_for_today}).
 
 -spec alert_count() -> integer().
 alert_count() -> gen_event:call(triage_handler, triage_handler, {total_alerts}).
