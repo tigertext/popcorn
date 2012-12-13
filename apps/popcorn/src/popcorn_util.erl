@@ -75,10 +75,10 @@ format_log_message(Log_Message) ->
 
   Find_More_Html     = "<strong>Filter current list to show only messages with matching:</strong><br /><br />" ++
                       "<label class='checkbox popover-label'><input type='checkbox'>Severity: " ++ binary_to_list(popcorn_util:number_to_severity(Log_Message#log_message.severity)) ++ "</label>" ++
-                      "<label class='checkbox popover-label'><input type='checkbox'>Module: " ++ opt(binary_to_list(Log_Message#log_message.log_module), "Not set") ++ "</label>" ++
-                      "<label class='checkbox popover-label'><input type='checkbox'>Function: " ++ opt(binary_to_list(Log_Message#log_message.log_function), "Not set") ++ "</label>" ++
-                      "<label class='checkbox popover-label'><input type='checkbox'>Line: " ++ opt(binary_to_list(Log_Message#log_message.log_line), "?") ++ " in " ++ opt(binary_to_list(Log_Message#log_message.log_module), "not set") ++ "</label>" ++
-                      "<label class='checkbox popover-label'><input type='checkbox'>Pid: " ++ opt(binary_to_list(Log_Message#log_message.log_pid), "Not set") ++ "</label><br />" ++
+                      "<label class='checkbox popover-label'><input type='checkbox'>Module: " ++ binary_to_list(opt(Log_Message#log_message.log_module, <<"Not set">>)) ++ "</label>" ++
+                      "<label class='checkbox popover-label'><input type='checkbox'>Function: " ++ binary_to_list(opt(Log_Message#log_message.log_function, <<"Not set">>)) ++ "</label>" ++
+                      "<label class='checkbox popover-label'><input type='checkbox'>Line: " ++ binary_to_list(opt(Log_Message#log_message.log_line, <<"?">>)) ++ " in " ++ opt(binary_to_list(Log_Message#log_message.log_module), "not set") ++ "</label>" ++
+                      "<label class='checkbox popover-label'><input type='checkbox'>Pid: " ++ binary_to_list(opt(Log_Message#log_message.log_pid, <<"Not set">>)) ++ "</label><br />" ++
                       "<button class='btn btn-mini' type='button'>Apply Filter</button>",
 
   [{'time',             Formatted_Time},

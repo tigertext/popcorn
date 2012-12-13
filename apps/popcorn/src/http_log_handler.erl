@@ -37,15 +37,22 @@ handle_path(<<"POST">>, [<<"log">>, <<"stream">>, <<"pause">>], Req, State) ->
     {ok, Reply, State};
 
 handle_path(<<"GET">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
-    Headers      = [{"Content-Type", <<"text/event-stream">>}],
-    {ok, Reply}  = cowboy_req:chunked_reply(200, Headers, Req),
+    case ets:select(current_log_streams, ets:fun2ms(fun(#log_stream{stream_id  = SID,
+                                                                    stream_pid = SPID}) when SID =:= Stream_Id -> SPID end)) of
+        [] ->
+            Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
+            {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
+            {ok, Reply, State};
+        Streams ->
+            Headers      = [{"Content-Type", <<"text/event-stream">>}],
+            {ok, Reply}  = cowboy_req:chunked_reply(200, Headers, Req),
 
-    Stream_Pid    = lists:nth(1, ets:select(current_log_streams, ets:fun2ms(fun(#log_stream{stream_id  = SID,
-                                                                                            stream_pid = SPID}) when SID =:= Stream_Id -> SPID end))),
+            Stream_Pid    = lists:nth(1, Streams),
 
-    gen_fsm:send_event(Stream_Pid, {set_client_pid, self()}),
+            gen_fsm:send_event(Stream_Pid, {set_client_pid, self()}),
 
-    handle_loop(Reply, State);
+            handle_loop(Reply, State)
+    end;
 
 handle_path(<<"PUT">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
     Stream_Pid    = lists:nth(1, ets:select(current_log_streams, ets:fun2ms(fun(#log_stream{stream_id  = SID,

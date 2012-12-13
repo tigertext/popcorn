@@ -30,18 +30,26 @@ hashtag_count() -> 0.
 mention_count() -> 0.
 
 -spec alert_count_today() -> integer().
-alert_count_today() -> 0.
+alert_count_today() -> gen_event:call(triage_handler, triage_handler, {alerts_for_today}).
 
 -spec alert_count() -> integer().
-alert_count() -> 0.
+alert_count() -> gen_event:call(triage_handler, triage_handler, {total_alerts}).
 
 alerts() ->
     [begin
-        Node_Properties = [{'name',  Counter},
-                           {'count', Num}],
+        [Counter_Name,Line] = string:tokens(Counter, ":"),
+        #alert{node=#popcorn_node{version=Version}} = gen_event:call(triage_handler, triage_handler, {data, Counter}),
+        Node_Properties = [{'name',  Counter_Name},
+                           {'line',  Line},
+                           {'count', Num},
+                           {'node_name', list(Version)},
+                           {'node',  Num}],
         dict:from_list(Node_Properties)
      end || {Counter, Num} <- gen_event:call(triage_handler, triage_handler, {alerts})
     ].
+
+list(B) when is_binary(B) -> binary_to_list(B);
+list(_) -> "".
 
 -spec known_nodes() -> list().
 known_nodes() ->

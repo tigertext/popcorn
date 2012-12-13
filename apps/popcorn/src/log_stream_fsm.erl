@@ -85,6 +85,7 @@ init([]) ->
 handle_event({new_message, Log_Message}, State_Name, State) ->
     Log_Stream    = State#state.log_stream,
     Should_Stream = Log_Stream#log_stream.paused =:= false andalso
+                    is_pid(Log_Stream#log_stream.client_pid) andalso
                     is_filtered_out(Log_Message, Log_Stream#log_stream.applied_filters) =:= false,
 
     case Should_Stream of
