@@ -168,19 +168,15 @@
 
       var streamSource = new EventSource("/dashboard/stream/{{stream_id}}");
 
-      streamSource.onmessage = function(eventObject) {
-        var event = JSON.parse(eventObject.data);
-        switch(event.kind) {
-          case "update_counters":
-            $('#event_count').text(event.data.event_count);
-            $('#alert_count_today').text(event.data.alert_count_today);
-            $('#alert_count').text(event.data.alert_count);
-            break;
-          default:
-            console.log({"unknown event": event})
-        }
-        
-      };
+      streamSource.addEventListener(
+        'update_counters',
+        function(event) {
+          var counters = JSON.parse(event.data);
+          if(counters.event_count) $('#event_count').text(counters.event_count);
+          if(counters.alert_count_today) $('#alert_count_today').text(counters.alert_count_today);
+          if(counters.alert_count) $('#alert_count').text(counters.alert_count)
+        },
+        false);
 
     </script>
 
