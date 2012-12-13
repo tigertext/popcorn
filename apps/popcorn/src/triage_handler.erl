@@ -19,11 +19,16 @@
 init(_) ->
     ets:new(triage_error_keys, [named_table, set, public, {keypos, #log_stream.stream_id}]),
     ets:new(triage_error_data, [named_table, set, public, {keypos, #alert.location}]),
+    folsom_metrics:new_counter("total_alerts"),
     {ok, #state{}}.
 
 %% gen_event:call(triage_handler, triage_handler, {count, "tts_sup:42"}).
 handle_call({count, Counter}, State) ->
     {ok, folsom_metrics:get_metric_value(Counter), State};
+
+%% gen_event:call(triage_handler, triage_handler, {total_alerts}).
+handle_call({total_alerts}, State) ->
+    {ok, folsom_metrics:get_metric_value("total_alerts"), State};
 
 handle_call({data, Counter}, State) ->
     Match = ets:fun2ms(fun(#alert{location=Location} = Alert) when Location =:= Counter -> Alert end),
@@ -45,7 +50,8 @@ handle_call(_Request, State) ->
 
 %% popcorn_udp:handle_info
 %% node_fsm
-handle_event({triage_event, #popcorn_node{} = Node, #log_message{log_module=Module, log_line=Line}} = Log_Entry, State) ->
+handle_event({triage_event, #popcorn_node{} = Node, #log_message{log_module=Module, log_line=Line, severity=Severity}} = Log_Entry, State) 
+        when Severity < 4, is_binary(Module), is_binary(Line) ->
     true = ets:insert(triage_error_data, #alert{location=key(Module,Line), node=Node, log=Log_Entry}),
     update_counter(Module,Line),
     {ok, State};
@@ -66,6 +72,7 @@ code_change(_OldVsn, State, _Extra) ->
 update_counter(undefined, _) -> ok;
 update_counter(_, undefined) -> ok;
 update_counter(Module,Line) ->
+    folsom_metrics:notify({"total_alerts", {inc, 1}}),
     Counter = key(Module,Line),
     case folsom_metrics:metric_exists(Counter) of
         false -> new_metric(Counter);

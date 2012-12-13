@@ -33,12 +33,12 @@ mention_count() -> 0.
 alert_count_today() -> 0.
 
 -spec alert_count() -> integer().
-alert_count() -> 0.
+alert_count() -> gen_event:call(triage_handler, triage_handler, {total_alerts}).
 
 alerts() ->
     [begin
         [Counter_Name,Line] = string:tokens(Counter, ":"),
-        #alert{node=#popcorn_node{version=Version}} = gen_event:call(triage_handler, triage_handler, {data, "tt_support:220"}),
+        #alert{node=#popcorn_node{version=Version}} = gen_event:call(triage_handler, triage_handler, {data, Counter}),
         Node_Properties = [{'name',  Counter_Name},
                            {'line',  Line},
                            {'count', Num},
