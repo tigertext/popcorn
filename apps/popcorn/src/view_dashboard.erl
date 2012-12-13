@@ -38,11 +38,15 @@ alert_count() -> gen_event:call(triage_handler, triage_handler, {total_alerts}).
 alerts() ->
     [begin
         [Counter_Name,Line] = string:tokens(Counter, ":"),
-        #alert{node=#popcorn_node{version=Version}} = gen_event:call(triage_handler, triage_handler, {data, Counter}),
+        #alert{node=#popcorn_node{version=Version}, 
+               log=#log_message{message=Message}} = gen_event:call(triage_handler, triage_handler, {data, Counter}),
+            io:format("got msg ~p~n",[Message]),
         Node_Properties = [{'name',  Counter_Name},
                            {'line',  Line},
                            {'count', Num},
-                           {'node_name', list(Version)},
+                           {'message', list(Message)},
+                           {'version', list(Version)},
+                           %{'product', list(Version)},
                            {'node',  Num}],
         dict:from_list(Node_Properties)
      end || {Counter, Num} <- gen_event:call(triage_handler, triage_handler, {alerts})

@@ -103,21 +103,13 @@
                     </header>
                   </a>
                   <table class="table table-striped full-section table-hover">
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Event Count</th>
-                      </tr>
-                    </thead>
-                    <tbody>
                       {{#alerts}}
                         <tr>
-                          <td>{{name}} line {{line}}</td>
-                          <td>{{count}}</td>
-                          <td>{{node_name}}</td>
+                          <td>{{name}} line {{line}}<br/>{{message}}</td>
+                          <td>{{count}} seen</td>
+                          <td align="right">version {{version}}</td>
                         </tr>
                       {{/alerts}}
-                    </tbody>
                   </table>
                 </section>
 
