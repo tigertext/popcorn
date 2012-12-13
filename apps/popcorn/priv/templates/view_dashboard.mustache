@@ -166,11 +166,19 @@
 
     <script type="text/javascript">
 
-      var streamSource = new EventSource("/log/stream/{{stream_id}}");
+      var streamSource = new EventSource("/dashboard/stream/{{stream_id}}");
       var event_count = {{event_count}};
 
-      streamSource.onmessage = function(log_message) {
-        $('#event_count').text(++event_count);
+      streamSource.onmessage = function(eventObject) {
+        var event = JSON.parse(eventObject.data);
+        switch(event.kind) {
+          case "event_count":
+            $('#event_count').text(event.data)
+            break;
+          default:
+            console.log({"unknown event": event})
+        }
+        
       };
 
     </script>

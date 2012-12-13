@@ -18,7 +18,7 @@
 -record(state, {}).
 
 init(_) ->
-    ets:new(triage_error_keys, [named_table, set, public, {keypos, #log_stream.stream_id}]),
+    ets:new(triage_error_keys, [named_table, set, public, {keypos, 2}]),
     ets:new(triage_error_data, [named_table, set, public, {keypos, #alert.location}]),
     folsom_metrics:new_counter("total_alerts"),
     {ok, #state{}}.

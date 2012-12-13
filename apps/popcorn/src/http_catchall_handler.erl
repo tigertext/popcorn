@@ -47,24 +47,19 @@ handle(Req, State) ->
                          {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
                          {ok, Reply, State};
                 true  ->
-                        Applied_Node_Filters = lists:map(fun({N, _}) -> binary_to_list(N) end, ets:tab2list(current_nodes)),
-                        Default_Filters = [ {'node_names', Applied_Node_Filters},
-                                            {'severities', popcorn_util:all_severity_numbers()} ],
-
                         %% spawn the stream fsm
-                        {ok, Stream_Pid} = supervisor:start_child(stream_sup, []),
+                        {ok, Stream_Pid} = supervisor:start_child(dashboard_stream_sup, []),
 
                         %% create the stream object
-                        Log_Stream = #log_stream{stream_id        = popcorn_util:random_id(),
-                                                 stream_pid       = Stream_Pid,
-                                                 client_pid       = undefined,
-                                                 applied_filters  = Default_Filters,
-                                                 paused           = false},
+                        Stream_Id = popcorn_util:random_id(),
+                        Stream = #stream{stream_id        = Stream_Id,
+                                         stream_pid       = Stream_Pid,
+                                         client_pid       = undefined},
 
                         %% assign to the fsm
-                        gen_fsm:send_event(Stream_Pid, {connect, Log_Stream}),
+                        gen_fsm:send_event(Stream_Pid, {connect, Stream}),
 
-                        Context = dict:from_list([{stream_id, binary_to_list(Log_Stream#log_stream.stream_id)}]),
+                        Context = dict:from_list([{stream_id, binary_to_list(Stream_Id)}]),
 
                         TFun        = mustache:compile(view_dashboard),
                         Output      = mustache:render(view_dashboard, TFun, Context),

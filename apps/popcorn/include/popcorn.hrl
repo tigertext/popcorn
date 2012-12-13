@@ -22,11 +22,11 @@
 -define(POPCORN_ALERT_MSG(Msg, Args),      io:format("~s\n", [lists:flatten(io_lib:format(Msg, Args))]), lager:alert(Msg, Args)).
 -define(POPCORN_EMERGENCY_MSG(Msg, Args),  io:format("~s\n", [lists:flatten(io_lib:format(Msg, Args))]), lager:emergency(Msg, Args)).
 
--record(log_stream,  {stream_id       :: string(),
-                      stream_pid      :: pid(),
-                      client_pid      :: pid(),
-                      applied_filters :: list(),
-                      paused          :: boolean()}).
+-record(stream,  {stream_id       :: string(),
+                  stream_pid      :: pid(),
+                  client_pid      :: pid(),
+                  applied_filters :: list(),
+                  paused          :: boolean()}).
 
 -record(popcorn_node, {node_name :: binary(),
                        role      :: binary(),

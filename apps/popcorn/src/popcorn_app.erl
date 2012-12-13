@@ -26,7 +26,8 @@ init([]) ->
     io:format("Creating ets tables..."),
     ets:new(current_connected_users,  [named_table, set, public]),
     ets:new(current_nodes,            [named_table, set, public]),
-    ets:new(current_log_streams,      [named_table, set, public, {keypos, #log_stream.stream_id}]),
+    ets:new(current_log_streams,      [named_table, set, public, {keypos, #stream.stream_id}]),
+    ets:new(current_dashboard_streams,[named_table, set, public, {keypos, #stream.stream_id}]),
     ets:new(current_roles,            [named_table, bag, public]),
     io:format(" done!\n"),
 
@@ -42,6 +43,8 @@ init([]) ->
                             {[<<"images">>, '...'],     http_static_handler, []},
                             {[<<"bootstrap">>, '...'],  http_static_handler, []},
                             {[<<"log">>, '...'],        http_log_handler, []},
+                            {[<<"dashboard">>, <<"stream">>, '...'],
+                                                        http_stream_handler, []},
                             {[<<"node">>, '_'],         http_node_handler, []},
                             {'_',                       http_catchall_handler, []}
                            ]}],
@@ -54,9 +57,10 @@ init([]) ->
                   {popcorn_server, {popcorn_server, start_link, []}, permanent, 5000, worker, [popcorn_server]},
                   {popcorn_udp,    {popcorn_udp,    start_link, []}, permanent, 5000, worker, [popcorn_udp]},
 
-                  {connected_user_sup, {supervisor, start_link, [{local, connected_user_sup}, ?MODULE, [connected_user_fsm]]}, permanent, infinity, supervisor, []},
-                  {node_sup,           {supervisor, start_link, [{local, node_sup},           ?MODULE, [node_fsm]]},           permanent, infinity, supervisor, []},
-                  {stream_sup,         {supervisor, start_link, [{local, stream_sup},         ?MODULE, [log_stream_fsm]]},     permanent, infinity, supervisor, []}
+                  {connected_user_sup,   {supervisor, start_link, [{local, connected_user_sup},   ?MODULE, [connected_user_fsm]]},   permanent, infinity, supervisor, []},
+                  {node_sup,             {supervisor, start_link, [{local, node_sup},             ?MODULE, [node_fsm]]},             permanent, infinity, supervisor, []},
+                  {log_stream_sup,       {supervisor, start_link, [{local, log_stream_sup},       ?MODULE, [log_stream_fsm]]},       permanent, infinity, supervisor, []},
+                  {dashboard_stream_sup, {supervisor, start_link, [{local, dashboard_stream_sup}, ?MODULE, [dashboard_stream_fsm]]}, permanent, infinity, supervisor, []}
                ],
 
     {ok, { {one_for_one, 10000, 10}, Children} };
