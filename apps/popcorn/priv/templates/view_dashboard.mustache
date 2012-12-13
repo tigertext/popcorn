@@ -72,7 +72,7 @@
                             <div><small>nodes</small></div>
                         </div>
                         <div class="span2">
-                            <div class="kpi">{{event_count}}</div>
+                            <div id="event_count" class="kpi">{{event_count}}</div>
                             <div><small>events</small></div>
                     </div>
                     <div class="span2">
@@ -163,6 +163,17 @@
     <script src="/js/jquery.min.js"></script>
     <script src="/bootstrap/js/bootstrap-dropdown.js"></script>
     <script src="/bootstrap/js/bootstrap-collapse.js"></script>
+
+    <script type="text/javascript">
+
+      var streamSource = new EventSource("/log/stream/{{stream_id}}");
+      var event_count = {{event_count}};
+
+      streamSource.onmessage = function(log_message) {
+        $('#event_count').text(++event_count);
+      };
+
+    </script>
 
   </body>
 </html>

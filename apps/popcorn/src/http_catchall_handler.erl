@@ -46,9 +46,30 @@ handle(Req, State) ->
                 false -> Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
                          {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
                          {ok, Reply, State};
-                true  -> Output = mustache:render(view_dashboard),
-                         {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
-                         {ok, Reply, State}
+                true  ->
+                        Applied_Node_Filters = lists:map(fun({N, _}) -> binary_to_list(N) end, ets:tab2list(current_nodes)),
+                        Default_Filters = [ {'node_names', Applied_Node_Filters},
+                                            {'severities', popcorn_util:all_severity_numbers()} ],
+
+                        %% spawn the stream fsm
+                        {ok, Stream_Pid} = supervisor:start_child(stream_sup, []),
+
+                        %% create the stream object
+                        Log_Stream = #log_stream{stream_id        = popcorn_util:random_id(),
+                                                 stream_pid       = Stream_Pid,
+                                                 client_pid       = undefined,
+                                                 applied_filters  = Default_Filters,
+                                                 paused           = false},
+
+                        %% assign to the fsm
+                        gen_fsm:send_event(Stream_Pid, {connect, Log_Stream}),
+
+                        Context = dict:from_list([{stream_id, binary_to_list(Log_Stream#log_stream.stream_id)}]),
+
+                        TFun        = mustache:compile(view_dashboard),
+                        Output      = mustache:render(view_dashboard, TFun, Context),
+                        {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
+                        {ok, Reply, State}
             end;
 
         {{Method, _}, {Path, _}} ->
