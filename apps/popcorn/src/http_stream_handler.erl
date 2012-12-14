@@ -45,11 +45,24 @@ handle_loop(Req, State) ->
             {ok, Req, State};
         {cowboy_req, resp_sent} ->
             handle_loop(Req, State);
+        {new_node, Node} ->
+            Total_Message_Count = folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER),
+            Data = [{node_name, Node#popcorn_node.node_name},
+                    {percent_of_all_events, ?PERCENT(1 / Total_Message_Count)},
+                    {total_messages, 1},
+                    {alert_count,   0},
+                    {hashtag_count, 0},
+                    {mention_count, 0}],
+            io:format("New node: ~p~n", [Data]),
+            Event = lists:flatten(mochijson:encode({struct, Data})),
+            chunk_event("new_node", Event, Req, State);
         {new_metric, Counter} ->
+            io:format("New metric: ~p~n", [Counter]),
             Data = triage_handler:counter_data(Counter),
             Event = lists:flatten(mochijson:encode({struct, Data})),
             chunk_event("new_metric", Event, Req, State);
         {update_counters, NewCounters} ->
+            io:format("Update Counters: ~p~n", [NewCounters]),
             Event = lists:flatten(mochijson:encode({struct, NewCounters})),
             chunk_event("update_counters", Event, Req, State);
         Other ->

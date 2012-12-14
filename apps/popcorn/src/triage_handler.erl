@@ -82,10 +82,20 @@ handle_call(_Request, State) ->
 
 %% popcorn_udp:handle_info
 %% node_fsm
-handle_event({triage_event, #popcorn_node{} = Node, #log_message{log_module=Module, log_line=Line, severity=Severity}} = Log_Entry, State) 
+handle_event({triage_event, #popcorn_node{} = Node,
+              #log_message{log_module=Module, log_line=Line, severity=Severity},
+              Is_New_Node} = Log_Entry, State)
         when Severity < 4, is_binary(Module), is_binary(Line) ->
     true = ets:insert(triage_error_data, #alert{location=key(Module,Line), node=Node, log=Log_Entry}),
+    case Is_New_Node of
+        true -> dashboard_stream_fsm:broadcast({new_node, Node});
+        false -> ok
+    end,
     update_counter(Module,Line),
+    {ok, State};
+
+handle_event({triage_event, #popcorn_node{} = Node, true}, State) ->
+    dashboard_stream_fsm:broadcast({new_node, Node}),
     {ok, State};
 
 handle_event(_Event, State) ->

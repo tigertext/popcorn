@@ -121,7 +121,7 @@
                       <h1>Nodes</h1>
                     </header>
                   </a>
-                  <table class="table table-striped full-section table-hover">
+                  <table id="known_nodes" class="table table-striped full-section table-hover">
                     <thead>
                       <tr>
                         <th>Name</th>
@@ -168,7 +168,7 @@
 
       var streamSource = new EventSource("/dashboard/stream/{{stream_id}}");
 
-      function maybe(v) { if(v) return v; return "" };
+      function maybe(v, d) { if(v == 0 || v) return v; if(d == 0 || d) return d; return "" };
 
       streamSource.addEventListener(
         'update_counters',
@@ -194,6 +194,24 @@
                     "-seen'>1</span> seen</td><td align='right'>version " +
                     maybe(counter.version) + "</td></tr>";
           $('#alerts tr:first').before(row);
+        },
+        false);
+
+      streamSource.addEventListener(
+        'new_node',
+        function(event) {
+          var node = JSON.parse(event.data);
+          console.log({"new node" : node});
+          var row = "<tr>" +
+                      "<td class='primary'><a href='/node/" + node.node_name + "'>" + node.node_name + "</a></td>" +
+                      "<td>" + maybe(node.total_messages, 1) + "</td>" +
+                      "<td><div class='progress progress-mini'>" +
+                              "<div class='bar' style='width: " + maybe(node.percent_of_all_events, 0) + "%'></div>" +
+                          "</div></td>" +
+                      "<td>" + maybe(node.alert_count, 0) + "</td>" +
+                      "<td>" + maybe(node.hashtag_count, 0) + "</td>" +
+                      "<td>" + maybe(node.mention_count, 0) + "</td></tr>";
+          $('#known_nodes tr:last').after(row);
         },
         false);
 

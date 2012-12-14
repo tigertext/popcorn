@@ -46,21 +46,23 @@ handle_cast(_Msg, State) ->
 handle_info({udp, Socket, _Host, _Port, Bin}, State) ->
     {Popcorn_Node, Log_Message} = decode_protobuffs_message(Bin),
 
-    safe_notify({triage_event, Popcorn_Node, Log_Message}),
-
     %% create the node fsm, if necessary
-    case ets:select_count(current_nodes, [{{'$1', '$2'}, [{'=:=', '$1', Popcorn_Node#popcorn_node.node_name}], [true]}]) of
-        0 -> {ok, Pid} = supervisor:start_child(node_sup, []),
-             ok = gen_fsm:sync_send_event(Pid, {set_popcorn_node, Popcorn_Node}),
-             ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid});
-        _ -> ok
-    end,
+    Is_New_Node =
+        case ets:select_count(current_nodes, [{{'$1', '$2'}, [{'=:=', '$1', Popcorn_Node#popcorn_node.node_name}], [true]}]) of
+            0 -> {ok, Pid} = supervisor:start_child(node_sup, []),
+                 ok = gen_fsm:sync_send_event(Pid, {set_popcorn_node, Popcorn_Node}),
+                 ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid}),
+                 true;
+            _ -> false
+        end,
 
     %% let the fsm create the log
     case ets:lookup(current_nodes, Popcorn_Node#popcorn_node.node_name) of
         []                 -> ?POPCORN_WARN_MSG("unable to find fsm for node ~p", [Popcorn_Node#popcorn_node.node_name]);
         [{_, Running_Pid}] -> gen_fsm:send_event(Running_Pid, {log_message, Popcorn_Node, Log_Message})
     end,
+
+    safe_notify({triage_event, Popcorn_Node, Log_Message, Is_New_Node}),
 
    % _Tags = get_tags(binary_to_list(Message)),
 
