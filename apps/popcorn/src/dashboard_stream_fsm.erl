@@ -10,6 +10,7 @@
 -define(IDLE_DISCONNECT_TIMER,      5000).
 
 -export([start_link/0]).
+-export([broadcast/1]).
 
 -export([init/1,
          handle_event/3,
@@ -26,6 +27,12 @@
 
 -record(state, {stream                  :: #stream{},
                 idle_loops_disconnected :: integer()}).
+
+broadcast(Event) ->
+    lists:foreach(
+        fun(Dashboard_Stream) ->
+            gen_fsm:send_all_state_event(Dashboard_Stream#stream.stream_pid, Event)
+        end, ets:tab2list(current_dashboard_streams)).
 
 start_link() -> gen_fsm:start_link(?MODULE, [], []).
 
@@ -72,7 +79,7 @@ init([]) ->
 'STREAMING'(Other, _From, State) ->
     {noreply, undefined, 'STREAMING', State}.
 
-handle_event({update_counters, _Counters} = Event, State_Name, State) ->
+handle_event({_Kind, _Data} = Event, State_Name, State) ->
     Stream      = State#state.stream,
 
     case is_pid(Stream#stream.client_pid) of

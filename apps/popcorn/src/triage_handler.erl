@@ -11,11 +11,34 @@
          code_change/3
 ]).
 
+-export([counter_data/1]).
+
 -include_lib("lager/include/lager.hrl").
 -include("include/popcorn.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
 
 -record(state, {}).
+
+counter_data(Counter) ->
+    Basic_Properties =
+      case gen_event:call(triage_handler, triage_handler, {data, Counter}) of
+        #alert{node = #popcorn_node{version = Version},
+               log  = #log_message{message = Message}} ->
+          [ {'message', list(Message)}, {'version', list(Version)}];
+        #alert{node = #popcorn_node{version = Version}} ->
+          [ {'version', list(Version)}];
+        #alert{log  = #log_message{message = Message}} ->
+          [ {'message', list(Message)}];
+        #alert{} ->
+          []
+      end,
+    case string:tokens(Counter, ":") of
+        [Counter_Name,Line|_] -> [{'name', Counter_Name}, {'line', Line} | Basic_Properties];
+        _ -> Basic_Properties
+    end.
+
+list(B) when is_binary(B) -> binary_to_list(B);
+list(_) -> "".
 
 init(_) ->
     ets:new(triage_error_keys, [named_table, set, public, {keypos, 2}]),
@@ -48,9 +71,8 @@ handle_call({data, Counter}, State) ->
     end,
     {ok, V, State};
 
-%% gen_event:call(triage_handler, triage_handler, {alerts}).
 handle_call({alerts}, State) ->
-    Alerts = [begin 
+    Alerts = [begin
                 {Counter, folsom_metrics:get_metric_value(Counter)}
               end || {key, Counter} <- ets:tab2list(triage_error_keys)],
     {ok, lists:sort(fun({_,A}, {_,B}) -> A > B end, Alerts), State};
@@ -96,20 +118,19 @@ update_counter(Module,Line) ->
     folsom_metrics:notify({Day, {inc, 1}}),
     folsom_metrics:notify({Counter, {inc, 1}}),
 
-    Dashboard_Streams = ets:tab2list(current_dashboard_streams),
     NewCounters =
-        [   {<<"event_count">>,       folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER)},
-            {<<"alert_count_today">>, folsom_metrics:get_metric_value(Day)},
-            {<<"alert_count">>,       folsom_metrics:get_metric_value("total_alerts")}],
-    lists:foreach(
-        fun(Dashboard_Stream) ->
-            gen_fsm:send_all_state_event(
-                Dashboard_Stream#stream.stream_pid, {update_counters, NewCounters})
-        end, Dashboard_Streams).
+        [   {counter,           list_to_binary(Counter)},
+            {counter_count,     folsom_metrics:get_metric_value(Counter)},
+            {event_count,       folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER)},
+            {alert_count_today, folsom_metrics:get_metric_value(Day)},
+            {alert_count,       folsom_metrics:get_metric_value("total_alerts")}],
+
+    dashboard_stream_fsm:broadcast({update_counters, NewCounters}).
 
 new_metric(Counter) ->
     true = ets:insert(triage_error_keys, {key, Counter}),
-    folsom_metrics:new_counter(Counter).
+    folsom_metrics:new_counter(Counter),
+    dashboard_stream_fsm:broadcast({new_metric, Counter}).
 
 key(Module,Line) -> binary_to_list(Module) ++ ":" ++ binary_to_list(Line).
 

@@ -102,11 +102,11 @@
                       <h1>Alerts</h1>
                     </header>
                   </a>
-                  <table class="table table-striped full-section table-hover">
+                  <table id="alerts" class="table table-striped full-section table-hover">
                       {{#alerts}}
                         <tr>
                           <td>{{name}} line {{line}}<br/>{{message}}</td>
-                          <td>{{count}} seen</td>
+                          <td><span id="{{name}}-{{line}}-seen">{{count}}</span> seen</td>
                           <td align="right">version {{version}}</td>
                         </tr>
                       {{/alerts}}
@@ -168,13 +168,32 @@
 
       var streamSource = new EventSource("/dashboard/stream/{{stream_id}}");
 
+      function maybe(v) { if(v) return v; return "" };
+
       streamSource.addEventListener(
         'update_counters',
         function(event) {
           var counters = JSON.parse(event.data);
+          console.log({"Update for Counters" : counters});
           if(counters.event_count) $('#event_count').text(counters.event_count);
           if(counters.alert_count_today) $('#alert_count_today').text(counters.alert_count_today);
-          if(counters.alert_count) $('#alert_count').text(counters.alert_count)
+          if(counters.alert_count) $('#alert_count').text(counters.alert_count);
+          if(counters.counter && counters.counter_count)
+            $('#' + counters.counter.replace(":", "-") + '-seen').text(counters.counter_count);
+        },
+        false);
+
+      streamSource.addEventListener(
+        'new_metric',
+        function(event) {
+          var counter = JSON.parse(event.data);
+          console.log({"new metric" : counter});
+          var row = "<tr><td>" + maybe(counter.name) + " line " + maybe(counter.line) + "<br/>" +
+                    maybe(counter.message) + "</td><td><span id='" +
+                        maybe(counter.name) + "-" + maybe(counter.line) +
+                    "-seen'>1</span> seen</td><td align='right'>version " +
+                    maybe(counter.version) + "</td></tr>";
+          $('#alerts tr:last').after(row);
         },
         false);
 

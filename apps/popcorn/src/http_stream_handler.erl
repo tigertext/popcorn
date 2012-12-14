@@ -45,17 +45,24 @@ handle_loop(Req, State) ->
             {ok, Req, State};
         {cowboy_req, resp_sent} ->
             handle_loop(Req, State);
+        {new_metric, Counter} ->
+            Data = triage_handler:counter_data(Counter),
+            Event = lists:flatten(mochijson:encode({struct, Data})),
+            chunk_event("new_metric", Event, Req, State);
         {update_counters, NewCounters} ->
             Event = lists:flatten(mochijson:encode({struct, NewCounters})),
-            case cowboy_req:chunk(lists:flatten(["event: update_counters\n"]), Req) of
-                ok ->
-                    case cowboy_req:chunk(lists:flatten(["data: ", Event, "\n\n"]), Req) of
-                        ok -> handle_loop(Req, State);
-                        {error, closed} -> {ok, Req, State}
-                    end;
-                {error, closed} -> {ok, Req, State}
-            end;
+            chunk_event("update_counters", Event, Req, State);
         Other ->
             ?POPCORN_DEBUG_MSG("streaming handler received unknown message: ~p", [Other]),
             handle_loop(Req, State)
+    end.
+
+chunk_event(EventName, Event, Req, State) ->
+    case cowboy_req:chunk(lists:flatten(["event: " ++ EventName ++ "\n"]), Req) of
+        ok ->
+            case cowboy_req:chunk(lists:flatten(["data: ", Event, "\n\n"]), Req) of
+                ok -> handle_loop(Req, State);
+                {error, closed} -> {ok, Req, State}
+            end;
+        {error, closed} -> {ok, Req, State}
     end.
