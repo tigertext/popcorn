@@ -193,7 +193,7 @@
                         maybe(counter.name) + "-" + maybe(counter.line) +
                     "-seen'>1</span> seen</td><td align='right'>version " +
                     maybe(counter.version) + "</td></tr>";
-          $('#alerts tr:last').after(row);
+          $('#alerts tr:first').before(row);
         },
         false);
 
