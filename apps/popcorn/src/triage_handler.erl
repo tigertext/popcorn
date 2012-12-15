@@ -23,6 +23,11 @@ init(_) ->
     folsom_metrics:new_counter("total_alerts"),
     {ok, #state{}}.
 
+%% [] = List
+%% {} = Tuple
+%% Variables are uppercase
+%% atoms are lowercase
+%%
 %% gen_event:call(triage_handler, triage_handler, {count, "tts_sup:42"}).
 handle_call({count, Counter}, State) ->
     {ok, folsom_metrics:get_metric_value(Counter), State};
@@ -52,18 +57,21 @@ handle_call({data, Counter}, State) ->
 handle_call({alerts}, State) ->
     Alerts = [begin 
                 {Counter, folsom_metrics:get_metric_value(Counter)}
-              end || {key, Counter} <- ets:tab2list(triage_error_keys)],
+              end || {key, Counter} <- ets:tab2list(triage_error_keys), string:str(Counter, ":") =/= 0 ],
     {ok, lists:sort(fun({_,A}, {_,B}) -> A > B end, Alerts), State};
 
 handle_call(_Request, State) ->
     {ok, ok, State}.
 
+%% view_dashboard.mustache
+%% view_dashboard.erl
 %% popcorn_udp:handle_info
 %% node_fsm
-handle_event({triage_event, #popcorn_node{} = Node, #log_message{log_module=Module, log_line=Line, severity=Severity}} = Log_Entry, State) 
+handle_event({triage_event, #popcorn_node{} = Node, #log_message{log_module=Module, log_line=Line, severity=Severity} = Log_Entry}, State) 
         when Severity < 4, is_binary(Module), is_binary(Line) ->
     true = ets:insert(triage_error_data, #alert{location=key(Module,Line), node=Node, log=Log_Entry}),
     update_counter(Module,Line),
+    %% update connected dashboards
     {ok, State};
 
 handle_event(_Event, State) ->
