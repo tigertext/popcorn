@@ -36,31 +36,9 @@ alert_count_today() -> gen_event:call(triage_handler, triage_handler, {alerts_fo
 alert_count() -> gen_event:call(triage_handler, triage_handler, {total_alerts}).
 
 alerts() ->
-    [begin
-        Initial_Properties = [ {'count', Num}, {'node', Num} ],
-        Basic_Properties =
-          case gen_event:call(triage_handler, triage_handler, {data, Counter}) of
-            #alert{node = #popcorn_node{version = Version},
-                   log  = #log_message{message = Message}} ->
-              [ {'message', list(Message)}, {'version', list(Version)} | Initial_Properties];
-            #alert{node = #popcorn_node{version = Version}} ->
-              [ {'version', list(Version)} | Initial_Properties];
-            #alert{log  = #log_message{message = Message}} ->
-              [ {'message', list(Message)} | Initial_Properties];
-            #alert{} ->
-              Initial_Properties
-          end,
-        Node_Properties =
-          case string:tokens(Counter, ":") of
-            [Counter_Name,Line|_] -> [{'module', Counter_Name}, {'line', Line} | Basic_Properties];
-            _ -> Basic_Properties
-          end,
-        dict:from_list(Node_Properties)
-     end || {Counter, Num} <- gen_event:call(triage_handler, triage_handler, {alerts})
+    [dict:from_list([{count, Num} | triage_handler:counter_data(Counter)])
+     || {Counter, Num} <- gen_event:call(triage_handler, triage_handler, {alerts})
     ].
-
-list(B) when is_binary(B) -> binary_to_list(B);
-list(_) -> "".
 
 -spec known_nodes() -> list().
 known_nodes() ->
@@ -69,6 +47,7 @@ known_nodes() ->
         Message_Counts  = gen_fsm:sync_send_event(Pid, get_message_counts),
         Node_List       = binary_to_list(Node),
         Node_Properties = [{'node_name',             Node_List},
+                           {'node_hash',             re:replace(base64:encode(Node), "=", "_", [{return, list}, global])},
                            {'total_messages',        proplists:get_value(total, Message_Counts, 0)},
                            {'percent_of_all_events', ?PERCENT(proplists:get_value(total, Message_Counts, 0) / Total_Message_Count)},
                            {'alert_count',           0},

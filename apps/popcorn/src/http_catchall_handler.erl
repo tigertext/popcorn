@@ -46,9 +46,25 @@ handle(Req, State) ->
                 false -> Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
                          {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
                          {ok, Reply, State};
-                true  -> Output = mustache:render(view_dashboard),
-                         {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
-                         {ok, Reply, State}
+                true  ->
+                        %% spawn the stream fsm
+                        {ok, Stream_Pid} = supervisor:start_child(dashboard_stream_sup, []),
+
+                        %% create the stream object
+                        Stream_Id = popcorn_util:random_id(),
+                        Stream = #stream{stream_id        = Stream_Id,
+                                         stream_pid       = Stream_Pid,
+                                         client_pid       = undefined},
+
+                        %% assign to the fsm
+                        gen_fsm:send_event(Stream_Pid, {connect, Stream}),
+
+                        Context = dict:from_list([{stream_id, binary_to_list(Stream_Id)}]),
+
+                        TFun        = mustache:compile(view_dashboard),
+                        Output      = mustache:render(view_dashboard, TFun, Context),
+                        {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
+                        {ok, Reply, State}
             end;
 
         {{Method, _}, {Path, _}} ->
