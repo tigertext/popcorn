@@ -78,7 +78,7 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
                        "<label class='checkbox popover-label'><input type='checkbox'>Severity: " ++ binary_to_list(popcorn_util:number_to_severity(Severity)) ++ "</label>" ++
                        "<label class='checkbox popover-label'><input type='checkbox'>Module: " ++ binary_to_list(opt(Module, <<"Not set">>)) ++ "</label>" ++
                        "<label class='checkbox popover-label'><input type='checkbox'>Function: " ++ binary_to_list(opt(Function, <<"Not set">>)) ++ "</label>" ++
-                       "<label class='checkbox popover-label'><input type='checkbox'>Line: " ++ binary_to_list(opt(Line, <<"?">>)) ++ " in " ++ opt(binary_to_list(Module), "not set") ++ "</label>" ++
+                       "<label class='checkbox popover-label'><input type='checkbox'>Line: " ++ binary_to_list(opt(Line, <<"?">>)) ++ " in " ++ binary_to_list(opt(Module, <<"not set">>)) ++ "</label>" ++
                        "<label class='checkbox popover-label'><input type='checkbox'>Pid: " ++ binary_to_list(opt(Pid, <<"Not set">>)) ++ "</label>" ++
                        lists:append(["<label class='checkbox popover-label'><input type='checkbox'>@" ++ Mention ++ "</label>" || Mention <- Mentions]) ++
                        lists:append(["<label class='checkbox popover-label'><input type='checkbox'>#" ++ Hashtag ++ "</label>" || Hashtag <- Hashtags]) ++ 
@@ -87,10 +87,10 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
   [{'time',             Formatted_Time},
    {'datetime',         Formatted_DateTime},
    {'find_more_html',   Find_More_Html},
-   {'log_module',       opt(binary_to_list(Module), "Unknown")},
-   {'log_function',     opt(binary_to_list(Function), "Unknown")},
-   {'log_line',         opt(binary_to_list(Line), "??")},
-   {'log_pid',          opt(binary_to_list(Pid), "?")},
+   {'log_module',       binary_to_list(opt(Module, <<"Unknown">>))},
+   {'log_function',     binary_to_list(opt(Function, <<"Unknown">>))},
+   {'log_line',         binary_to_list(opt(Line, <<"??">>))},
+   {'log_pid',          binary_to_list(opt(Pid, <<"?">>))},
    {'message_severity', binary_to_list(popcorn_util:number_to_severity(Severity))},
    {'message',          binary_to_list(Message)}].
 
