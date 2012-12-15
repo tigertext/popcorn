@@ -3,15 +3,24 @@
 -behaviour(application).
 
 %% Application callbacks
--export([start/2, stop/1, init/1]).
--export([load_known_nodes/0]).
+-export([start/2,
+         start_phase/3,
+         stop/1,
+         init/1]).
 
 -include("include/popcorn.hrl").
 
 -define(MAX_RESTART,    5).
 -define(MAX_TIME,      60).
 
-load_known_nodes() ->
+%% ===================================================================
+%% Application callbacks
+%% ===================================================================
+
+start(_StartType, _StartArgs) -> supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+stop(_State) -> ok.
+
+start_phase(deserialize_mnesia, _Start_Type, _Phase_Args) ->
     io:format("Reloading previously known nodes...\n"),
     lists:foreach(fun(Known_Node) ->
         io:format("Node: ~s\n", [binary_to_list(Known_Node)]),
@@ -22,20 +31,12 @@ load_known_nodes() ->
       end, mnesia:dirty_all_keys(known_nodes)),
     io:format(" done!\n").
 
-
-%% ===================================================================
-%% Application callbacks
-%% ===================================================================
-
-start(_StartType, _StartArgs) -> supervisor:start_link({local, ?MODULE}, ?MODULE, []).
-stop(_State) -> ok.
-
 init([]) ->
     io:format("CWD: ~p\n", [filename:absname("")]),
 
     {ok, _} = gen_event:start({local, triage_handler}),
     gen_event:add_handler(triage_handler, triage_handler, []),
-    
+
     io:format("Creating ets tables..."),
     ets:new(current_connected_users,  [named_table, set, public]),
     ets:new(current_nodes,            [named_table, set, public]),
@@ -53,9 +54,6 @@ init([]) ->
                                        {record_name, popcorn_node},
                                        {attributes,  record_info(fields, popcorn_node)}]),
     io:format(" done!\n"),
-
-    %% ugh.  where can this move to?
-    timer:apply_after(1000, popcorn_app, load_known_nodes, []),
 
     io:format("Creating global metrics..."),
     folsom_metrics:new_counter(?TOTAL_EVENT_COUNTER),

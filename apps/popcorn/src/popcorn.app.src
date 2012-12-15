@@ -3,6 +3,7 @@
   {description, "Popcorn log monitor"},
   {vsn, "##VERSION##"},
   {registered, []},
+  {start_phases, [{deserialize_mnesia, []}]},
   {applications, [
                   kernel,
                   stdlib,
