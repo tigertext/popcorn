@@ -104,10 +104,11 @@
                   </a>
                   <table class="table table-striped full-section table-hover">
                       {{#alerts}}
-                        <tr>
-                          <td>{{name}} line {{line}}<br/>{{message}}</td>
+                        <tr id="1">
+                          <td>{{module}}:{{function}} line {{line}}<br/>{{message}}</td>
                           <td>{{count}} seen</td>
                           <td align="right">version {{version}}</td>
+                          <td></td>
                         </tr>
                       {{/alerts}}
                   </table>
@@ -166,4 +167,3 @@
 
   </body>
 </html>
-
