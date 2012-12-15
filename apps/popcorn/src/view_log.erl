@@ -67,4 +67,3 @@ get_opt_env(Mod, Var, Default) ->
         {ok, Val} -> {ok, Val};
         _         -> {ok, Default}
     end.
-
