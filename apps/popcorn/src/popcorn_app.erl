@@ -63,6 +63,7 @@ init([]) ->
     io:format("Starting http listener..."),
     {ok, Http_Listen_Port} = application:get_env(popcorn, http_listen_port),
     Http_Dispatch = [{'_', [
+                            {[<<"favicon.ico">>],       http_static_handler, []},
                             {[<<"js">>, '...'],         http_static_handler, []},
                             {[<<"css">>, '...'],        http_static_handler, []},
                             {[<<"images">>, '...'],     http_static_handler, []},
