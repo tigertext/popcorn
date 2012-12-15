@@ -46,11 +46,6 @@ init(_) ->
     folsom_metrics:new_counter("total_alerts"),
     {ok, #state{}}.
 
-%% [] = List
-%% {} = Tuple
-%% Variables are uppercase
-%% atoms are lowercase
-%%
 %% gen_event:call(triage_handler, triage_handler, {count, "tts_sup:42"}).
 handle_call({count, Counter}, State) ->
     {ok, folsom_metrics:get_metric_value(Counter), State};
@@ -90,8 +85,8 @@ handle_call(_Request, State) ->
 %% popcorn_udp:handle_info
 %% node_fsm
 handle_event({triage_event, #popcorn_node{} = Node, Node_Pid,
-              #log_message{log_module=Module, log_line=Line, severity=Severity},
-              Is_New_Node} = Log_Entry, State)
+              #log_message{log_module=Module, log_line=Line, severity=Severity} = Log_Entry,
+              Is_New_Node}, State)
         when Severity < 4, is_binary(Module), is_binary(Line) ->
     true = ets:insert(triage_error_data, #alert{location=key(Module,Line), node=Node, log=Log_Entry}),
     case Is_New_Node of
