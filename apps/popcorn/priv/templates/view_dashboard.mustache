@@ -103,6 +103,7 @@
                     </header>
                   </a>
                   <table id="alerts" class="table table-striped full-section table-hover">
+                      <tr />
                       {{#alerts}}
                         <tr>
                           <td>{{name}} line {{line}}<br/>{{message}}</td>
@@ -134,10 +135,10 @@
                     </thead>
                     <tbody>
                       {{#known_nodes}}
-                        <tr>
+                        <tr class="node-row" id="node-{{node_hash}}">
                           <td class="primary"><a href="/node/{{node_name}}">{{node_name}}</a></td>
-                          <td>{{total_messages}}</td>
-                          <td>
+                          <td class="node-total">{{total_messages}}</td>
+                          <td class="node-percent">
                             <div class="progress progress-mini">
                               <div class="bar" style="width: {{percent_of_all_events}}%"></div>
                             </div>
@@ -170,16 +171,37 @@
 
       function maybe(v, d) { if(v == 0 || v) return v; if(d == 0 || d) return d; return "" };
 
+      function percent(value) { return (Math.round(value * 100 * 100.0) / 100.0) + "%"; };
+
+      function set_node_percents() {
+        var total = 0;
+        var nodes = {};
+        var rows = $('.node-row');
+        for(var i = 0; i < rows.length; i++) {
+          tr = rows[i];
+          var value = parseInt($('#' + tr.id + ' .node-total').text(), 10);
+          total += value;
+          nodes[tr.id] = value
+        }
+        for(var i = 0; i < rows.length; i++) {
+          tr = rows[i];
+          $('#' + tr.id + ' .node-percent .progress .bar').width(percent(nodes[tr.id] / total))
+        }
+      };
+
       streamSource.addEventListener(
         'update_counters',
         function(event) {
           var counters = JSON.parse(event.data);
-          console.log({"Update for Counters" : counters});
           if(counters.event_count) $('#event_count').text(counters.event_count);
           if(counters.alert_count_today) $('#alert_count_today').text(counters.alert_count_today);
           if(counters.alert_count) $('#alert_count').text(counters.alert_count);
           if(counters.counter && counters.counter_count)
             $('#' + counters.counter.replace(":", "-") + '-seen').text(counters.counter_count);
+          if(counters.node_hash && counters.node_count) {
+            $('#node-' + counters.node_hash + ' .node-total').text(counters.node_count);
+            set_node_percents();
+          }
         },
         false);
 
@@ -187,7 +209,6 @@
         'new_metric',
         function(event) {
           var counter = JSON.parse(event.data);
-          console.log({"new metric" : counter});
           var row = "<tr><td>" + maybe(counter.name) + " line " + maybe(counter.line) + "<br/>" +
                     maybe(counter.message) + "</td><td><span id='" +
                         maybe(counter.name) + "-" + maybe(counter.line) +
@@ -201,11 +222,10 @@
         'new_node',
         function(event) {
           var node = JSON.parse(event.data);
-          console.log({"new node" : node});
           var row = "<tr>" +
                       "<td class='primary'><a href='/node/" + node.node_name + "'>" + node.node_name + "</a></td>" +
-                      "<td>" + maybe(node.total_messages, 1) + "</td>" +
-                      "<td><div class='progress progress-mini'>" +
+                      "<td class='node-total' id='" + node.node_hash + "-total'>" + maybe(node.total_messages, 1) + "</td>" +
+                      "<td class='node-percent' id='" + node.node_hash + "-percent'><div class='progress progress-mini'>" +
                               "<div class='bar' style='width: " + maybe(node.percent_of_all_events, 0) + "%'></div>" +
                           "</div></td>" +
                       "<td>" + maybe(node.alert_count, 0) + "</td>" +

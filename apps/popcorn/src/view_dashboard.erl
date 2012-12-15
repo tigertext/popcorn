@@ -47,6 +47,7 @@ known_nodes() ->
         Message_Counts  = gen_fsm:sync_send_event(Pid, get_message_counts),
         Node_List       = binary_to_list(Node),
         Node_Properties = [{'node_name',             Node_List},
+                           {'node_hash',             re:replace(base64:encode(Node), "=", "_", [{return, list}, global])},
                            {'total_messages',        proplists:get_value(total, Message_Counts, 0)},
                            {'percent_of_all_events', ?PERCENT(proplists:get_value(total, Message_Counts, 0) / Total_Message_Count)},
                            {'alert_count',           0},

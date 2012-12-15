@@ -82,7 +82,7 @@ handle_call(_Request, State) ->
 
 %% popcorn_udp:handle_info
 %% node_fsm
-handle_event({triage_event, #popcorn_node{} = Node,
+handle_event({triage_event, #popcorn_node{} = Node, Node_Pid,
               #log_message{log_module=Module, log_line=Line, severity=Severity},
               Is_New_Node} = Log_Entry, State)
         when Severity < 4, is_binary(Module), is_binary(Line) ->
@@ -91,10 +91,10 @@ handle_event({triage_event, #popcorn_node{} = Node,
         true -> dashboard_stream_fsm:broadcast({new_node, Node});
         false -> ok
     end,
-    update_counter(Module,Line),
+    update_counter(Node,Node_Pid,Module,Line),
     {ok, State};
 
-handle_event({triage_event, #popcorn_node{} = Node, true}, State) ->
+handle_event({triage_event, #popcorn_node{} = Node, _Node_Pid, true}, State) ->
     dashboard_stream_fsm:broadcast({new_node, Node}),
     {ok, State};
 
@@ -111,9 +111,9 @@ code_change(_OldVsn, State, _Extra) ->
     %% TODO version number should be read here, or else we don't support upgrades
     {ok, State}.
 
-update_counter(undefined, _) -> ok;
-update_counter(_, undefined) -> ok;
-update_counter(Module,Line) ->
+update_counter(_, _, undefined, _) -> ok;
+update_counter(_, _, _, undefined) -> ok;
+update_counter(Node, Node_Pid, Module, Line) ->
     folsom_metrics:notify({"total_alerts", {inc, 1}}),
     Counter = key(Module,Line),
     Day = day_key(),
@@ -129,7 +129,13 @@ update_counter(Module,Line) ->
     folsom_metrics:notify({Counter, {inc, 1}}),
 
     NewCounters =
-        [   {counter,           list_to_binary(Counter)},
+        [   {node_hash,         re:replace(base64:encode(Node#popcorn_node.node_name), "=", "_", [{return, binary}, global])},
+            {node_count,        case Node_Pid of
+                                    undefined -> 0;
+                                    Node_Pid ->
+                                        proplists:get_value(total, gen_fsm:sync_send_event(Node_Pid, get_message_counts), 0)
+                                end},
+            {counter,           list_to_binary(Counter)},
             {counter_count,     folsom_metrics:get_metric_value(Counter)},
             {event_count,       folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER)},
             {alert_count_today, folsom_metrics:get_metric_value(Day)},
