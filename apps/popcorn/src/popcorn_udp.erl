@@ -47,14 +47,12 @@ handle_info({udp, Socket, _Host, _Port, Bin}, State) ->
     {Popcorn_Node, Log_Message} = decode_protobuffs_message(Bin),
 
     %% create the node fsm, if necessary
-    Is_New_Node =
-        case ets:select_count(current_nodes, [{{'$1', '$2'}, [{'=:=', '$1', Popcorn_Node#popcorn_node.node_name}], [true]}]) of
-            0 -> {ok, Pid} = supervisor:start_child(node_sup, []),
-                 ok = gen_fsm:sync_send_event(Pid, {set_popcorn_node, Popcorn_Node}),
-                 ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid}),
-                 true;
-            _ -> false
-        end,
+    case mnesia:dirty_read(known_nodes, Popcorn_Node#popcorn_node.node_name) of
+        [] -> {ok, Pid} = supervisor:start_child(node_sup, []),
+              ok = gen_fsm:sync_send_event(Pid, {set_popcorn_node, Popcorn_Node}),
+              ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid});
+        _  -> ok
+    end,
 
     %% let the fsm create the log
     Node_Pid =

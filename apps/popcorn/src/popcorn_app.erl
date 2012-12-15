@@ -3,7 +3,10 @@
 -behaviour(application).
 
 %% Application callbacks
--export([start/2, stop/1, init/1]).
+-export([start/2,
+         start_phase/3,
+         stop/1,
+         init/1]).
 
 -include("include/popcorn.hrl").
 
@@ -17,18 +20,40 @@
 start(_StartType, _StartArgs) -> supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 stop(_State) -> ok.
 
+start_phase(deserialize_mnesia, _Start_Type, _Phase_Args) ->
+    io:format("Reloading previously known nodes...\n"),
+    lists:foreach(fun(Known_Node) ->
+        io:format("Node: ~s\n", [binary_to_list(Known_Node)]),
+        Popcorn_Node = lists:nth(1, mnesia:dirty_read(known_nodes, Known_Node)),
+        {ok, Pid} = supervisor:start_child(node_sup, []),
+        ok = gen_fsm:sync_send_event(Pid, {deserialize_popcorn_node, Popcorn_Node}),
+        ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid})
+      end, mnesia:dirty_all_keys(known_nodes)),
+    io:format(" done!\n").
+
 init([]) ->
     io:format("CWD: ~p\n", [filename:absname("")]),
 
     {ok, _} = gen_event:start({local, triage_handler}),
     gen_event:add_handler(triage_handler, triage_handler, []),
-    
+
     io:format("Creating ets tables..."),
     ets:new(current_connected_users,  [named_table, set, public]),
     ets:new(current_nodes,            [named_table, set, public]),
     ets:new(current_log_streams,      [named_table, set, public, {keypos, #stream.stream_id}]),
     ets:new(current_dashboard_streams,[named_table, set, public, {keypos, #stream.stream_id}]),
     ets:new(current_roles,            [named_table, bag, public]),
+    io:format(" done!\n"),
+
+    %% ensure we have a mnesia schema created
+    mnesia:stop(),
+    mnesia:create_schema([node()]),
+    mnesia:start(),
+
+    io:format("Ensuring required mnesia tables exist..."),
+    mnesia:create_table(known_nodes,  [{disc_copies, [node()]},
+                                       {record_name, popcorn_node},
+                                       {attributes,  record_info(fields, popcorn_node)}]),
     io:format(" done!\n"),
 
     io:format("Creating global metrics..."),

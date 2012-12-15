@@ -39,8 +39,9 @@ init([]) ->
     lists:foreach(fun({Severity, Retention_Interval}) ->
         Microseconds = popcorn_util:retention_time_to_microsec(Retention_Interval),
         Oldest_TS    = ?NOW - Microseconds,
-        Severity_Num = popcorn_util:severity_to_number(Severity),
-        ets:select_delete(State#state.history_name, ets:fun2ms(fun(#log_message{timestamp = TS, severity  = S}) when TS < Oldest_TS andalso S =:= Severity_Num -> true end))
+        Severity_Num = popcorn_util:severity_to_number(Severity)
+        %I = mnesia:select(State#state.history_name, ets:fun2ms(fun(#log_message{timestamp = TS, severity = S} = Log_Message) when TS < Oldest_TS andalso S =:= Severity_Num -> Log_Message end)),
+        %?POPCORN_DEBUG_MSG("I = ~p", [I])
       end, Retentions),
 
     gen_fsm:start_timer(?EXPIRE_TIMER, expire_log_messages),
@@ -49,7 +50,7 @@ init([]) ->
 
 'LOGGING'({log_message, Popcorn_Node, Log_Message}, State) ->
     %% log the message
-    ets:insert(State#state.history_name, Log_Message),
+    mnesia:dirty_write(State#state.history_name, Log_Message),
 
     %% increment the severity counter for this node
     folsom_metrics:notify({proplists:get_value(Log_Message#log_message.severity, State#state.severity_metric_names), {inc, 1}}),
@@ -88,18 +89,40 @@ init([]) ->
 
     {next_state, 'LOGGING', State}.
 
-'LOGGING'({set_popcorn_node, Popcorn_Node}, _From, State) ->
+'LOGGING'({deserialize_popcorn_node, Popcorn_Node}, _From, State) ->
     Node_Name        = Popcorn_Node#popcorn_node.node_name,
-    Prefix           = <<"_popcorn__">>,
+    Prefix           = <<"raw_logs__">>,
     History_Name     = binary_to_atom(<<Prefix/binary, Node_Name/binary>>, latin1),
 
-    case ets:info(History_Name) of
-        undefined -> ok;
-        _         -> ets:delete(History_Name)
-    end,
+    ets:insert(current_roles, {Popcorn_Node#popcorn_node.role, self()}),
 
-    %% create the ets table to stpre the raw logs for this node
-    ets:new(History_Name, [named_table, ordered_set, public, {keypos, #log_message.timestamp}]),
+    %% 0 = emergency -> 7 = debug
+    Separator_Binary = <<30>>,
+    Severity_Metric_Names = lists:map(fun(Level) ->
+                                Level_Bin = list_to_binary(integer_to_list(Level)),
+                                Severity_Counter_Name = binary_to_atom(<<Prefix/binary, Node_Name/binary, Separator_Binary/binary, Level_Bin/binary>>, latin1),
+                                {Level, Severity_Counter_Name}
+                              end, lists:seq(0, 7)),
+
+    %% create the metrics
+    lists:foreach(fun({_, N}) -> folsom_metrics:new_counter(N) end, Severity_Metric_Names),
+
+    {reply, ok, 'LOGGING', State#state{history_name          = History_Name,
+                                       severity_metric_names = Severity_Metric_Names,
+                                       popcorn_node          = Popcorn_Node}};
+
+'LOGGING'({set_popcorn_node, Popcorn_Node}, _From, State) ->
+    mnesia:dirty_write(known_nodes, Popcorn_Node),
+
+    Node_Name        = Popcorn_Node#popcorn_node.node_name,
+    Prefix           = <<"raw_logs__">>,
+    History_Name     = binary_to_atom(<<Prefix/binary, Node_Name/binary>>, latin1),
+
+    %% create the mnesia table to stpre the raw logs for this node
+    {atomic, ok} = mnesia:create_table(History_Name, [{disc_copies, [node()]},
+                                                      {record_name, log_message},
+                                                      {index,       [#log_message.severity]},     %% this can't be the first element in the record
+                                                      {attributes,  record_info(fields, log_message)}]),
 
     %% add this node to the "roles" tets table
     ets:insert(current_roles, {Popcorn_Node#popcorn_node.role, self()}),
