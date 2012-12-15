@@ -17,7 +17,7 @@
 %% ------------------------------------------------------------------
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3]).
+         code_change/3, get_tags/1]).
 
 %% ------------------------------------------------------------------
 %% API Function Definitions
@@ -62,8 +62,6 @@ handle_info({udp, Socket, _Host, _Port, Bin}, State) ->
         [{_, Running_Pid}] -> gen_fsm:send_event(Running_Pid, {log_message, Popcorn_Node, Log_Message})
     end,
 
-   % _Tags = get_tags(binary_to_list(Message)),
-
     inet:setopts(Socket, [{active, once}]),
     {noreply, State};
 
@@ -80,14 +78,11 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 
-%get_tags(Message) ->
-%    Tags_List = lists:filter(fun(Word) ->
-%          string:substr(Word, 1, 1) =:= "#"
-%      end, string:tokens(Message, " ")),
-%    Cleaned_Tags = lists:map(fun(Word) ->
-%          string:substr(Word, 2, length(Word) - 1)
-%      end, Tags_List),
-%    string:join(Cleaned_Tags, ",").
+get_tags(Message) ->
+    {tokenize(Message, "#"), tokenize(Message, "@")}.
+
+tokenize(Message, Character) ->
+    [string:substr(Word, 2, length(Word) -1) || Word <- string:tokens(Message, " ,;-"), string:substr(Word, 1, 1) =:= Character].
 
 -spec decode_protobuffs_message(binary()) -> {#popcorn_node{}, #log_message{}}.
 decode_protobuffs_message(Encoded_Message) ->
@@ -101,6 +96,8 @@ decode_protobuffs_message(Encoded_Message) ->
     {{8, Line},  Rest8}        = protobuffs:decode(Rest7,           bytes),
     {{9, Pid},  <<>>}          = protobuffs:decode(Rest8,           bytes),
 
+    {Hashtags,Mentions} = get_tags(binary_to_list(Message)),
+
     Popcorn_Node = #popcorn_node{node_name = check_undefined(Node),
                                  role      = check_undefined(Node_Role),
                                  version   = check_undefined(Node_Version)},
@@ -108,6 +105,8 @@ decode_protobuffs_message(Encoded_Message) ->
     Log_Message  = #log_message{timestamp    = ?NOW,     %% this should be part of the protobuffs packet?
                                 severity     = check_undefined(Severity),
                                 message      = check_undefined(Message),
+                                hashtags     = Hashtags,
+                                mentions     = Mentions,
                                 log_module   = check_undefined(Module),
                                 log_function = check_undefined(Function),
                                 log_line     = check_undefined(Line),
