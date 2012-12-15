@@ -65,31 +65,34 @@ opt(<<>>, Default)      -> Default;
 opt(undefined, Default) -> Default;
 opt(Value, _)           -> Value.
 
-format_log_message(Log_Message) ->
-  UTC_Timestamp = calendar:now_to_universal_time({Log_Message#log_message.timestamp div 1000000000000, 
-                                                 Log_Message#log_message.timestamp div 1000000 rem 1000000,
-                                                 Log_Message#log_message.timestamp rem 1000000}),
+format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_function=Function, log_line=Line, log_pid=Pid,
+                                severity=Severity, message=Message, hashtags=Hashtags, mentions=Mentions}) ->
+  UTC_Timestamp = calendar:now_to_universal_time({Timestamp div 1000000000000, 
+                                                  Timestamp div 1000000 rem 1000000,
+                                                  Timestamp rem 1000000}),
   {{Year, Month, Day}, {Hour, Minute, Second}} = UTC_Timestamp,
   Formatted_DateTime = lists:flatten(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0B ~2.10.0B:~2.10.0B:~2.10.0B", [Year, Month, Day, Hour, Minute, Second])),
   Formatted_Time     = lists:flatten(io_lib:format("~2.10.0B:~2.10.0B:~2.10.0B", [Hour, Minute, Second])),
 
   Find_More_Html     = "<strong>Filter current list to show only messages with matching:</strong><br /><br />" ++
-                      "<label class='checkbox popover-label'><input type='checkbox'>Severity: " ++ binary_to_list(popcorn_util:number_to_severity(Log_Message#log_message.severity)) ++ "</label>" ++
-                      "<label class='checkbox popover-label'><input type='checkbox'>Module: " ++ binary_to_list(opt(Log_Message#log_message.log_module, <<"Not set">>)) ++ "</label>" ++
-                      "<label class='checkbox popover-label'><input type='checkbox'>Function: " ++ binary_to_list(opt(Log_Message#log_message.log_function, <<"Not set">>)) ++ "</label>" ++
-                      "<label class='checkbox popover-label'><input type='checkbox'>Line: " ++ binary_to_list(opt(Log_Message#log_message.log_line, <<"?">>)) ++ " in " ++ opt(binary_to_list(Log_Message#log_message.log_module), "not set") ++ "</label>" ++
-                      "<label class='checkbox popover-label'><input type='checkbox'>Pid: " ++ binary_to_list(opt(Log_Message#log_message.log_pid, <<"Not set">>)) ++ "</label><br />" ++
-                      "<button class='btn btn-mini' type='button'>Apply Filter</button>",
+                      "<label class='checkbox popover-label'><input type='checkbox'>Severity: " ++ binary_to_list(popcorn_util:number_to_severity(Severity)) ++ "</label>" ++
+                      "<label class='checkbox popover-label'><input type='checkbox'>Module: " ++ binary_to_list(opt(Module, <<"Not set">>)) ++ "</label>" ++
+                      "<label class='checkbox popover-label'><input type='checkbox'>Function: " ++ binary_to_list(opt(Function, <<"Not set">>)) ++ "</label>" ++
+                      "<label class='checkbox popover-label'><input type='checkbox'>Line: " ++ binary_to_list(opt(Line, <<"?">>)) ++ " in " ++ opt(binary_to_list(Module), "not set") ++ "</label>" ++
+                      "<label class='checkbox popover-label'><input type='checkbox'>Pid: " ++ binary_to_list(opt(Pid, <<"Not set">>)) ++ "</label>" ++
+                      lists:append(["<label class='checkbox popover-label'><input type='checkbox'>@" ++ Mention ++ "</label>" || Mention <- Mentions]) ++
+                      lists:append(["<label class='checkbox popover-label'><input type='checkbox'>#" ++ Hashtag ++ "</label>" || Hashtag <- Hashtags]) ++ 
+                      "<br /><button class='btn btn-mini' type='button'>Apply Filter</button>",
 
   [{'time',             Formatted_Time},
    {'datetime',         Formatted_DateTime},
    {'find_more_html',   Find_More_Html},
-   {'log_module',       opt(binary_to_list(Log_Message#log_message.log_module), "Unknown")},
-   {'log_function',     opt(binary_to_list(Log_Message#log_message.log_function), "Unknown")},
-   {'log_line',         opt(binary_to_list(Log_Message#log_message.log_line), "??")},
-   {'log_pid',          opt(binary_to_list(Log_Message#log_message.log_pid), "?")},
-   {'message_severity', binary_to_list(popcorn_util:number_to_severity(Log_Message#log_message.severity))},
-   {'message',          binary_to_list(Log_Message#log_message.message)}].
+   {'log_module',       opt(binary_to_list(Module), "Unknown")},
+   {'log_function',     opt(binary_to_list(Function), "Unknown")},
+   {'log_line',         opt(binary_to_list(Line), "??")},
+   {'log_pid',          opt(binary_to_list(Pid), "?")},
+   {'message_severity', binary_to_list(popcorn_util:number_to_severity(Severity))},
+   {'message',          binary_to_list(Message)}].
 
 head_includes() ->
     Head_Includes = ["<link rel='stylesheet/less' href=\"/css/popcorn.less\" type=\"text/css\">",

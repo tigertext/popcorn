@@ -24,8 +24,8 @@ terminate(_Req, _State) -> ok.
 handle_path(<<"POST">>, [<<"log">>, <<"stream">>, <<"pause">>], Req, State) ->
     {ok, Vals, _} = cowboy_req:body_qs(Req),
     Stream_Id     = proplists:get_value(<<"stream_id">>, Vals),
-    Stream_Pid    = lists:nth(1, ets:select(current_log_streams, ets:fun2ms(fun(#log_stream{stream_id  = SID,
-                                                                                            stream_pid = SPID}) when SID =:= Stream_Id -> SPID end))),
+    Stream_Pid    = lists:nth(1, ets:select(current_log_streams, ets:fun2ms(fun(#stream{stream_id  = SID,
+                                                                                        stream_pid = SPID}) when SID =:= Stream_Id -> SPID end))),
 
     gen_fsm:send_all_state_event(Stream_Pid, toggle_pause),
 
@@ -37,8 +37,8 @@ handle_path(<<"POST">>, [<<"log">>, <<"stream">>, <<"pause">>], Req, State) ->
     {ok, Reply, State};
 
 handle_path(<<"GET">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
-    case ets:select(current_log_streams, ets:fun2ms(fun(#log_stream{stream_id  = SID,
-                                                                    stream_pid = SPID}) when SID =:= Stream_Id -> SPID end)) of
+    case ets:select(current_log_streams, ets:fun2ms(fun(#stream{stream_id  = SID,
+                                                                stream_pid = SPID}) when SID =:= Stream_Id -> SPID end)) of
         [] ->
             Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
             {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
@@ -55,8 +55,8 @@ handle_path(<<"GET">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
     end;
 
 handle_path(<<"PUT">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
-    Stream_Pid    = lists:nth(1, ets:select(current_log_streams, ets:fun2ms(fun(#log_stream{stream_id  = SID,
-                                                                                            stream_pid = SPID}) when SID =:= Stream_Id -> SPID end))),
+    Stream_Pid    = lists:nth(1, ets:select(current_log_streams, ets:fun2ms(fun(#stream{stream_id  = SID,
+                                                                                        stream_pid = SPID}) when SID =:= Stream_Id -> SPID end))),
 
     {ok, Vals, _} = cowboy_req:body_qs(Req),
     case proplists:get_value(<<"severities">>, Vals) of
@@ -104,19 +104,19 @@ handle_path(<<"GET">>, [<<"log">>], Req, State) ->
                                         {'severities', lists:map(fun(Severity_Name) -> popcorn_util:severity_to_number(list_to_binary(Severity_Name)) end, Applied_Severity_Filters)}]),
 
                  %% spawn the stream fsm
-                 {ok, Stream_Pid} = supervisor:start_child(stream_sup, []),
+                 {ok, Stream_Pid} = supervisor:start_child(log_stream_sup, []),
 
                  %% create the stream object
-                 Log_Stream = #log_stream{stream_id        = popcorn_util:random_id(),
-                                          stream_pid       = Stream_Pid,
-                                          client_pid       = undefined,
-                                          applied_filters  = Default_Filters,
-                                          paused           = false},
+                 Log_Stream = #stream{stream_id        = popcorn_util:random_id(),
+                                      stream_pid       = Stream_Pid,
+                                      client_pid       = undefined,
+                                      applied_filters  = Default_Filters,
+                                      paused           = false},
 
                  %% assign to the fsm
                  gen_fsm:send_event(Stream_Pid, {connect, Log_Stream}),
 
-                 Context = dict:from_list([{stream_id,       binary_to_list(Log_Stream#log_stream.stream_id)},
+                 Context = dict:from_list([{stream_id,       binary_to_list(Log_Stream#stream.stream_id)},
                                           {default_filters, dict:from_list(Default_Filters)}]),
 
                  TFun        = mustache:compile(view_log),

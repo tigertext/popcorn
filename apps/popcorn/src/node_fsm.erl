@@ -83,7 +83,7 @@ init([]) ->
     %% Notify any streams connected
     Log_Streams = ets:tab2list(current_log_streams),
     lists:foreach(fun(Log_Stream) ->
-        gen_fsm:send_all_state_event(Log_Stream#log_stream.stream_pid, {new_message, Log_Message})
+        gen_fsm:send_all_state_event(Log_Stream#stream.stream_pid, {new_message, Log_Message})
       end, Log_Streams),
 
     {next_state, 'LOGGING', State}.

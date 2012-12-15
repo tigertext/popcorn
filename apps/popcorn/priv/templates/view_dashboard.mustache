@@ -72,7 +72,7 @@
                             <div><small>nodes</small></div>
                         </div>
                         <div class="span2">
-                            <div class="kpi">{{event_count}}</div>
+                            <div id="event_count" class="kpi">{{event_count}}</div>
                             <div><small>events</small></div>
                     </div>
                     <div class="span2">
@@ -84,11 +84,11 @@
                         <div><small>@mentions</small></div>
                     </div>
                     <div class="span2">
-                        <div class="kpi">{{alert_count_today}}</div>
+                        <div id="alert_count_today" class="kpi">{{alert_count_today}}</div>
                         <div><small>alerts today</small></div>
                     </div>
                     <div class="span2">
-                        <div class="kpi">{{alert_count}}</div>
+                        <div id="alert_count" class="kpi">{{alert_count}}</div>
                         <div><small>total alerts</small></div>
                     </div>
                   </div>
@@ -102,22 +102,16 @@
                       <h1>Alerts</h1>
                     </header>
                   </a>
-                  <table class="table table-striped full-section table-hover">
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Event Count</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <table id="alerts" class="table table-striped full-section table-hover">
+                      <tr />
                       {{#alerts}}
                         <tr>
-                          <td>{{name}} line {{line}}</td>
-                          <td>{{count}}</td>
-                          <td>{{node_name}}</td>
+                          <td>{{name}} line {{line}}<br/>{{message}}</td>
+                          <td><span id="{{name}}-{{line}}-seen">{{count}}</span> seen</td>
+                          <td align="right">version {{version}}</td>
+                          <td></td>
                         </tr>
                       {{/alerts}}
-                    </tbody>
                   </table>
                 </section>
 
@@ -129,7 +123,7 @@
                       <h1>Nodes</h1>
                     </header>
                   </a>
-                  <table class="table table-striped full-section table-hover">
+                  <table id="known_nodes" class="table table-striped full-section table-hover">
                     <thead>
                       <tr>
                         <th>Name</th>
@@ -142,10 +136,10 @@
                     </thead>
                     <tbody>
                       {{#known_nodes}}
-                        <tr>
+                        <tr class="node-row" id="node-{{node_hash}}">
                           <td class="primary"><a href="/node/{{node_name}}">{{node_name}}</a></td>
-                          <td>{{total_messages}}</td>
-                          <td>
+                          <td class="node-total">{{total_messages}}</td>
+                          <td class="node-percent">
                             <div class="progress progress-mini">
                               <div class="bar" style="width: {{percent_of_all_events}}%"></div>
                             </div>
@@ -172,6 +166,77 @@
     <script src="/bootstrap/js/bootstrap-dropdown.js"></script>
     <script src="/bootstrap/js/bootstrap-collapse.js"></script>
 
+    <script type="text/javascript">
+
+      var streamSource = new EventSource("/dashboard/stream/{{stream_id}}");
+
+      function maybe(v, d) { if(v == 0 || v) return v; if(d == 0 || d) return d; return "" };
+
+      function percent(value) { return (Math.round(value * 100 * 100.0) / 100.0) + "%"; };
+
+      function set_node_percents() {
+        var total = 0;
+        var nodes = {};
+        var rows = $('.node-row');
+        for(var i = 0; i < rows.length; i++) {
+          tr = rows[i];
+          var value = parseInt($('#' + tr.id + ' .node-total').text(), 10);
+          total += value;
+          nodes[tr.id] = value
+        }
+        for(var i = 0; i < rows.length; i++) {
+          tr = rows[i];
+          $('#' + tr.id + ' .node-percent .progress .bar').width(percent(nodes[tr.id] / total))
+        }
+      };
+
+      streamSource.addEventListener(
+        'update_counters',
+        function(event) {
+          var counters = JSON.parse(event.data);
+          if(counters.event_count) $('#event_count').text(counters.event_count);
+          if(counters.alert_count_today) $('#alert_count_today').text(counters.alert_count_today);
+          if(counters.alert_count) $('#alert_count').text(counters.alert_count);
+          if(counters.counter && counters.counter_count)
+            $('#' + counters.counter.replace(":", "-") + '-seen').text(counters.counter_count);
+          if(counters.node_hash && counters.node_count) {
+            $('#node-' + counters.node_hash + ' .node-total').text(counters.node_count);
+            set_node_percents();
+          }
+        },
+        false);
+
+      streamSource.addEventListener(
+        'new_metric',
+        function(event) {
+          var counter = JSON.parse(event.data);
+          var row = "<tr><td>" + maybe(counter.name) + " line " + maybe(counter.line) + "<br/>" +
+                    maybe(counter.message) + "</td><td><span id='" +
+                        maybe(counter.name) + "-" + maybe(counter.line) +
+                    "-seen'>1</span> seen</td><td align='right'>version " +
+                    maybe(counter.version) + "</td></tr>";
+          $('#alerts tr:first').before(row);
+        },
+        false);
+
+      streamSource.addEventListener(
+        'new_node',
+        function(event) {
+          var node = JSON.parse(event.data);
+          var row = "<tr>" +
+                      "<td class='primary'><a href='/node/" + node.node_name + "'>" + node.node_name + "</a></td>" +
+                      "<td class='node-total' id='" + node.node_hash + "-total'>" + maybe(node.total_messages, 1) + "</td>" +
+                      "<td class='node-percent' id='" + node.node_hash + "-percent'><div class='progress progress-mini'>" +
+                              "<div class='bar' style='width: " + maybe(node.percent_of_all_events, 0) + "%'></div>" +
+                          "</div></td>" +
+                      "<td>" + maybe(node.alert_count, 0) + "</td>" +
+                      "<td>" + maybe(node.hashtag_count, 0) + "</td>" +
+                      "<td>" + maybe(node.mention_count, 0) + "</td></tr>";
+          $('#known_nodes tr:last').after(row);
+        },
+        false);
+
+    </script>
+
   </body>
 </html>
-
