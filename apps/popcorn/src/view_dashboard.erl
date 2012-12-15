@@ -37,18 +37,24 @@ alert_count() -> gen_event:call(triage_handler, triage_handler, {total_alerts}).
 
 alerts() ->
     [begin
-            io:format("looking at ~p~n", [Counter]),
-        [Counter_Name,Line] = string:tokens(Counter, ":"),
-        #alert{node=#popcorn_node{version=Version}, 
-               log=#log_message{message=Message, log_function=Function}} = gen_event:call(triage_handler, triage_handler, {data, Counter}),
-        Node_Properties = [{'module',  Counter_Name},
-                           {'function',  list(Function)},
-                           {'line',  Line},
-                           {'count', Num},
-                           {'message', list(Message)},
-                           {'version', list(Version)},
-                           %{'product', list(Version)},
-                           {'node',  Num}],
+        Initial_Properties = [ {'count', Num}, {'node', Num} ],
+        Basic_Properties =
+          case gen_event:call(triage_handler, triage_handler, {data, Counter}) of
+            #alert{node = #popcorn_node{version = Version},
+                   log  = #log_message{message = Message}} ->
+              [ {'message', list(Message)}, {'version', list(Version)} | Initial_Properties];
+            #alert{node = #popcorn_node{version = Version}} ->
+              [ {'version', list(Version)} | Initial_Properties];
+            #alert{log  = #log_message{message = Message}} ->
+              [ {'message', list(Message)} | Initial_Properties];
+            #alert{} ->
+              Initial_Properties
+          end,
+        Node_Properties =
+          case string:tokens(Counter, ":") of
+            [Counter_Name,Line|_] -> [{'module', Counter_Name}, {'line', Line} | Basic_Properties];
+            _ -> Basic_Properties
+          end,
         dict:from_list(Node_Properties)
      end || {Counter, Num} <- gen_event:call(triage_handler, triage_handler, {alerts})
     ].
