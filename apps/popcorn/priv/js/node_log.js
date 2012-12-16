@@ -69,17 +69,33 @@ $(document).ready(function() {
   var timestampPopoverContent = '<label class="radio timestamp-radio-label">' +
                                   '<input type="radio" name="timestamp-radio" value="relative" checked></input>' +
                                   'Relative' +
-                                  '<div id="timespan-relative" style="min-height:30px;">' +
-                                    '<span class="timestamp-description">After now</span>' +
-                                    '<div class="timestamp-change"><a href="#" class="btn btn-mini">change</a></div>' +
+                                  '<div id="timespan-relative">' +
+                                    '<span class="timestamp-description">Show the past<br /></span>' +
+                                    '<input type="text" id="relative-val"></input>' +
+                                    '<select id="relative-unit">' +
+                                      '<option val="minutes">minutes</option>' +
+                                      '<option val="hours">hours</option>' +
+                                      '<option val="days">days</option>' +
+                                      '<option val="weeks">weeks</option>' +
+                                    '</select>' +
+                                    '<div class="timestamp-change"><a href="#" class="btn btn-mini">apply</a></div>' +
                                   '</div>' +
                                 '</label>' +
                                 '<label class="radio timestamp-radio-label">' +
                                   '<input type="radio" name="timestamp-radio" value="absolute"></input>' +
                                   'Absolute' +
-                                  '<div id="timespan-absolute" style="display:none;min-height:30px;">' +
-                                    '<span class="timestamp-description"></span>' +
-                                    '<div class="timestamp-change"><a href="#" class="btn btn-mini">change</a></div>' +
+                                  '<div id="timespan-absolute" style="display:none;">' +
+                                    '<span class="timestamp-description">From</span>' +
+                                    '<div class="input-append date" id="absolute-date-start" data-date="12-02-2012" data-date-format="dd-mm-yyyy">' +
+                                      '<span class="add-on"><i class="icon-th"></i></span>' +
+                                      '<input type="text" value="12-02-2012" readonly style="width:145px;">' +
+                                    '</div>' +
+                                    '<span class="timestamp-description">To</span>' +
+                                    '<div class="input-append date" id="absolute-date-end" data-date="12-02-2012" data-date-format="dd-mm-yyyy">' +
+                                      '<span class="add-on"><i class="icon-th"></i></span>' +
+                                      '<input type="text" value="12-02-2012" readonly style="width:145px;">' +
+                                    '</div>' +
+                                    '<div class="timestamp-change"><a href="#" class="btn btn-mini">apply</a></div>' +
                                   '</div>' +
                                 '</label>';
 
@@ -88,6 +104,11 @@ $(document).ready(function() {
                                title: 'Message Timestamp',
                                placement: 'bottom',
                                content: timestampPopoverContent});
+
+  $('#log-timestamp').click(function() {
+    $('#absolute-date-start').datepicker();
+    $('#absolute-date-end').datepicker();
+  });
 
   $('input[name=timestamp-radio]').live('change', function() {
     if ($(this).val() == 'absolute') {
