@@ -90,10 +90,18 @@ $(document).ready(function() {
                                       '<span class="add-on"><i class="icon-th"></i></span>' +
                                       '<input type="text" value="12-02-2012" readonly style="width:145px;">' +
                                     '</div>' +
+                                    '<div class="input-append bootstrap-timepicker-component" id="absolute-time-start">' +
+                                      '<span class="add-on"><i class="icon-time"></i></span>' +
+                                      '<input type="text" class="timepicker-default input-small" readonly>' +
+                                    '</div>' +
                                     '<span class="timestamp-description">To</span>' +
                                     '<div class="input-append date" id="absolute-date-end" data-date="12-02-2012" data-date-format="dd-mm-yyyy">' +
                                       '<span class="add-on"><i class="icon-th"></i></span>' +
                                       '<input type="text" value="12-02-2012" readonly style="width:145px;">' +
+                                    '</div>' +
+                                    '<div class="input-append bootstrap-timepicker-component" id="absolute-time-end">' +
+                                      '<span class="add-on"><i class="icon-time"></i></span>' +
+                                      '<input type="text" class="timepicker-default input-small" readonly>' +
                                     '</div>' +
                                     '<div class="timestamp-change"><a href="#" class="btn btn-mini">apply</a></div>' +
                                   '</div>' +
@@ -108,6 +116,8 @@ $(document).ready(function() {
   $('#log-timestamp').click(function() {
     $('#absolute-date-start').datepicker();
     $('#absolute-date-end').datepicker();
+    $('#absolute-time-start').timepicker();
+    $('#absolute-time-end').timepicker();
   });
 
   $('input[name=timestamp-radio]').live('change', function() {
