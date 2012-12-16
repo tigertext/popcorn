@@ -52,4 +52,5 @@
 Thanks to the following:
 
 https://github.com/littke/inspiritas-bootstrap/
+https://github.com/eternicode/bootstrap-datepicker
 
