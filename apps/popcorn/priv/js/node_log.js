@@ -66,6 +66,39 @@ $(document).ready(function() {
                      e.preventDefault();
                  });
 
+  var timestampPopoverContent = '<label class="radio timestamp-radio-label">' +
+                                  '<input type="radio" name="timestamp-radio" value="relative" checked></input>' +
+                                  'Relative' +
+                                  '<div id="timespan-relative" style="min-height:30px;">' +
+                                    '<span class="timestamp-description">After now</span>' +
+                                    '<div class="timestamp-change"><a href="#" class="btn btn-mini">change</a></div>' +
+                                  '</div>' +
+                                '</label>' +
+                                '<label class="radio timestamp-radio-label">' +
+                                  '<input type="radio" name="timestamp-radio" value="absolute"></input>' +
+                                  'Absolute' +
+                                  '<div id="timespan-absolute" style="display:none;min-height:30px;">' +
+                                    '<span class="timestamp-description"></span>' +
+                                    '<div class="timestamp-change"><a href="#" class="btn btn-mini">change</a></div>' +
+                                  '</div>' +
+                                '</label>';
+
+  $('#log-timestamp').popover({html: true,
+                               trigger: 'click',
+                               title: 'Message Timestamp',
+                               placement: 'bottom',
+                               content: timestampPopoverContent});
+
+  $('input[name=timestamp-radio]').live('change', function() {
+    if ($(this).val() == 'absolute') {
+      $('#timespan-absolute').show();
+      $('#timespan-relative').hide();
+    } else if($(this).val() == 'relative') {
+      $('#timespan-relative').show();
+      $('#timespan-absolute').hide();
+    }
+  });
+
   // select the default filters
   for (appliedFilter in appliedFilters) {
     var values = appliedFilters[appliedFilter];
