@@ -96,11 +96,15 @@ handle_event({triage_event, #popcorn_node{} = Node, Node_Pid,
     update_counter(Node,Node_Pid,Module,Line),
     {ok, State};
 
-handle_event({triage_event, #popcorn_node{} = Node, _Node_Pid, true}, State) ->
+handle_event({triage_event, #popcorn_node{} = Node, _Node_Pid, _Log_Message, true}, State) ->
     dashboard_stream_fsm:broadcast({new_node, Node}),
     {ok, State};
 
-handle_event(_Event, State) ->
+handle_event({triage_event, #popcorn_node{}, _Node_Pid, _Log_Message, false}, State) ->
+    {ok, State};
+
+handle_event(Event, State) ->
+    io:format("Unexpected event: ~p~n", [Event]),
     {ok, State}.
 
 handle_info(_Info, State) ->
