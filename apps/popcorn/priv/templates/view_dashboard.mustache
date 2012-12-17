@@ -68,7 +68,7 @@
                       </a>
                       <div class="row-fluid">
                         <div class="span2">
-                            <div class="kpi">{{node_count}}</div>
+                            <div id="node_count" class="kpi">{{node_count}}</div>
                             <div><small>nodes</small></div>
                         </div>
                         <div class="span2">
@@ -223,7 +223,8 @@
         'new_node',
         function(event) {
           var node = JSON.parse(event.data);
-          var row = "<tr>" +
+          if(node.node_count) $('#node_count').text(node.node_count);
+          var row = "<tr class='node-row' id='node-" + node.node_hash + "'>" +
                       "<td class='primary'><a href='/node/" + node.node_name + "'>" + node.node_name + "</a></td>" +
                       "<td class='node-total' id='" + node.node_hash + "-total'>" + maybe(node.total_messages, 1) + "</td>" +
                       "<td class='node-percent' id='" + node.node_hash + "-percent'><div class='progress progress-mini'>" +
