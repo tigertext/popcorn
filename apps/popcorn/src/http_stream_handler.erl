@@ -47,7 +47,8 @@ handle_loop(Req, State) ->
             handle_loop(Req, State);
         {new_node, Node} ->
             Total_Message_Count = folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER),
-            Data = [{node_name, Node#popcorn_node.node_name},
+            Data = [{node_count, ets:info(current_nodes, size)},
+                    {node_name, Node#popcorn_node.node_name},
                     {node_hash, re:replace(base64:encode(Node#popcorn_node.node_name), "=", "_", [{return, binary}, global])},
                     {percent_of_all_events, ?PERCENT(1 / Total_Message_Count)},
                     {total_messages, 1},

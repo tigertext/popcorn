@@ -18,7 +18,7 @@
 head_includes() -> popcorn_util:head_includes().
 
 -spec node_count() -> integer().
-node_count() -> length(ets:tab2list(current_nodes)).
+node_count() -> ets:info(current_nodes, size).
 
 -spec event_count() -> integer().
 event_count() -> folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER).
