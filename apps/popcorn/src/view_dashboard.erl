@@ -62,4 +62,4 @@ known_nodes() ->
       end, ets:tab2list(current_nodes)).
 
 -spec username() -> string().
-username() -> "marc".
+username() -> "admin".
