@@ -14,7 +14,7 @@
 
 -export([init/1,
          handle_event/3,
-         handle_sync_event/4,
+         handle_sync_event/4, 
          handle_info/3,
          terminate/3,
          code_change/4]).
@@ -43,6 +43,14 @@ init([]) ->
 
     {ok, 'STARTING', #state{idle_loops_disconnected = 0}}.
 
+'STARTING'({timeout, _From, idle_disconnect}, State) ->
+    gen_fsm:start_timer(?IDLE_DISCONNECT_TIMER, idle_disconnect),
+    case State#state.idle_loops_disconnected of
+        4 ->
+            error_logger:error_msg("Dashboard FSM disconnecting before streaming"),
+            {stop, normal, State};
+        O -> {next_state, 'STARTING', State#state{idle_loops_disconnected = O + 1}}
+    end;
 'STARTING'({connect, Stream}, State) ->
     %% add to the ets table
     ets:insert(current_dashboard_streams, Stream),

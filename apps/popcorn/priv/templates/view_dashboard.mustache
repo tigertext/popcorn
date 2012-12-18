@@ -105,9 +105,9 @@
                   <table id="alerts" class="table table-striped full-section table-hover">
                       <tr />
                       {{#alerts}}
-                        <tr>
+                        <tr id="alert-{{name}}-{{line}}">
                           <td>{{name}} line {{line}}<br/>{{message}}</td>
-                          <td><span id="{{name}}-{{line}}-seen">{{count}}</span> seen</td>
+                          <td><span class="seen">{{count}}</span> seen</td>
                           <td align="right">version {{version}}</td>
                           <td></td>
                         </tr>
@@ -197,25 +197,24 @@
           if(counters.event_count) $('#event_count').text(counters.event_count);
           if(counters.alert_count_today) $('#alert_count_today').text(counters.alert_count_today);
           if(counters.alert_count) $('#alert_count').text(counters.alert_count);
-          if(counters.counter && counters.counter_count)
-            $('#' + counters.counter.replace(":", "-") + '-seen').text(counters.counter_count);
+          if(counters.counter) {
+            var rowName = 'alert-' + maybe(counters.counter.name) + '-' + maybe(counters.counter.line);
+            var row = $('#' + rowName);
+            if(row.length > 0) {
+              $('#' + rowName + ' .seen').text(counters.counter.seen);
+            } else {
+              var newRow = "<tr id='" + rowName +"'>" +
+                            "<td>" + maybe(counters.counter.name) + " line " + maybe(counters.counter.line) + "<br/>" + maybe(counters.counter.message) + "</td>" +
+                            "<td><span class='seen'>" + maybe(counters.counter.seen, 1) + "</span> seen</td>" +
+                            "<td align='right'>version " + maybe(counters.counter.version) + "</td></tr>";
+              $('#alerts tr:first').before(newRow);
+              if($('#alerts tr').length > {{alert_lines}}) $('#alerts tr:last').remove();
+            }
+          }
           if(counters.node_hash && counters.node_count) {
             $('#node-' + counters.node_hash + ' .node-total').text(counters.node_count);
             set_node_percents();
           }
-        },
-        false);
-
-      streamSource.addEventListener(
-        'new_metric',
-        function(event) {
-          var counter = JSON.parse(event.data);
-          var row = "<tr><td>" + maybe(counter.name) + " line " + maybe(counter.line) + "<br/>" +
-                    maybe(counter.message) + "</td><td><span id='" +
-                        maybe(counter.name) + "-" + maybe(counter.line) +
-                    "-seen'>1</span> seen</td><td align='right'>version " +
-                    maybe(counter.version) + "</td></tr>";
-          $('#alerts tr:first').before(row);
         },
         false);
 
