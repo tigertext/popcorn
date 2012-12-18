@@ -40,6 +40,12 @@ handle(Req, State) ->
                                      {ok, Reply, State}
             end;
 
+        {{<<"POST">>, _}, {<<"/clear_alert">>, _}} ->
+            {ok, Post, _Req2} = cowboy_req:body_qs(Req),
+            ?POPCORN_INFO_MSG("clear alert: ~p", [Post]),
+            {ok, Reply} = cowboy_req:reply(200, [], <<>>, Req),
+            {ok, Reply, State};
+
         {{<<"GET">>, _}, {<<"/alerts">>, _}} ->
             ?POPCORN_DEBUG_MSG("http request for alerts"),
             case session_handler:is_session_authed_and_valid(Req) of
