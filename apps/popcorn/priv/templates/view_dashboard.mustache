@@ -106,10 +106,10 @@
                       <tr />
                       {{#alerts}}
                         <tr id="alert-{{name}}-{{line}}">
+                          <td><a href="#" class="btn btn-mini">Clear</a></td>
                           <td>{{name}} line {{line}}<br/>{{message}}</td>
-                          <td><span class="seen">{{count}}</span> seen</td>
-                          <td align="right">version {{version}}</td>
-                          <td></td>
+                          <td><span class="recent">{{recent}}</span> recent / <span class="seen">{{count}}</span> seen</td>
+                          <td align="right">{{product}} {{version}}</td>
                         </tr>
                       {{/alerts}}
                   </table>
@@ -201,12 +201,14 @@
             var rowName = 'alert-' + maybe(counters.counter.name) + '-' + maybe(counters.counter.line);
             var row = $('#' + rowName);
             if(row.length > 0) {
-              $('#' + rowName + ' .seen').text(counters.counter.seen);
+              $('#' + rowName + ' .seen').text(counters.counter.count);
+              $('#' + rowName + ' .recent').text(counters.counter.recent);
             } else {
               var newRow = "<tr id='" + rowName +"'>" +
+                            "<td><a href='#' class='btn btn-mini'>Clear</a></td>" +
                             "<td>" + maybe(counters.counter.name) + " line " + maybe(counters.counter.line) + "<br/>" + maybe(counters.counter.message) + "</td>" +
-                            "<td><span class='seen'>" + maybe(counters.counter.seen, 1) + "</span> seen</td>" +
-                            "<td align='right'>version " + maybe(counters.counter.version) + "</td></tr>";
+                            "<td><span class='recent'>" + maybe(counters.counter.recent, 0) + "</span> recent / <span class='seen'>" + maybe(counters.counter.count, 1) + "</span> seen</td>" +
+                            "<td align='right'>" + maybe(counters.counter.product) + " " + maybe(counters.counter.version) + "</td></tr>";
               $('#alerts tr:first').before(newRow);
               if($('#alerts tr').length > {{alert_lines}}) $('#alerts tr:last').remove();
             }

@@ -149,9 +149,9 @@ data(#alert{location = undefined}) -> [];
 data(Alert) ->
     Basic_Properties =
       case Alert of
-        #alert{node = #popcorn_node{version = Version},
+        #alert{node = #popcorn_node{role = Role, version = Version},
                log  = #log_message{message = Message}} ->
-          [ {'message', list(Message)}, {'version', list(Version)}];
+          [ {'message', list(Message)}, {'product', list(Role)}, {'version', list(Version)}];
         #alert{node = #popcorn_node{version = Version}} ->
           [ {'version', list(Version)}];
         #alert{log  = #log_message{message = Message}} ->
@@ -164,4 +164,6 @@ data(Alert) ->
             [Counter_Name,Line|_] -> [{'name', Counter_Name}, {'line', Line} | Basic_Properties];
             _ -> Basic_Properties
         end,
-    [{count, folsom_metrics:get_metric_value(Alert#alert.location)} | All_Properties].
+    [{count, folsom_metrics:get_metric_value(Alert#alert.location)},
+     {recent, folsom_metrics:get_metric_value(Alert#alert.location)}
+     | All_Properties].
