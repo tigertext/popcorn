@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Popcorn Log Analysis</title>
+  {{#head_includes}}
+  {{tag}}
+  {{/head_includes}}
+</head>
+<body>
+
+    <!-- Navbar
+    ================================================== -->
+    <div class="navbar navbar-static-top navbar-inverse">
+      <div class="navbar-inner">
+        <div class="container">
+          <a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </a>
+
+          <a class="brand" href="/">Popcorn</a>
+          <span class="tagline">a predictive & intelligent log analysis machine</span>
+
+          <div class="nav-collapse collapse" id="main-menu">
+            <div class="auth pull-right">
+              <img class="avatar" src="images/littke.png">
+              <span class="name">{{username}}</span><br/>
+              <span class="links">
+                <a href="/settings">Settings</a>
+                <a href="/logout">Logout</a>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="row-fluid">
+        <div class="span3">
+          <aside>
+            <nav>
+              <ul class="nav">
+                <li class="selected">
+                  <a href="/"><i class="icon-list"></i> Dashboard</a>
+                </li>
+                <li>
+                  <a href="/alerts"><i class="icon-bell icon-white"></i> Alerts</a>
+                </li>
+                <li>
+                  <a href="/#nodes"><i class="icon-th-large icon-white"></i> Nodes</a>
+                </li>
+              </ul>
+            </nav>
+          </aside>
+        </div>
+        <div class="span9" id="content-wrapper">
+          <div id="content">
+
+            <section id="alerts">
+              <a name="alerts">
+                <header>
+                  <h1>Alerts</h1>
+                </header>
+              </a>
+              <table id="alerts" class="table table-striped full-section table-hover">
+                <tr />
+                {{#alerts}}
+                <tr id="alert-{{name}}-{{line}}">
+                  <td>{{name}} line {{line}}<br/>{{message}}</td>
+                  <td><span class="seen">{{count}}</span> seen</td>
+                  <td align="right">version {{version}}</td>
+                  <td></td>
+                </tr>
+                {{/alerts}}
+              </table>
+            </section>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/js/jquery.min.js"></script>
+    <script src="/bootstrap/js/bootstrap-dropdown.js"></script>
+    <script src="/bootstrap/js/bootstrap-collapse.js"></script>
+    <script type="text/javascript">
+
+        var streamSource = new EventSource("/dashboard/stream/{{stream_id}}");
+
+        function maybe(v, d) { if(v == 0 || v) return v; if(d == 0 || d) return d; return "" };
+
+        streamSource.addEventListener(
+          'update_counters',
+          function(event) {
+            var counters = JSON.parse(event.data);
+            if(counters.counter) {
+              var rowName = 'alert-' + maybe(counters.counter.name) + '-' + maybe(counters.counter.line);
+              var row = $('#' + rowName);
+              if(row.length > 0) {
+                $('#' + rowName + ' .seen').text(counters.counter.seen);
+              } else {
+                var newRow = "<tr id='" + rowName +"'>" +
+                "<td>" + maybe(counters.counter.name) + " line " + maybe(counters.counter.line) + "<br/>" + maybe(counters.counter.message) + "</td>" +
+                "<td><span class='seen'>" + maybe(counters.counter.seen, 1) + "</span> seen</td>" +
+                "<td align='right'>version " + maybe(counters.counter.version) + "</td></tr>";
+                $('#alerts tr:first').before(newRow);
+              }
+            }
+          },
+          false);
+
+    </script>
+
+  </body>
+</html>
