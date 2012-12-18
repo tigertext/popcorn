@@ -58,14 +58,19 @@ handle_loop(Req, State) ->
             io:format("New node: ~p~n", [Data]),
             Event = lists:flatten(mochijson:encode({struct, Data})),
             chunk_event("new_node", Event, Req, State);
-        {new_metric, Counter} ->
-            io:format("New metric: ~p~n", [Counter]),
-            Data = triage_handler:counter_data(Counter),
-            Event = lists:flatten(mochijson:encode({struct, Data})),
-            chunk_event("new_metric", Event, Req, State);
         {update_counters, NewCounters} ->
             io:format("Update Counters: ~p~n", [NewCounters]),
-            Event = lists:flatten(mochijson:encode({struct, NewCounters})),
+            Event =
+                lists:flatten(mochijson:encode(
+                    case lists:keytake(counter, 1, NewCounters) of
+                        false ->
+                            {struct, NewCounters};
+                        {value, {counter, Counter}, Rest} ->
+                            CounterData =
+                                [{seen, folsom_metrics:get_metric_value(Counter)}
+                                    | triage_handler:counter_data(Counter)],
+                            {struct, [{counter, {struct, CounterData}} | Rest]}
+                    end)),
             chunk_event("update_counters", Event, Req, State);
         Other ->
             ?POPCORN_DEBUG_MSG("streaming handler received unknown message: ~p", [Other]),

@@ -141,8 +141,7 @@ update_counter(Node, Node_Pid, Module, Line) ->
                                     Node_Pid ->
                                         proplists:get_value(total, gen_fsm:sync_send_event(Node_Pid, get_message_counts), 0)
                                 end},
-            {counter,           list_to_binary(Counter)},
-            {counter_count,     folsom_metrics:get_metric_value(Counter)},
+            {counter,           Counter},
             {event_count,       folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER)},
             {alert_count_today, folsom_metrics:get_metric_value(Day)},
             {alert_count,       folsom_metrics:get_metric_value("total_alerts")}],
@@ -151,8 +150,7 @@ update_counter(Node, Node_Pid, Module, Line) ->
 
 new_metric(Counter) ->
     true = ets:insert(triage_error_keys, {key, Counter}),
-    folsom_metrics:new_counter(Counter),
-    dashboard_stream_fsm:broadcast({new_metric, Counter}).
+    folsom_metrics:new_counter(Counter).
 
 key(Module,Line) -> binary_to_list(Module) ++ ":" ++ binary_to_list(Line).
 
