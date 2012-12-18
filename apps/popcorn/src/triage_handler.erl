@@ -11,7 +11,7 @@
          code_change/3
 ]).
 
--export([counter_data/1]).
+-export([counter_data/1, all_alerts/0, recent_alerts/1, alert_count_today/0, alert_count/0]).
 
 -include_lib("lager/include/lager.hrl").
 -include("include/popcorn.hrl").
@@ -19,23 +19,15 @@
 
 -record(state, {}).
 
-counter_data(Counter) ->
-    Basic_Properties =
-      case gen_event:call(triage_handler, triage_handler, {data, Counter}) of
-        #alert{node = #popcorn_node{version = Version},
-               log  = #log_message{message = Message}} ->
-          [ {'message', list(Message)}, {'version', list(Version)}];
-        #alert{node = #popcorn_node{version = Version}} ->
-          [ {'version', list(Version)}];
-        #alert{log  = #log_message{message = Message}} ->
-          [ {'message', list(Message)}];
-        #alert{} ->
-          []
-      end,
-    case string:tokens(Counter, ":") of
-        [Counter_Name,Line|_] -> [{'name', Counter_Name}, {'line', Line} | Basic_Properties];
-        _ -> Basic_Properties
-    end.
+counter_data(Counter) -> gen_event:call(?MODULE, ?MODULE, {data, Counter}).
+
+alert_count() -> gen_event:call(?MODULE, ?MODULE, total_alerts).
+
+alert_count_today() -> gen_event:call(?MODULE, ?MODULE, alerts_for_today).
+
+all_alerts() -> gen_event:call(?MODULE, ?MODULE, {alerts, all}).
+
+recent_alerts(Count) -> gen_event:call(?MODULE, ?MODULE, {alerts, Count}).
 
 list(B) when is_binary(B) -> binary_to_list(B);
 list(_) -> "".
@@ -46,44 +38,38 @@ init(_) ->
     folsom_metrics:new_counter("total_alerts"),
     {ok, #state{}}.
 
-%% gen_event:call(triage_handler, triage_handler, {count, "tts_sup:42"}).
-handle_call({count, Counter}, State) ->
-    {ok, folsom_metrics:get_metric_value(Counter), State};
-
-%% gen_event:call(triage_handler, triage_handler, {total_alerts}).
-handle_call({total_alerts}, State) ->
+handle_call({data, Counter}, State) ->
+    V = case ets:lookup(triage_error_data, Counter) of
+            [#alert{} = Alert] -> Alert;
+            _ -> #alert{}
+        end,
+    {ok, data(V), State};
+handle_call(total_alerts, State) ->
     {ok, folsom_metrics:get_metric_value("total_alerts"), State};
-
-%% gen_event:call(triage_handler, triage_handler, {alerts_for_today}).
-handle_call({alerts_for_today}, State) ->
+handle_call(alerts_for_today, State) ->
     Day = day_key(),
     Value = case folsom_metrics:metric_exists(Day) of
-        false -> folsom_metrics:new_counter(Day), 0;
-        true  -> folsom_metrics:get_metric_value(Day)
-    end,
+                false -> folsom_metrics:new_counter(Day), 0;
+                true  -> folsom_metrics:get_metric_value(Day)
+            end,
     {ok, Value, State};
-
-handle_call({data, Counter}, State) ->
-    Match = ets:fun2ms(fun(#alert{location=Location} = Alert) when Location =:= Counter -> Alert end),
-    V = case ets:select(triage_error_data, Match) of
-        [#alert{} = Alert] -> Alert;
-        _ -> #alert{}
-    end,
-    {ok, V, State};
-
-handle_call({alerts}, State) ->
-    Alerts = [begin
-                {Counter, folsom_metrics:get_metric_value(Counter)}
-              end || {key, Counter} <- ets:tab2list(triage_error_keys), string:str(Counter, ":") =/= 0 ],
-    {ok, lists:sort(fun({_,A}, {_,B}) -> A > B end, Alerts), State};
-
+handle_call({alerts, Count}, State) ->
+    Alerts =
+        [   case ets:lookup(triage_error_data, Counter) of
+                [#alert{} = Alert] -> Alert;
+                _ -> #alert{}
+            end || {key, Counter} <- ets:tab2list(triage_error_keys), string:str(Counter, ":") =/= 0 ],
+    Sorted = lists:reverse(lists:keysort(#alert.timestamp, Alerts)),
+    FinalList =
+        case Count of
+            all -> Sorted;
+            Count when Count >= length(Sorted) -> Sorted;
+            Count -> lists:sublist(Sorted, Count)
+        end,
+    {ok, [data(Alert) || Alert <- FinalList], State};
 handle_call(_Request, State) ->
     {ok, ok, State}.
 
-%% view_dashboard.mustache
-%% view_dashboard.erl
-%% popcorn_udp:handle_info
-%% node_fsm
 handle_event({triage_event, #popcorn_node{} = Node, Node_Pid,
               #log_message{log_module=Module, log_line=Line, severity=Severity} = Log_Entry,
               Is_New_Node}, State)
@@ -158,3 +144,24 @@ key(Module,Line) -> binary_to_list(Module) ++ ":" ++ binary_to_list(Line).
 day_key() ->
         {{Year,Month,Day},_} = calendar:now_to_universal_time(erlang:now()),
         integer_to_list(Year) ++ "-" ++ integer_to_list(Month) ++ "-" ++ integer_to_list(Day).
+
+data(#alert{location = undefined}) -> [];
+data(Alert) ->
+    Basic_Properties =
+      case Alert of
+        #alert{node = #popcorn_node{version = Version},
+               log  = #log_message{message = Message}} ->
+          [ {'message', list(Message)}, {'version', list(Version)}];
+        #alert{node = #popcorn_node{version = Version}} ->
+          [ {'version', list(Version)}];
+        #alert{log  = #log_message{message = Message}} ->
+          [ {'message', list(Message)}];
+        #alert{} ->
+          []
+      end,
+    All_Properties =
+        case string:tokens(Alert#alert.location, ":") of
+            [Counter_Name,Line|_] -> [{'name', Counter_Name}, {'line', Line} | Basic_Properties];
+            _ -> Basic_Properties
+        end,
+    [{count, folsom_metrics:get_metric_value(Alert#alert.location)} | All_Properties].

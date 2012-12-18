@@ -99,11 +99,11 @@
               var rowName = 'alert-' + maybe(counters.counter.name) + '-' + maybe(counters.counter.line);
               var row = $('#' + rowName);
               if(row.length > 0) {
-                $('#' + rowName + ' .seen').text(counters.counter.seen);
+                $('#' + rowName + ' .seen').text(counters.counter.count);
               } else {
                 var newRow = "<tr id='" + rowName +"'>" +
                 "<td>" + maybe(counters.counter.name) + " line " + maybe(counters.counter.line) + "<br/>" + maybe(counters.counter.message) + "</td>" +
-                "<td><span class='seen'>" + maybe(counters.counter.seen, 1) + "</span> seen</td>" +
+                "<td><span class='seen'>" + maybe(counters.counter.count, 1) + "</span> seen</td>" +
                 "<td align='right'>version " + maybe(counters.counter.version) + "</td></tr>";
                 $('#alerts tr:first').before(newRow);
               }

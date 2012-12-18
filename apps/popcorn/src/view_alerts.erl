@@ -8,10 +8,7 @@
 -spec head_includes() -> list().
 head_includes() -> popcorn_util:head_includes().
 
-alerts() ->
-    [dict:from_list([{count, Num} | triage_handler:counter_data(Counter)])
-     || {Counter, Num} <- gen_event:call(triage_handler, triage_handler, {alerts})
-    ].
+alerts() -> [dict:from_list(Alert) || Alert <- triage_handler:all_alerts()].
 
 -spec username() -> string().
 username() -> "marc".

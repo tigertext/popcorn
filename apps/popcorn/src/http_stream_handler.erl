@@ -66,9 +66,7 @@ handle_loop(Req, State) ->
                         false ->
                             {struct, NewCounters};
                         {value, {counter, Counter}, Rest} ->
-                            CounterData =
-                                [{seen, folsom_metrics:get_metric_value(Counter)}
-                                    | triage_handler:counter_data(Counter)],
+                            CounterData = triage_handler:counter_data(Counter),
                             {struct, [{counter, {struct, CounterData}} | Rest]}
                     end)),
             chunk_event("update_counters", Event, Req, State);
