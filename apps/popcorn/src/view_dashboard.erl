@@ -11,8 +11,16 @@
          mention_count/0,
          alert_count_today/0,
          alert_count/0,
+         alert_lines/0,
          known_nodes/0,
          username/0]).
+
+-spec alert_lines() -> pos_integer().
+alert_lines() ->
+  case application:get_env(popcorn, dashboard_alert_lines) of
+    {ok, Value} -> Value;
+    _ -> 3
+  end.
 
 -spec head_includes() -> list().
 head_includes() -> popcorn_util:head_includes().
@@ -37,7 +45,7 @@ alert_count() -> gen_event:call(triage_handler, triage_handler, {total_alerts}).
 
 alerts() ->
     [dict:from_list([{count, Num} | triage_handler:counter_data(Counter)])
-     || {Counter, Num} <- gen_event:call(triage_handler, triage_handler, {alerts})
+     || {Counter, Num} <- lists:sublist(gen_event:call(triage_handler, triage_handler, {alerts}), alert_lines())
     ].
 
 -spec known_nodes() -> list().
