@@ -41,7 +41,6 @@ alert_event_counts(Context) -> event_counts(mustache:get(node_name, Context), 1)
 
 -spec emergency_event_counts(dict()) -> list().
 emergency_event_counts(Context) -> event_counts(mustache:get(node_name, Context), 0).
-		
 
 -spec event_counts(atom(), integer()) -> list().
 event_counts(Node_Name, Severity) ->
