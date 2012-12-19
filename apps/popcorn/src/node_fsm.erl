@@ -175,12 +175,7 @@ init([]) ->
 handle_event(Event, StateName, State)                 -> {stop, {StateName, undefined_event, Event}, State}.
 handle_sync_event(Event, _From, StateName, State)     -> {stop, {StateName, undefined_event, Event}, State}.
 handle_info(_Info, StateName, State)                  -> {next_state, StateName, State}.
-terminate(_Reason, _StateName, State)                 ->
-    case ets:info(State#state.history_name) of
-        undefined -> ok;
-        _         -> ets:delete(State#state.history_name)
-    end,
-    ok.
+terminate(_Reason, _StateName, State)                 -> ok.
 
 code_change(_OldVsn, StateName, StateData, _Extra)    -> {ok, StateName, StateData}.
 
