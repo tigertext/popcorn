@@ -40,8 +40,18 @@ handle(Req, State) ->
                                      {ok, Reply, State}
             end;
 
+        {{<<"POST">>, _}, {<<"/clear_alert">>, _}} ->
+            {ok, Post, _Req2} = cowboy_req:body_qs(Req),
+            Name = proplists:get_value(<<"name">>, Post, <<>>),
+            Line = proplists:get_value(<<"line">>, Post, <<>>),
+            Counter = binary_to_list(<<Name/binary, $:, Line/binary>>),
+            triage_handler:clear_alert(Counter),
+            {ok, Reply} = cowboy_req:reply(200, Req),
+            {ok, Reply, State};
+
         {{<<"GET">>, _}, {<<"/alerts">>, _}} ->
-            ?POPCORN_DEBUG_MSG("http request for alerts"),
+            {All, _} = cowboy_req:qs_val(<<"all">>, Req),
+            ?POPCORN_DEBUG_MSG("http request for alerts (~p)", [All]),
             case session_handler:is_session_authed_and_valid(Req) of
                 false -> Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
                          {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
@@ -59,7 +69,8 @@ handle(Req, State) ->
                         %% assign to the fsm
                         gen_fsm:send_event(Stream_Pid, {connect, Stream}),
 
-                        Context = dict:from_list([{stream_id, binary_to_list(Stream_Id)}]),
+                        Context = dict:from_list([{stream_id, binary_to_list(Stream_Id)},
+                                                  {all,       All}]),
 
                         TFun        = mustache:compile(view_alerts),
                         Output      = mustache:render(view_alerts, TFun, Context),

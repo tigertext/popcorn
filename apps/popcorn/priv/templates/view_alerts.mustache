@@ -61,19 +61,25 @@
             <section id="alerts">
               <a name="alerts">
                 <header>
+                  <div class="pull-right">
+                    {{#header_button}}
+                    <a class="btn btn-small" href="{{href}}">{{label}}</a>
+                    {{/header_button}}
+                  </div>
                   <h1>Alerts</h1>
                 </header>
               </a>
               <table id="alerts" class="table table-striped full-section table-hover">
-                <tr />
-                {{#alerts}}
-                <tr id="alert-{{name}}-{{line}}">
-                  <td>{{name}} line {{line}}<br/>{{message}}</td>
-                  <td><span class="seen">{{count}}</span> seen</td>
-                  <td align="right">version {{version}}</td>
-                  <td></td>
-                </tr>
-                {{/alerts}}
+                <tbody>
+                  {{#alerts}}
+                  <tr id="alert-{{name}}-{{line}}">
+                    <td><a href="#" class="btn btn-mini btn-clear">Clear</a></td>
+                    <td>{{name}} line {{line}}<br/>{{message}}</td>
+                    <td><span class="recent">{{recent}}</span> recent / <span class="seen">{{count}}</span> seen</td>
+                    <td align="right">{{product}} {{version}}</td>
+                  </tr>
+                  {{/alerts}}
+                </tbody>
               </table>
             </section>
 
@@ -85,32 +91,21 @@
     <script src="/js/jquery.min.js"></script>
     <script src="/bootstrap/js/bootstrap-dropdown.js"></script>
     <script src="/bootstrap/js/bootstrap-collapse.js"></script>
+    <script src="/js/dashboard.js" type="text/javascript"></script>
     <script type="text/javascript">
+      $(function() {
+          var streamSource = new EventSource("/dashboard/stream/{{stream_id}}");
 
-        var streamSource = new EventSource("/dashboard/stream/{{stream_id}}");
+          streamSource.addEventListener(
+            'update_counters',
+            function(event) {
+              var counters = JSON.parse(event.data);
+              if(counters.counter) updateAlertRow('#alerts', counters.counter);
+            },
+            false);
 
-        function maybe(v, d) { if(v == 0 || v) return v; if(d == 0 || d) return d; return "" };
-
-        streamSource.addEventListener(
-          'update_counters',
-          function(event) {
-            var counters = JSON.parse(event.data);
-            if(counters.counter) {
-              var rowName = 'alert-' + maybe(counters.counter.name) + '-' + maybe(counters.counter.line);
-              var row = $('#' + rowName);
-              if(row.length > 0) {
-                $('#' + rowName + ' .seen').text(counters.counter.seen);
-              } else {
-                var newRow = "<tr id='" + rowName +"'>" +
-                "<td>" + maybe(counters.counter.name) + " line " + maybe(counters.counter.line) + "<br/>" + maybe(counters.counter.message) + "</td>" +
-                "<td><span class='seen'>" + maybe(counters.counter.seen, 1) + "</span> seen</td>" +
-                "<td align='right'>version " + maybe(counters.counter.version) + "</td></tr>";
-                $('#alerts tr:first').before(newRow);
-              }
-            }
-          },
-          false);
-
+          setClearOnClick('.btn-clear');
+        });
     </script>
 
   </body>
