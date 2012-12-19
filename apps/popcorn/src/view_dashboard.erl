@@ -38,15 +38,12 @@ hashtag_count() -> 0.
 mention_count() -> 0.
 
 -spec alert_count_today() -> integer().
-alert_count_today() -> gen_event:call(triage_handler, triage_handler, {alerts_for_today}).
+alert_count_today() -> triage_handler:alert_count_today().
 
 -spec alert_count() -> integer().
-alert_count() -> gen_event:call(triage_handler, triage_handler, {total_alerts}).
+alert_count() -> triage_handler:alert_count().
 
-alerts() ->
-    [dict:from_list([{count, Num} | triage_handler:counter_data(Counter)])
-     || {Counter, Num} <- lists:sublist(gen_event:call(triage_handler, triage_handler, {alerts}), alert_lines())
-    ].
+alerts() -> [dict:from_list(Alert) || Alert <- triage_handler:recent_alerts(alert_lines())].
 
 -spec known_nodes() -> list().
 known_nodes() ->
@@ -65,4 +62,4 @@ known_nodes() ->
       end, ets:tab2list(current_nodes)).
 
 -spec username() -> string().
-username() -> "marc".
+username() -> "admin".

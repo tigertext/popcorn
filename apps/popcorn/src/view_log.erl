@@ -49,7 +49,7 @@ applied_filters(Context) ->
     lists:flatten(mochijson:encode(Json)).
 
 -spec username() -> string().
-username() -> "marc".
+username() -> "admin".
 
 -spec streaming_url(dict()) -> string().
 streaming_url(Context) ->
