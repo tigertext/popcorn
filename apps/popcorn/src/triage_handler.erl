@@ -11,7 +11,7 @@
          code_change/3
 ]).
 
--export([counter_data/1, all_alerts/0, recent_alerts/1, alert_count_today/0, alert_count/0]).
+-export([counter_data/1, all_alerts/0, recent_alerts/1, alert_count_today/0, alert_count/0, clear_alert/1]).
 
 -include_lib("lager/include/lager.hrl").
 -include("include/popcorn.hrl").
@@ -29,8 +29,7 @@ all_alerts() -> gen_event:call(?MODULE, ?MODULE, {alerts, all}).
 
 recent_alerts(Count) -> gen_event:call(?MODULE, ?MODULE, {alerts, Count}).
 
-list(B) when is_binary(B) -> binary_to_list(B);
-list(_) -> "".
+clear_alert(Counter) -> gen_event:call(?MODULE, ?MODULE, {clear, Counter}).
 
 init(_) ->
     ets:new(triage_error_keys, [named_table, set, public, {keypos, 2}]),
@@ -67,6 +66,12 @@ handle_call({alerts, Count}, State) ->
             Count -> lists:sublist(Sorted, Count)
         end,
     {ok, [data(Alert) || Alert <- FinalList], State};
+handle_call({clear, Counter}, State) ->
+    Key = "recent:" ++ Counter,
+    folsom_metrics:delete_metric(Key),
+    folsom_metrics:new_counter(Key),
+    dashboard_stream_fsm:broadcast({update_counters, [{counter, Counter}]}),
+    {ok, ok, State};
 handle_call(_Request, State) ->
     {ok, ok, State}.
 
@@ -119,6 +124,7 @@ update_counter(Node, Node_Pid, Module, Line) ->
     end,
     folsom_metrics:notify({Day, {inc, 1}}),
     folsom_metrics:notify({Counter, {inc, 1}}),
+    folsom_metrics:notify({"recent:" ++ Counter, {inc, 1}}),
 
     NewCounters =
         [   {node_hash,         re:replace(base64:encode(Node#popcorn_node.node_name), "=", "_", [{return, binary}, global])},
@@ -136,7 +142,8 @@ update_counter(Node, Node_Pid, Module, Line) ->
 
 new_metric(Counter) ->
     true = ets:insert(triage_error_keys, {key, Counter}),
-    folsom_metrics:new_counter(Counter).
+    folsom_metrics:new_counter(Counter),
+    folsom_metrics:new_counter("recent:" ++ Counter).
 
 key(Module,Line) -> binary_to_list(Module) ++ ":" ++ binary_to_list(Line).
 
@@ -165,5 +172,8 @@ data(Alert) ->
             _ -> Basic_Properties
         end,
     [{count, folsom_metrics:get_metric_value(Alert#alert.location)},
-     {recent, folsom_metrics:get_metric_value(Alert#alert.location)}
+     {recent, folsom_metrics:get_metric_value("recent:" ++ Alert#alert.location)}
      | All_Properties].
+
+list(B) when is_binary(B) -> binary_to_list(B);
+list(_) -> "".

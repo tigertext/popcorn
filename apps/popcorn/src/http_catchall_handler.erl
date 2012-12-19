@@ -42,8 +42,11 @@ handle(Req, State) ->
 
         {{<<"POST">>, _}, {<<"/clear_alert">>, _}} ->
             {ok, Post, _Req2} = cowboy_req:body_qs(Req),
-            ?POPCORN_INFO_MSG("clear alert: ~p", [Post]),
-            {ok, Reply} = cowboy_req:reply(200, [], <<>>, Req),
+            Name = proplists:get_value(<<"name">>, Post, <<>>),
+            Line = proplists:get_value(<<"line">>, Post, <<>>),
+            Counter = binary_to_list(<<Name/binary, $:, Line/binary>>),
+            triage_handler:clear_alert(Counter),
+            {ok, Reply} = cowboy_req:reply(200, Req),
             {ok, Reply, State};
 
         {{<<"GET">>, _}, {<<"/alerts">>, _}} ->
