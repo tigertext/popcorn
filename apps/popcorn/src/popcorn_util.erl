@@ -94,8 +94,14 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
    {'message_severity', binary_to_list(popcorn_util:number_to_severity(Severity))},
    {'message',          binary_to_list(Message)}].
 
+css_file() ->
+    case file:read_file_info(code:priv_dir(popcorn) ++ "/css/popcorn.css") of
+        {error,enoent} -> "popcorn.less";
+        {ok, _} -> "popcorn.css"
+    end.
+
 head_includes() ->
-    Head_Includes = ["<link rel='stylesheet/less' href=\"/css/popcorn.less\" type=\"text/css\">",
+    Head_Includes = ["<link rel='stylesheet/less' href=\"/css/"++css_file()++"\" type=\"text/css\">",
                      "<script src=\"/js/less.js\" type=\"text/javascript\"></script>"],
 
     lists:map(fun(Include) ->

@@ -42,6 +42,12 @@ dialyze_plt: all
 			compiler edoc hipe mnesia otp_mibs public_key \
 			snmp -pa apps/*/ebin
 
+# Please install lessc first using
+#   npm install -g less
+css: popcorn.css
+popcorn.css: apps/popcorn/priv/css/popcorn.less
+	/usr/local/bin/lessc apps/popcorn/priv/css/popcorn.less > apps/popcorn/priv/css/popcorn.css
+	
 types:
 	typer --plt .dialyzer-R15B01.plt -r apps/popcorn/src -I apps/popcorn/include -I apps/popcorn -pa deps/*/ebin --annotate
 
