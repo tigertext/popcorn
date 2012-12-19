@@ -11,8 +11,7 @@ head_includes() -> popcorn_util:head_includes().
 -spec logs(dict()) -> [dict()].
 logs(Context) ->
 	[dict:from_list(popcorn_util:format_log_message(Log_Message))
-	 || Log_Message <- [#log_message{message = <<"one">>, timestamp = ?NOW, severity = 1},
-  						#log_message{message = <<"two">>, timestamp = ?NOW, severity = 2}]].
+	 || Log_Message <- triage_handler:log_messages(mustache:get(counter, Context))].
 
 -spec username() -> string().
 username() -> "admin".

@@ -14,6 +14,8 @@
          terminate/3,
          code_change/4]).
 
+-export([messages/2]).
+
 -export([
     'LOGGING'/2,
     'LOGGING'/3]).
@@ -34,6 +36,8 @@ get_message_counts(Node_Pid) ->
     end.
 
 start_link() -> gen_fsm:start_link(?MODULE, [], []).
+
+messages(Node_Pid, Counter) -> gen_fsm:sync_send_event(Node_Pid, {get_messages, Counter}).
 
 init([]) ->
     process_flag(trap_exit, true),
@@ -162,6 +166,8 @@ init([]) ->
     Total_Count     = lists:foldl(fun({_, Count}, Total) -> Total + Count end, 0, Severity_Counts),
 
     {reply, Severity_Counts ++ [{total, Total_Count}], 'LOGGING', State};
+'LOGGING'({get_messages, Counter}, _From, State) ->
+    {reply, [], 'LOGGING', State};
 'LOGGING'({severity_count_history, Severity}, _From, State) ->
     Last_24_Hours = popcorn_util:last_24_hours(),
 
@@ -189,8 +195,4 @@ handle_event(Event, StateName, State)                 -> {stop, {StateName, unde
 handle_sync_event(Event, _From, StateName, State)     -> {stop, {StateName, undefined_event, Event}, State}.
 handle_info(_Info, StateName, State)                  -> {next_state, StateName, State}.
 terminate(_Reason, _StateName, State)                 -> ok.
-
 code_change(_OldVsn, StateName, StateData, _Extra)    -> {ok, StateName, StateData}.
-
-
-

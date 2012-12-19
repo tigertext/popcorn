@@ -17,7 +17,7 @@
 
 -export([counter_data/1, all_alerts/1, recent_alerts/1,
          alert_count_today/0, alert_count/0, clear_alert/1,
-         safe_notify/4]).
+         safe_notify/4, log_messages/1]).
 
 -include_lib("lager/include/lager.hrl").
 -include("include/popcorn.hrl").
@@ -30,6 +30,8 @@ safe_notify(Popcorn_Node, Node_Pid, Log_Message, Is_New_Node) ->
         undefined -> {error, no_error_triage};
         Pid -> gen_event:sync_notify(Pid, {triage_event, Popcorn_Node, Node_Pid, Log_Message, Is_New_Node})
     end.
+
+log_messages(Counter) -> gen_event:call(?MODULE, ?MODULE, {messages, Counter}).
 
 counter_data(Counter) -> gen_event:call(?MODULE, ?MODULE, {data, Counter}).
 
@@ -93,6 +95,11 @@ handle_call({clear, Counter}, State) ->
             io:format("Error trying to get ~p: ~p~n~p", [Key, Error, erlang:get_stacktrace()]),
             {ok, ok, State}
     end;
+handle_call({messages, Counter}, State) ->
+    Messages =
+        lists:flatten(
+            [node_fsm:messages(Node_Pid, Counter) || {_, Node_Pid} <- ets:tab2list(current_nodes)]),
+    {ok, Messages, State};
 handle_call(_Request, State) ->
     {ok, ok, State}.
 
