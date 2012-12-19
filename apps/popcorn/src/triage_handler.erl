@@ -11,7 +11,7 @@
          code_change/3
 ]).
 
--export([counter_data/1, all_alerts/0, recent_alerts/1, alert_count_today/0, alert_count/0, clear_alert/1]).
+-export([counter_data/1, all_alerts/1, recent_alerts/1, alert_count_today/0, alert_count/0, clear_alert/1]).
 
 -include_lib("lager/include/lager.hrl").
 -include("include/popcorn.hrl").
@@ -25,7 +25,8 @@ alert_count() -> gen_event:call(?MODULE, ?MODULE, total_alerts).
 
 alert_count_today() -> gen_event:call(?MODULE, ?MODULE, alerts_for_today).
 
-all_alerts() -> gen_event:call(?MODULE, ?MODULE, {alerts, all}).
+all_alerts(true = _Include_Cleared) -> gen_event:call(?MODULE, ?MODULE, {alerts, all});
+all_alerts(_) -> gen_event:call(?MODULE, ?MODULE, {alerts, recent}).
 
 recent_alerts(Count) -> gen_event:call(?MODULE, ?MODULE, {alerts, Count}).
 
@@ -58,14 +59,9 @@ handle_call({alerts, Count}, State) ->
                 [#alert{} = Alert] -> Alert;
                 _ -> #alert{}
             end || {key, Counter} <- ets:tab2list(triage_error_keys), string:str(Counter, ":") =/= 0 ],
-    Sorted = lists:reverse(lists:keysort(#alert.timestamp, Alerts)),
-    FinalList =
-        case Count of
-            all -> Sorted;
-            Count when Count >= length(Sorted) -> Sorted;
-            Count -> lists:sublist(Sorted, Count)
-        end,
-    {ok, [data(Alert) || Alert <- FinalList], State};
+    Sorted = lists:keysort(#alert.timestamp, Alerts),
+    FinalList = reverse_limit_and_filter(Sorted, Count),
+    {ok, FinalList, State};
 handle_call({clear, Counter}, State) ->
     Key = "recent:" ++ Counter,
     folsom_metrics:delete_metric(Key),
@@ -177,3 +173,16 @@ data(Alert) ->
 
 list(B) when is_binary(B) -> binary_to_list(B);
 list(_) -> "".
+
+reverse_limit_and_filter(Alerts, all) -> [data(Alert) || Alert <- lists:reverse(Alerts)];
+reverse_limit_and_filter(Alerts, Count) ->
+    reverse_limit_and_filter(lists:reverse(Alerts), Count, []).
+reverse_limit_and_filter([], _Count, Acc) -> lists:reverse(Acc);
+reverse_limit_and_filter(_Alerts, Count, Acc) when length(Acc) == Count -> lists:reverse(Acc);
+reverse_limit_and_filter([Alert | Alerts], Count, Acc) ->
+    reverse_limit_and_filter(
+        Alerts, Count,
+        case folsom_metrics:get_metric_value("recent:" ++ Alert#alert.location) of
+            0 -> Acc;
+            _ -> [data(Alert) | Acc]
+        end).

@@ -61,19 +61,25 @@
             <section id="alerts">
               <a name="alerts">
                 <header>
+                  <div class="pull-right">
+                    {{#header_button}}
+                    <a class="btn btn-small" href="{{href}}">{{label}}</a>
+                    {{/header_button}}
+                  </div>
                   <h1>Alerts</h1>
                 </header>
               </a>
               <table id="alerts" class="table table-striped full-section table-hover">
-                <tr />
-                {{#alerts}}
-                <tr id="alert-{{name}}-{{line}}">
-                  <td><a href="#" class="btn btn-mini btn-clear">Clear</a></td>
-                  <td>{{name}} line {{line}}<br/>{{message}}</td>
-                  <td><span class="recent">{{recent}}</span> recent / <span class="seen">{{count}}</span> seen</td>
-                  <td align="right">{{product}} {{version}}</td>
-                </tr>
-                {{/alerts}}
+                <tbody>
+                  {{#alerts}}
+                  <tr id="alert-{{name}}-{{line}}">
+                    <td><a href="#" class="btn btn-mini btn-clear">Clear</a></td>
+                    <td>{{name}} line {{line}}<br/>{{message}}</td>
+                    <td><span class="recent">{{recent}}</span> recent / <span class="seen">{{count}}</span> seen</td>
+                    <td align="right">{{product}} {{version}}</td>
+                  </tr>
+                  {{/alerts}}
+                </tbody>
               </table>
             </section>
 

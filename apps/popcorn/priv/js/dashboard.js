@@ -44,7 +44,7 @@ function updateAlertRow(table, counter) {
     "<td>" + maybe(counter.name) + " line " + maybe(counter.line) + "<br/><span class='message'>" + maybe(counter.message) + "</span></td>" +
     "<td><span class='recent'>" + maybe(counter.recent, 0) + "</span> recent / <span class='seen'>" + maybe(counter.count, 1) + "</span> seen</td>" +
     "<td align='right'>" + maybe(counter.product) + " " + maybe(counter.version) + "</td></tr>";
-    $(table + ' tr:first').before(newRow);
+    $(table + ' tbody').prepend(newRow);
     setClearOnClick('#' + rowName + ' .btn-clear');
   };
   $('#' + rowName + ' td').addClass('highlight');
