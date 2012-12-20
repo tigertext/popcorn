@@ -18,12 +18,20 @@
     'LOGGING'/2,
     'LOGGING'/3]).
 
--define(EXPIRE_TIMER,        15000).
+-export([get_message_counts/1]).
+
+-define(EXPIRE_TIMER, 15000).
 
 -record(state, {history_name          :: atom(),
                 severity_metric_names :: list(),
                 most_recent_version   :: string(),
                 popcorn_node          :: #popcorn_node{}}).
+
+get_message_counts(Node_Pid) ->
+    case erlang:is_process_alive(Node_Pid) of
+        false -> [{total, 0}];
+        true -> gen_fsm:sync_send_event(Node_Pid, get_message_counts)
+    end.
 
 start_link() -> gen_fsm:start_link(?MODULE, [], []).
 
@@ -175,12 +183,7 @@ init([]) ->
 handle_event(Event, StateName, State)                 -> {stop, {StateName, undefined_event, Event}, State}.
 handle_sync_event(Event, _From, StateName, State)     -> {stop, {StateName, undefined_event, Event}, State}.
 handle_info(_Info, StateName, State)                  -> {next_state, StateName, State}.
-terminate(_Reason, _StateName, State)                 ->
-    case ets:info(State#state.history_name) of
-        undefined -> ok;
-        _         -> ets:delete(State#state.history_name)
-    end,
-    ok.
+terminate(_Reason, _StateName, State)                 -> ok.
 
 code_change(_OldVsn, StateName, StateData, _Extra)    -> {ok, StateName, StateData}.
 

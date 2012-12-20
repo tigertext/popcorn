@@ -49,7 +49,7 @@ alerts() -> [dict:from_list(Alert) || Alert <- triage_handler:recent_alerts(aler
 known_nodes() ->
     Total_Message_Count = folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER),
     lists:map(fun({Node, Pid}) ->
-        Message_Counts  = gen_fsm:sync_send_event(Pid, get_message_counts),
+        Message_Counts  = node_fsm:get_message_counts(Pid),
         Node_List       = binary_to_list(Node),
         Node_Properties = [{'node_name',             Node_List},
                            {'node_hash',             re:replace(base64:encode(Node), "=", "_", [{return, list}, global])},
