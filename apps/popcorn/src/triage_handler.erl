@@ -11,13 +11,23 @@
          code_change/3
 ]).
 
--export([counter_data/1, all_alerts/1, recent_alerts/1, alert_count_today/0, alert_count/0, clear_alert/1]).
+-define(UPDATE_INTERVAL, 10000).
+
+-export([counter_data/1, all_alerts/1, recent_alerts/1,
+         alert_count_today/0, alert_count/0, clear_alert/1,
+         safe_notify/4]).
 
 -include_lib("lager/include/lager.hrl").
 -include("include/popcorn.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
 
--record(state, {}).
+-record(state, {timer :: reference()}).
+
+safe_notify(Popcorn_Node, Node_Pid, Log_Message, Is_New_Node) ->
+    case whereis(?MODULE) of
+        undefined -> {error, no_error_triage};
+        Pid -> gen_event:sync_notify(Pid, {triage_event, Popcorn_Node, Node_Pid, Log_Message, Is_New_Node})
+    end.
 
 counter_data(Counter) -> gen_event:call(?MODULE, ?MODULE, {data, Counter}).
 
@@ -36,7 +46,8 @@ init(_) ->
     ets:new(triage_error_keys, [named_table, set, public, {keypos, 2}]),
     ets:new(triage_error_data, [named_table, set, public, {keypos, #alert.location}]),
     folsom_metrics:new_counter("total_alerts"),
-    {ok, #state{}}.
+    Timer = erlang:send_after(?UPDATE_INTERVAL, self(), update_counters),
+    {ok, #state{timer = Timer}}.
 
 handle_call({data, Counter}, State) ->
     V = case ets:lookup(triage_error_data, Counter) of
@@ -67,7 +78,7 @@ handle_call({clear, Counter}, State) ->
     folsom_metrics:delete_metric(Key),
     folsom_metrics:new_counter(Key),
     dashboard_stream_fsm:broadcast({update_counters, [{counter, Counter}]}),
-    {ok, ok, State};
+    {ok, ok, reset_timer(State)};
 handle_call(_Request, State) ->
     {ok, ok, State}.
 
@@ -81,7 +92,7 @@ handle_event({triage_event, #popcorn_node{} = Node, Node_Pid,
         false -> ok
     end,
     update_counter(Node,Node_Pid,Module,Line),
-    {ok, State};
+    {ok, reset_timer(State)};
 
 handle_event({triage_event, #popcorn_node{} = Node, _Node_Pid, _Log_Message, true}, State) ->
     dashboard_stream_fsm:broadcast({new_node, Node}),
@@ -94,6 +105,23 @@ handle_event(Event, State) ->
     io:format("Unexpected event: ~p~n", [Event]),
     {ok, State}.
 
+handle_info(update_counters, State) ->
+    lists:foreach(
+        fun({_, undefined}) -> ok;
+           ({Node_Name, Node_Pid}) ->
+            NodeCounters =
+                [{node_hash,  re:replace(base64:encode(Node_Name), "=", "_", [{return, binary}, global])},
+                 {node_count, proplists:get_value(total, node_fsm:get_message_counts(Node_Pid), 0)}],
+            dashboard_stream_fsm:broadcast({update_counters, NodeCounters})
+        end, ets:tab2list(current_nodes)),
+
+    NewCounters =
+        [{event_count,       folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER)},
+         %%{alert_count_today, folsom_metrics:get_metric_value(day_key())},
+         {alert_count,       folsom_metrics:get_metric_value("total_alerts")}],
+
+    dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
+    {ok, reset_timer(State)};
 handle_info(_Info, State) ->
     {ok, State}.
 
@@ -127,7 +155,7 @@ update_counter(Node, Node_Pid, Module, Line) ->
             {node_count,        case Node_Pid of
                                     undefined -> 0;
                                     Node_Pid ->
-                                        proplists:get_value(total, gen_fsm:sync_send_event(Node_Pid, get_message_counts), 0)
+                                        proplists:get_value(total, node_fsm:get_message_counts(Node_Pid), 0)
                                 end},
             {counter,           Counter},
             {event_count,       folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER)},
@@ -186,3 +214,8 @@ reverse_limit_and_filter([Alert | Alerts], Count, Acc) ->
             0 -> Acc;
             _ -> [data(Alert) | Acc]
         end).
+
+reset_timer(State) ->
+    erlang:cancel_timer(State#state.timer),
+    Timer = erlang:send_after(?UPDATE_INTERVAL, self(), update_counters),
+    State#state{timer = Timer}.

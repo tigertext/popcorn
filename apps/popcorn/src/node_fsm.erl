@@ -18,12 +18,20 @@
     'LOGGING'/2,
     'LOGGING'/3]).
 
--define(EXPIRE_TIMER,        15000).
+-export([get_message_counts/1]).
+
+-define(EXPIRE_TIMER, 15000).
 
 -record(state, {history_name          :: atom(),
                 severity_metric_names :: list(),
                 most_recent_version   :: string(),
                 popcorn_node          :: #popcorn_node{}}).
+
+get_message_counts(Node_Pid) ->
+    case erlang:is_process_alive(Node_Pid) of
+        false -> [{total, 0}];
+        true -> gen_fsm:sync_send_event(Node_Pid, get_message_counts)
+    end.
 
 start_link() -> gen_fsm:start_link(?MODULE, [], []).
 
