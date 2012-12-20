@@ -74,11 +74,19 @@ handle_call({alerts, Count}, State) ->
     FinalList = reverse_limit_and_filter(Sorted, Count),
     {ok, FinalList, State};
 handle_call({clear, Counter}, State) ->
-    Key = "recent:" ++ Counter,
-    folsom_metrics:delete_metric(Key),
-    folsom_metrics:new_counter(Key),
-    dashboard_stream_fsm:broadcast({update_counters, [{counter, Counter}]}),
-    {ok, ok, reset_timer(State)};
+    Key = recent_key(Counter),
+    case folsom_metrics:get_metric_value(Key) of
+        0 -> {ok, ok, State};
+        _ ->
+            folsom_metrics:delete_metric(Key),
+            folsom_metrics:new_counter(Key),
+            folsom_metrics:notify({"total_alerts", {dec, 1}}),
+            NewCounters =
+                [{counter,      Counter},
+                 {alert_count,  folsom_metrics:get_metric_value("total_alerts")}],
+            dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
+            {ok, ok, reset_timer(State)}
+    end;
 handle_call(_Request, State) ->
     {ok, ok, State}.
 
@@ -115,9 +123,15 @@ handle_info(update_counters, State) ->
             dashboard_stream_fsm:broadcast({update_counters, NodeCounters})
         end, ets:tab2list(current_nodes)),
 
+    Day = day_key(),
+    case folsom_metrics:metric_exists(Day) of
+        false -> new_metric(Day);
+        true  -> ok
+    end,
+
     NewCounters =
         [{event_count,       folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER)},
-         %%{alert_count_today, folsom_metrics:get_metric_value(day_key())},
+         {alert_count_today, folsom_metrics:get_metric_value(Day)},
          {alert_count,       folsom_metrics:get_metric_value("total_alerts")}],
 
     dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
@@ -135,7 +149,6 @@ code_change(_OldVsn, State, _Extra) ->
 update_counter(_, _, undefined, _) -> ok;
 update_counter(_, _, _, undefined) -> ok;
 update_counter(Node, Node_Pid, Module, Line) ->
-    folsom_metrics:notify({"total_alerts", {inc, 1}}),
     Counter = key(Module,Line),
     Day = day_key(),
     case folsom_metrics:metric_exists(Day) of
@@ -143,12 +156,18 @@ update_counter(Node, Node_Pid, Module, Line) ->
         true  -> ok
     end,
     case folsom_metrics:metric_exists(Counter) of
-        false -> new_metric(Counter);
+        false ->
+            folsom_metrics:notify({Day, {inc, 1}}),
+            new_metric(Counter);
         true  -> ok
     end,
-    folsom_metrics:notify({Day, {inc, 1}}),
     folsom_metrics:notify({Counter, {inc, 1}}),
-    folsom_metrics:notify({"recent:" ++ Counter, {inc, 1}}),
+    folsom_metrics:notify({recent_key(Counter), {inc, 1}}),
+
+    case folsom_metrics:get_metric_value(recent_key(Counter)) of
+        1 -> folsom_metrics:notify({"total_alerts", {inc, 1}});
+        _ -> ok
+    end,
 
     NewCounters =
         [   {node_hash,         re:replace(base64:encode(Node#popcorn_node.node_name), "=", "_", [{return, binary}, global])},
@@ -167,9 +186,11 @@ update_counter(Node, Node_Pid, Module, Line) ->
 new_metric(Counter) ->
     true = ets:insert(triage_error_keys, {key, Counter}),
     folsom_metrics:new_counter(Counter),
-    folsom_metrics:new_counter("recent:" ++ Counter).
+    folsom_metrics:new_counter(recent_key(Counter)).
 
 key(Module,Line) -> binary_to_list(Module) ++ ":" ++ binary_to_list(Line).
+
+recent_key(Counter) -> "recent:" ++ Counter.
 
 %% TODO: use the timestamp from the log
 day_key() ->
@@ -196,7 +217,7 @@ data(Alert) ->
             _ -> Basic_Properties
         end,
     [{count, folsom_metrics:get_metric_value(Alert#alert.location)},
-     {recent, folsom_metrics:get_metric_value("recent:" ++ Alert#alert.location)}
+     {recent, folsom_metrics:get_metric_value(recent_key(Alert#alert.location))}
      | All_Properties].
 
 list(B) when is_binary(B) -> binary_to_list(B);
@@ -210,7 +231,7 @@ reverse_limit_and_filter(_Alerts, Count, Acc) when length(Acc) == Count -> lists
 reverse_limit_and_filter([Alert | Alerts], Count, Acc) ->
     reverse_limit_and_filter(
         Alerts, Count,
-        case folsom_metrics:get_metric_value("recent:" ++ Alert#alert.location) of
+        case folsom_metrics:get_metric_value(recent_key(Alert#alert.location)) of
             0 -> Acc;
             _ -> [data(Alert) | Acc]
         end).
