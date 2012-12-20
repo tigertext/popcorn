@@ -38,17 +38,22 @@ init([]) ->
     gen_event:add_handler(triage_handler, triage_handler, []),
 
     io:format("Creating ets tables..."),
-    ets:new(current_connected_users,  [named_table, set, public]),
-    ets:new(current_nodes,            [named_table, set, public]),
-    ets:new(current_log_streams,      [named_table, set, public, {keypos, #stream.stream_id}]),
-    ets:new(current_dashboard_streams,[named_table, set, public, {keypos, #stream.stream_id}]),
-    ets:new(current_roles,            [named_table, bag, public]),
+    current_connected_users =   ets:new(current_connected_users,  [named_table, set, public]),
+    current_nodes =             ets:new(current_nodes,            [named_table, set, public]),
+    current_log_streams =       ets:new(current_log_streams,      [named_table, set, public, {keypos, #stream.stream_id}]),
+    current_dashboard_streams = ets:new(current_dashboard_streams,[named_table, set, public, {keypos, #stream.stream_id}]),
+    current_roles =             ets:new(current_roles,            [named_table, bag, public]),
     io:format(" done!\n"),
 
     %% ensure we have a mnesia schema created
-    mnesia:stop(),
-    mnesia:create_schema([node()]),
-    mnesia:start(),
+    io:format("Starting mnesia..."),
+    stopped = mnesia:stop(),
+    case mnesia:create_schema([node()]) of
+      ok -> io:format(" initializing schema...");
+      {error, {_Node, {already_exists,_Node}}} -> io:format(" recovering schema...")
+    end,
+    ok = mnesia:start(),
+    io:format(" done!\n"),
 
     io:format("Ensuring required mnesia tables exist..."),
     mnesia:create_table(known_nodes,  [{disc_copies, [node()]},

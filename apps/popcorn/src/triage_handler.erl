@@ -13,6 +13,8 @@
 
 -define(UPDATE_INTERVAL, 10000).
 
+-record(alert, {location, log, timestamp = erlang:now()}).
+
 -export([counter_data/1, all_alerts/1, recent_alerts/1,
          alert_count_today/0, alert_count/0, clear_alert/1,
          safe_notify/4]).
@@ -40,7 +42,7 @@ all_alerts(_) -> gen_event:call(?MODULE, ?MODULE, {alerts, recent}).
 
 recent_alerts(Count) -> gen_event:call(?MODULE, ?MODULE, {alerts, Count}).
 
-clear_alert(Counter) -> gen_event:call(?MODULE, ?MODULE, {clear, Counter}).
+clear_alert(Counter) -> gen_event:call(?MODULE, ?MODULE, {clear, binary_to_list(Counter)}).
 
 init(_) ->
     ets:new(triage_error_keys, [named_table, set, public, {keypos, 2}]),
@@ -74,24 +76,37 @@ handle_call({alerts, Count}, State) ->
     FinalList = reverse_limit_and_filter(Sorted, Count),
     {ok, FinalList, State};
 handle_call({clear, Counter}, State) ->
-    Key = "recent:" ++ Counter,
-    folsom_metrics:delete_metric(Key),
-    folsom_metrics:new_counter(Key),
-    dashboard_stream_fsm:broadcast({update_counters, [{counter, Counter}]}),
-    {ok, ok, reset_timer(State)};
+    Key = recent_key(Counter),
+    try folsom_metrics:get_metric_value(Key) of
+        0 -> {ok, ok, State};
+        _ ->
+            folsom_metrics:delete_metric(Key),
+            folsom_metrics:new_counter(Key),
+            folsom_metrics:notify({"total_alerts", {dec, 1}}),
+            NewCounters =
+                [{counter,      Counter},
+                 {alert_count,  folsom_metrics:get_metric_value("total_alerts")}],
+            dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
+            {ok, ok, reset_timer(State)}
+    catch
+        _:Error ->
+            io:format("Error trying to get ~p: ~p~n~p", [Key, Error, erlang:get_stacktrace()]),
+            {ok, ok, State}
+    end;
 handle_call(_Request, State) ->
     {ok, ok, State}.
 
 handle_event({triage_event, #popcorn_node{} = Node, Node_Pid,
-              #log_message{log_module=Module, log_line=Line, severity=Severity} = Log_Entry,
+              #log_message{log_product=Product, log_version=Version,
+                           log_module=Module, log_line=Line, severity=Severity} = Log_Entry,
               Is_New_Node}, State)
-        when Severity < 4, is_binary(Module), is_binary(Line) ->
-    true = ets:insert(triage_error_data, #alert{location=key(Module,Line), node=Node, log=Log_Entry}),
+        when Severity < 4, is_binary(Product), is_binary(Version), is_binary(Module), is_binary(Line) ->
+    true = ets:insert(triage_error_data, #alert{location=key(Product,Version,Module,Line), log=Log_Entry}),
     case Is_New_Node of
         true -> dashboard_stream_fsm:broadcast({new_node, Node});
         false -> ok
     end,
-    update_counter(Node,Node_Pid,Module,Line),
+    update_counter(Node,Node_Pid,Product,Version,Module,Line),
     {ok, reset_timer(State)};
 
 handle_event({triage_event, #popcorn_node{} = Node, _Node_Pid, _Log_Message, true}, State) ->
@@ -115,9 +130,15 @@ handle_info(update_counters, State) ->
             dashboard_stream_fsm:broadcast({update_counters, NodeCounters})
         end, ets:tab2list(current_nodes)),
 
+    Day = day_key(),
+    case folsom_metrics:metric_exists(Day) of
+        false -> new_metric(Day);
+        true  -> ok
+    end,
+
     NewCounters =
         [{event_count,       folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER)},
-         %%{alert_count_today, folsom_metrics:get_metric_value(day_key())},
+         {alert_count_today, folsom_metrics:get_metric_value(Day)},
          {alert_count,       folsom_metrics:get_metric_value("total_alerts")}],
 
     dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
@@ -132,23 +153,26 @@ code_change(_OldVsn, State, _Extra) ->
     %% TODO version number should be read here, or else we don't support upgrades
     {ok, State}.
 
-update_counter(_, _, undefined, _) -> ok;
-update_counter(_, _, _, undefined) -> ok;
-update_counter(Node, Node_Pid, Module, Line) ->
-    folsom_metrics:notify({"total_alerts", {inc, 1}}),
-    Counter = key(Module,Line),
+update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
+    Counter = key(Product,Version,Module,Line),
     Day = day_key(),
     case folsom_metrics:metric_exists(Day) of
         false -> new_metric(Day);
         true  -> ok
     end,
     case folsom_metrics:metric_exists(Counter) of
-        false -> new_metric(Counter);
+        false ->
+            folsom_metrics:notify({Day, {inc, 1}}),
+            new_metric(Counter);
         true  -> ok
     end,
-    folsom_metrics:notify({Day, {inc, 1}}),
     folsom_metrics:notify({Counter, {inc, 1}}),
-    folsom_metrics:notify({"recent:" ++ Counter, {inc, 1}}),
+    folsom_metrics:notify({recent_key(Counter), {inc, 1}}),
+
+    case folsom_metrics:get_metric_value(recent_key(Counter)) of
+        1 -> folsom_metrics:notify({"total_alerts", {inc, 1}});
+        _ -> ok
+    end,
 
     NewCounters =
         [   {node_hash,         re:replace(base64:encode(Node#popcorn_node.node_name), "=", "_", [{return, binary}, global])},
@@ -167,9 +191,12 @@ update_counter(Node, Node_Pid, Module, Line) ->
 new_metric(Counter) ->
     true = ets:insert(triage_error_keys, {key, Counter}),
     folsom_metrics:new_counter(Counter),
-    folsom_metrics:new_counter("recent:" ++ Counter).
+    folsom_metrics:new_counter(recent_key(Counter)).
 
-key(Module,Line) -> binary_to_list(Module) ++ ":" ++ binary_to_list(Line).
+key(Product,Version,Module,Line) ->
+    binary_to_list(<<Product/binary, ":-:", Version/binary, ":-:", Module/binary, ":-:", Line/binary>>).
+
+recent_key(Counter) -> "recent:" ++ Counter.
 
 %% TODO: use the timestamp from the log
 day_key() ->
@@ -180,23 +207,24 @@ data(#alert{location = undefined}) -> [];
 data(Alert) ->
     Basic_Properties =
       case Alert of
-        #alert{node = #popcorn_node{role = Role, version = Version},
-               log  = #log_message{message = Message}} ->
-          [ {'message', list(Message)}, {'product', list(Role)}, {'version', list(Version)}];
-        #alert{node = #popcorn_node{version = Version}} ->
-          [ {'version', list(Version)}];
-        #alert{log  = #log_message{message = Message}} ->
+        #alert{log = #log_message{message = Message}} ->
           [ {'message', list(Message)}];
         #alert{} ->
           []
       end,
     All_Properties =
-        case string:tokens(Alert#alert.location, ":") of
-            [Counter_Name,Line|_] -> [{'name', Counter_Name}, {'line', Line} | Basic_Properties];
+        case string:tokens(Alert#alert.location, ":-:") of
+            [Product,Version,Module,Line|_] ->
+                [{product,  Product},
+                 {version,  Version},
+                 {name,     Module},
+                 {line,     Line}
+                 | Basic_Properties];
             _ -> Basic_Properties
         end,
-    [{count, folsom_metrics:get_metric_value(Alert#alert.location)},
-     {recent, folsom_metrics:get_metric_value("recent:" ++ Alert#alert.location)}
+    [{location, re:replace(base64:encode(Alert#alert.location), "=", "_", [{return, list}, global])},
+     {count,    folsom_metrics:get_metric_value(Alert#alert.location)},
+     {recent,   folsom_metrics:get_metric_value(recent_key(Alert#alert.location))}
      | All_Properties].
 
 list(B) when is_binary(B) -> binary_to_list(B);
@@ -210,7 +238,7 @@ reverse_limit_and_filter(_Alerts, Count, Acc) when length(Acc) == Count -> lists
 reverse_limit_and_filter([Alert | Alerts], Count, Acc) ->
     reverse_limit_and_filter(
         Alerts, Count,
-        case folsom_metrics:get_metric_value("recent:" ++ Alert#alert.location) of
+        case folsom_metrics:get_metric_value(recent_key(Alert#alert.location)) of
             0 -> Acc;
             _ -> [data(Alert) | Acc]
         end).

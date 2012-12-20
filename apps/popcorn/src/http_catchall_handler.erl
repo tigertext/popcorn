@@ -42,9 +42,8 @@ handle(Req, State) ->
 
         {{<<"POST">>, _}, {<<"/clear_alert">>, _}} ->
             {ok, Post, _Req2} = cowboy_req:body_qs(Req),
-            Name = proplists:get_value(<<"name">>, Post, <<>>),
-            Line = proplists:get_value(<<"line">>, Post, <<>>),
-            Counter = binary_to_list(<<Name/binary, $:, Line/binary>>),
+            Alert = proplists:get_value(<<"alert">>, Post, <<>>),
+            Counter = base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global])),
             triage_handler:clear_alert(Counter),
             {ok, Reply} = cowboy_req:reply(200, Req),
             {ok, Reply, State};

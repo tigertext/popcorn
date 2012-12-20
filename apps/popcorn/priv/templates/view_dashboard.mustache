@@ -105,7 +105,7 @@
                   <table id="alerts" class="table table-striped full-section table-hover">
                     <tbody>
                       {{#alerts}}
-                        <tr id="alert-{{name}}-{{line}}">
+                        <tr id="{{location}}">
                           <td><a href="#" class="btn btn-mini btn-clear">Clear</a></td>
                           <td>{{name}} line {{line}}<br/>{{message}}</td>
                           <td><span class="recent">{{recent}}</span> recent / <span class="seen">{{count}}</span> seen</td>
@@ -175,14 +175,14 @@
             'update_counters',
             function(event) {
               var counters = JSON.parse(event.data);
-              if(counters.event_count) $('#event_count').text(counters.event_count);
-              if(counters.alert_count_today) $('#alert_count_today').text(counters.alert_count_today);
-              if(counters.alert_count) $('#alert_count').text(counters.alert_count);
+              if(counters.event_count != undefined) $('#event_count').text(counters.event_count);
+              if(counters.alert_count_today != undefined) $('#alert_count_today').text(counters.alert_count_today);
+              if(counters.alert_count != undefined) $('#alert_count').text(counters.alert_count);
               if(counters.counter) {
                 updateAlertRow('#alerts', counters.counter);
                 if($('#alerts tr').length > {{alert_lines}}) $('#alerts tr:last').remove();
               }
-              if(counters.node_hash && counters.node_count) {
+              if(counters.node_hash) {
                 $('#node-' + counters.node_hash + ' .node-total').text(counters.node_count);
                 setNodePercents();
               }
@@ -193,7 +193,7 @@
             'new_node',
             function(event) {
               var node = JSON.parse(event.data);
-              if(node.node_count) $('#node_count').text(node.node_count);
+              if(node.node_count != undefined) $('#node_count').text(node.node_count);
               var row = "<tr class='node-row' id='node-" + node.node_hash + "'>" +
                           "<td class='primary'><a href='/node/" + node.node_name + "'>" + node.node_name + "</a></td>" +
                           "<td class='node-total' id='" + node.node_hash + "-total'>" + maybe(node.total_messages, 1) + "</td>" +

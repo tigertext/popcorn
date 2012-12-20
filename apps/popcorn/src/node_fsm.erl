@@ -57,44 +57,49 @@ init([]) ->
     {next_state, 'LOGGING', State};
 
 'LOGGING'({log_message, Popcorn_Node, Log_Message}, State) ->
-    %% log the message
-    mnesia:dirty_write(State#state.history_name, Log_Message),
+    try
+        %% log the message
+        mnesia:dirty_write(State#state.history_name, Log_Message),
 
-    %% increment the severity counter for this node
-    folsom_metrics:notify({proplists:get_value(Log_Message#log_message.severity, State#state.severity_metric_names), {inc, 1}}),
+        %% increment the severity counter for this node
+        folsom_metrics:notify({proplists:get_value(Log_Message#log_message.severity, State#state.severity_metric_names), {inc, 1}}),
 
-    %% increment the total event counter
-    folsom_metrics:notify({?TOTAL_EVENT_COUNTER, {inc, 1}}),
+        %% increment the total event counter
+        folsom_metrics:notify({?TOTAL_EVENT_COUNTER, {inc, 1}}),
 
-    %% ensure the metric exists for this hour, severity combination and increment
-    Prefix    = <<"_popcorn__">>,
-    Hour      = list_to_binary(popcorn_util:hour()),
-    SeverityB = list_to_binary(integer_to_list(Log_Message#log_message.severity)),
-    Sep       = <<"_">>,
-    Node_Name = Popcorn_Node#popcorn_node.node_name,
+        %% ensure the metric exists for this hour, severity combination and increment
+        Prefix    = <<"_popcorn__">>,
+        Hour      = list_to_binary(popcorn_util:hour()),
+        SeverityB = list_to_binary(integer_to_list(Log_Message#log_message.severity)),
+        Sep       = <<"_">>,
+        Node_Name = Popcorn_Node#popcorn_node.node_name,
 
-    Node_Severity_History_Counter = binary_to_atom(<<Prefix/binary, Sep/binary, Node_Name/binary, Sep/binary, SeverityB/binary, Sep/binary, Hour/binary>>, latin1),
-    Total_Severity_History_Counter = binary_to_atom(<<Prefix/binary, Sep/binary, SeverityB/binary, Sep/binary, Hour/binary>>, latin1),
+        Node_Severity_History_Counter = binary_to_atom(<<Prefix/binary, Sep/binary, Node_Name/binary, Sep/binary, SeverityB/binary, Sep/binary, Hour/binary>>, latin1),
+        Total_Severity_History_Counter = binary_to_atom(<<Prefix/binary, Sep/binary, SeverityB/binary, Sep/binary, Hour/binary>>, latin1),
 
-    case folsom_metrics:metric_exists(Node_Severity_History_Counter) of
-        false -> folsom_metrics:new_counter(Node_Severity_History_Counter);
-        true  -> ok
+        case folsom_metrics:metric_exists(Node_Severity_History_Counter) of
+            false -> folsom_metrics:new_counter(Node_Severity_History_Counter);
+            true  -> ok
+        end,
+
+        case folsom_metrics:metric_exists(Total_Severity_History_Counter) of
+            false -> folsom_metrics:new_counter(Total_Severity_History_Counter);
+            true  -> ok
+        end,
+
+        folsom_metrics:notify({Node_Severity_History_Counter, {inc, 1}}),
+        folsom_metrics:notify({Total_Severity_History_Counter, {inc, 1}}),
+
+        %% Notify any streams connected
+        Log_Streams = ets:tab2list(current_log_streams),
+        lists:foreach(fun(Log_Stream) ->
+            gen_fsm:send_all_state_event(Log_Stream#stream.stream_pid, {new_message, Log_Message})
+          end, Log_Streams)
+    catch
+        _:Error ->
+            io:format("Couldn't log message:~nMessage: ~p~nNode: ~p~nError: ~p~nStack: ~p~n",
+                        [Log_Message, Popcorn_Node, Error, erlang:get_stacktrace()])
     end,
-
-    case folsom_metrics:metric_exists(Total_Severity_History_Counter) of
-        false -> folsom_metrics:new_counter(Total_Severity_History_Counter);
-        true  -> ok
-    end,
-
-    folsom_metrics:notify({Node_Severity_History_Counter, {inc, 1}}),
-    folsom_metrics:notify({Total_Severity_History_Counter, {inc, 1}}),
-
-    %% Notify any streams connected
-    Log_Streams = ets:tab2list(current_log_streams),
-    lists:foreach(fun(Log_Stream) ->
-        gen_fsm:send_all_state_event(Log_Stream#stream.stream_pid, {new_message, Log_Message})
-      end, Log_Streams),
-
     {next_state, 'LOGGING', State}.
 
 'LOGGING'({deserialize_popcorn_node, Popcorn_Node}, _From, State) ->
