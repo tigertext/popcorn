@@ -72,7 +72,7 @@
               <table id="alerts" class="table table-striped full-section table-hover">
                 <tbody>
                   {{#alerts}}
-                  <tr id="alert-{{name}}-{{line}}">
+                  <tr id="{{location}}">
                     <td><a href="#" class="btn btn-mini btn-clear">Clear</a></td>
                     <td>{{name}} line {{line}}<br/>{{message}}</td>
                     <td><span class="recent">{{recent}}</span> recent / <span class="seen">{{count}}</span> seen</td>

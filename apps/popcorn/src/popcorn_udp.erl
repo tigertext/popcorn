@@ -114,6 +114,8 @@ decode_protobuffs_message(Encoded_Message) ->
                                 message      = check_undefined(Message),
                                 hashtags     = Hashtags,
                                 mentions     = Mentions,
+                                log_product  = Popcorn_Node#popcorn_node.role,
+                                log_version  = Popcorn_Node#popcorn_node.version,
                                 log_module   = check_undefined(Module),
                                 log_function = check_undefined(Function),
                                 log_line     = check_undefined(Line),

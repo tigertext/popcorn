@@ -13,6 +13,8 @@
 
 -define(UPDATE_INTERVAL, 10000).
 
+-record(alert, {location, log, timestamp = erlang:now()}).
+
 -export([counter_data/1, all_alerts/1, recent_alerts/1,
          alert_count_today/0, alert_count/0, clear_alert/1,
          safe_notify/4]).
@@ -40,7 +42,7 @@ all_alerts(_) -> gen_event:call(?MODULE, ?MODULE, {alerts, recent}).
 
 recent_alerts(Count) -> gen_event:call(?MODULE, ?MODULE, {alerts, Count}).
 
-clear_alert(Counter) -> gen_event:call(?MODULE, ?MODULE, {clear, Counter}).
+clear_alert(Counter) -> gen_event:call(?MODULE, ?MODULE, {clear, binary_to_list(Counter)}).
 
 init(_) ->
     ets:new(triage_error_keys, [named_table, set, public, {keypos, 2}]),
@@ -75,7 +77,7 @@ handle_call({alerts, Count}, State) ->
     {ok, FinalList, State};
 handle_call({clear, Counter}, State) ->
     Key = recent_key(Counter),
-    case folsom_metrics:get_metric_value(Key) of
+    try folsom_metrics:get_metric_value(Key) of
         0 -> {ok, ok, State};
         _ ->
             folsom_metrics:delete_metric(Key),
@@ -86,20 +88,25 @@ handle_call({clear, Counter}, State) ->
                  {alert_count,  folsom_metrics:get_metric_value("total_alerts")}],
             dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
             {ok, ok, reset_timer(State)}
+    catch
+        _:Error ->
+            io:format("Error trying to get ~p: ~p~n~p", [Key, Error, erlang:get_stacktrace()]),
+            {ok, ok, State}
     end;
 handle_call(_Request, State) ->
     {ok, ok, State}.
 
 handle_event({triage_event, #popcorn_node{} = Node, Node_Pid,
-              #log_message{log_module=Module, log_line=Line, severity=Severity} = Log_Entry,
+              #log_message{log_product=Product, log_version=Version,
+                           log_module=Module, log_line=Line, severity=Severity} = Log_Entry,
               Is_New_Node}, State)
-        when Severity < 4, is_binary(Module), is_binary(Line) ->
-    true = ets:insert(triage_error_data, #alert{location=key(Module,Line), node=Node, log=Log_Entry}),
+        when Severity < 4, is_binary(Product), is_binary(Version), is_binary(Module), is_binary(Line) ->
+    true = ets:insert(triage_error_data, #alert{location=key(Product,Version,Module,Line), log=Log_Entry}),
     case Is_New_Node of
         true -> dashboard_stream_fsm:broadcast({new_node, Node});
         false -> ok
     end,
-    update_counter(Node,Node_Pid,Module,Line),
+    update_counter(Node,Node_Pid,Product,Version,Module,Line),
     {ok, reset_timer(State)};
 
 handle_event({triage_event, #popcorn_node{} = Node, _Node_Pid, _Log_Message, true}, State) ->
@@ -146,10 +153,8 @@ code_change(_OldVsn, State, _Extra) ->
     %% TODO version number should be read here, or else we don't support upgrades
     {ok, State}.
 
-update_counter(_, _, undefined, _) -> ok;
-update_counter(_, _, _, undefined) -> ok;
-update_counter(Node, Node_Pid, Module, Line) ->
-    Counter = key(Module,Line),
+update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
+    Counter = key(Product,Version,Module,Line),
     Day = day_key(),
     case folsom_metrics:metric_exists(Day) of
         false -> new_metric(Day);
@@ -188,7 +193,8 @@ new_metric(Counter) ->
     folsom_metrics:new_counter(Counter),
     folsom_metrics:new_counter(recent_key(Counter)).
 
-key(Module,Line) -> binary_to_list(Module) ++ ":" ++ binary_to_list(Line).
+key(Product,Version,Module,Line) ->
+    binary_to_list(<<Product/binary, ":-:", Version/binary, ":-:", Module/binary, ":-:", Line/binary>>).
 
 recent_key(Counter) -> "recent:" ++ Counter.
 
@@ -201,23 +207,24 @@ data(#alert{location = undefined}) -> [];
 data(Alert) ->
     Basic_Properties =
       case Alert of
-        #alert{node = #popcorn_node{role = Role, version = Version},
-               log  = #log_message{message = Message}} ->
-          [ {'message', list(Message)}, {'product', list(Role)}, {'version', list(Version)}];
-        #alert{node = #popcorn_node{version = Version}} ->
-          [ {'version', list(Version)}];
-        #alert{log  = #log_message{message = Message}} ->
+        #alert{log = #log_message{message = Message}} ->
           [ {'message', list(Message)}];
         #alert{} ->
           []
       end,
     All_Properties =
-        case string:tokens(Alert#alert.location, ":") of
-            [Counter_Name,Line|_] -> [{'name', Counter_Name}, {'line', Line} | Basic_Properties];
+        case string:tokens(Alert#alert.location, ":-:") of
+            [Product,Version,Module,Line|_] ->
+                [{product,  Product},
+                 {version,  Version},
+                 {name,     Module},
+                 {line,     Line}
+                 | Basic_Properties];
             _ -> Basic_Properties
         end,
-    [{count, folsom_metrics:get_metric_value(Alert#alert.location)},
-     {recent, folsom_metrics:get_metric_value(recent_key(Alert#alert.location))}
+    [{location, re:replace(base64:encode(Alert#alert.location), "=", "_", [{return, list}, global])},
+     {count,    folsom_metrics:get_metric_value(Alert#alert.location)},
+     {recent,   folsom_metrics:get_metric_value(recent_key(Alert#alert.location))}
      | All_Properties].
 
 list(B) when is_binary(B) -> binary_to_list(B);

@@ -18,21 +18,17 @@ function setNodePercents() {
   }
 };
 
-function addAlertRow(table, counter) {
-  var rowName = 'alert-' + maybe(counter.name) + '-' + maybe(counter.line);
-};
-
 function setClearOnClick(selector) {
   $(selector).click(function() {
-    var counter = $(this).parent().parent().attr("id").split("-");
+    var counter = $(this).parent().parent().attr("id");
     $.post(
       "/clear_alert",
-      {"name" : counter[1], "line" : counter[2]})
+      {"alert" : $(this).parent().parent().attr("id")})
   });
 };
 
 function updateAlertRow(table, counter) {
-  var rowName = 'alert-' + maybe(counter.name) + '-' + maybe(counter.line);
+  var rowName = counter.location;
   if($('#' + rowName).length > 0) {
     $('#' + rowName + ' .seen').text(counter.count);
     $('#' + rowName + ' .recent').text(counter.recent);

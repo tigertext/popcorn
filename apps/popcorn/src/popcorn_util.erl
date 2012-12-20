@@ -66,7 +66,8 @@ opt(undefined, Default) -> Default;
 opt(Value, _)           -> Value.
 
 format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_function=Function, log_line=Line, log_pid=Pid,
-                                severity=Severity, message=Message, hashtags=Hashtags, mentions=Mentions}) ->
+                                severity=Severity, message=Message, hashtags=Hashtags, mentions=Mentions, log_product=Product,
+                                log_version=Version}) ->
   UTC_Timestamp = calendar:now_to_universal_time({Timestamp div 1000000000000, 
                                                   Timestamp div 1000000 rem 1000000,
                                                   Timestamp rem 1000000}),
@@ -87,6 +88,8 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
   [{'time',             Formatted_Time},
    {'datetime',         Formatted_DateTime},
    {'find_more_html',   Find_More_Html},
+   {'log_product',      binary_to_list(opt(Product, <<"Unknown">>))},
+   {'log_version',      binary_to_list(opt(Version, <<"Unknown">>))},
    {'log_module',       binary_to_list(opt(Module, <<"Unknown">>))},
    {'log_function',     binary_to_list(opt(Function, <<"Unknown">>))},
    {'log_line',         binary_to_list(opt(Line, <<"??">>))},
