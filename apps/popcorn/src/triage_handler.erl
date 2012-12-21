@@ -110,10 +110,16 @@ handle_call({clear, Counter}, State) ->
             io:format("Error trying to get ~p: ~p~n~p", [Key, Error, erlang:get_stacktrace()]),
             {ok, ok, State}
     end;
-handle_call({messages, Product, Version, Name, Line}, State) ->
-    Messages =
-        lists:flatten(
-            [node_fsm:messages(Node_Pid, Product, Version, Name, Line) || {_, Node_Pid} <- ets:tab2list(current_nodes)]),
+handle_call({messages, Product, Version, Module, Line}, State) ->
+    P = list_to_binary(Product),
+    V = list_to_binary(Version),
+    M = list_to_binary(Module),
+    L = list_to_binary(Line),
+    Messages = mnesia:dirty_select(
+                popcorn_history,
+                ets:fun2ms(
+                    fun(#log_message{log_product = LP, log_version = LV, log_module = LM, log_line = LL} = Log_Message)
+                        when LP == P, LV == V, LM == M, LL == L -> Log_Message end)),
     {ok, Messages, State};
 handle_call(_Request, State) ->
     {ok, ok, State}.

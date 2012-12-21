@@ -32,9 +32,9 @@
                        role      :: binary(),
                        version   :: binary()}).
 
--record(log_message, {timestamp    :: number(),
-                      severity     :: integer(),
+-record(log_message, {severity     :: integer(),
                       message      :: binary(),
+                      timestamp    :: number(),
                       log_product  :: binary(),
                       log_version  :: binary(),
                       log_module   :: binary(),      %% underscore in the name is to prevent confusion with BIF and types
