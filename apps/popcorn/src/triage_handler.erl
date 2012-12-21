@@ -17,7 +17,7 @@
 
 -export([counter_data/1, all_alerts/1, recent_alerts/1,
          alert_count_today/0, alert_count/0, clear_alert/1,
-         safe_notify/4, log_messages/1]).
+         safe_notify/4, log_messages/1, decode_location/1]).
 
 -include_lib("lager/include/lager.hrl").
 -include("include/popcorn.hrl").
@@ -30,6 +30,11 @@ safe_notify(Popcorn_Node, Node_Pid, Log_Message, Is_New_Node) ->
         undefined -> {error, no_error_triage};
         Pid -> gen_event:sync_notify(Pid, {triage_event, Popcorn_Node, Node_Pid, Log_Message, Is_New_Node})
     end.
+
+decode_location(Alert) ->
+    Counter = base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global])),
+    Parts = re:split(Counter, <<":-:">>, [{return, list}]),
+    lists:zip([product, version, name, line], Parts).
 
 log_messages(Counter) -> gen_event:call(?MODULE, ?MODULE, {messages, Counter}).
 
@@ -44,7 +49,9 @@ all_alerts(_) -> gen_event:call(?MODULE, ?MODULE, {alerts, recent}).
 
 recent_alerts(Count) -> gen_event:call(?MODULE, ?MODULE, {alerts, Count}).
 
-clear_alert(Counter) -> gen_event:call(?MODULE, ?MODULE, {clear, binary_to_list(Counter)}).
+clear_alert(Alert) ->
+    Counter = base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global])),
+    gen_event:call(?MODULE, ?MODULE, {clear, binary_to_list(Counter)}).
 
 init(_) ->
     ets:new(triage_error_keys, [named_table, set, public, {keypos, 2}]),
