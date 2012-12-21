@@ -14,7 +14,7 @@
          terminate/3,
          code_change/4]).
 
--export([messages/2]).
+-export([messages/5]).
 
 -export([
     'LOGGING'/2,
@@ -37,7 +37,7 @@ get_message_counts(Node_Pid) ->
 
 start_link() -> gen_fsm:start_link(?MODULE, [], []).
 
-messages(Node_Pid, Counter) -> gen_fsm:sync_send_event(Node_Pid, {get_messages, Counter}).
+messages(Node_Pid, Product, Version, Name, Line) -> gen_fsm:sync_send_event(Node_Pid, {get_messages, Product, Version, Name, Line}).
 
 init([]) ->
     process_flag(trap_exit, true),
@@ -166,8 +166,17 @@ init([]) ->
     Total_Count     = lists:foldl(fun({_, Count}, Total) -> Total + Count end, 0, Severity_Counts),
 
     {reply, Severity_Counts ++ [{total, Total_Count}], 'LOGGING', State};
-'LOGGING'({get_messages, Counter}, _From, State) ->
-    {reply, [], 'LOGGING', State};
+'LOGGING'({get_messages, Product, Version, Module, Line}, _From, State) ->
+    P = list_to_binary(Product),
+    V = list_to_binary(Version),
+    M = list_to_binary(Module),
+    L = list_to_binary(Line),
+    Messages = mnesia:dirty_select(
+                State#state.history_name,
+                ets:fun2ms(
+                    fun(#log_message{log_product = LP, log_version = LV, log_module = LM, log_line = LL} = Log_Message)
+                        when LP == P, LV == V, LM == M, LL == L -> Log_Message end)),
+    {reply, Messages, 'LOGGING', State};
 'LOGGING'({severity_count_history, Severity}, _From, State) ->
     Last_24_Hours = popcorn_util:last_24_hours(),
 

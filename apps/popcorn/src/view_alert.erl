@@ -10,8 +10,12 @@ head_includes() -> popcorn_util:head_includes().
 
 -spec logs(dict()) -> [dict()].
 logs(Context) ->
-	[dict:from_list(popcorn_util:format_log_message(Log_Message))
-	 || Log_Message <- triage_handler:log_messages(mustache:get(counter, Context))].
+    [dict:from_list(popcorn_util:format_log_message(Log_Message))
+     || Log_Message <- triage_handler:log_messages(
+                            mustache:get(product,   Context),
+                            mustache:get(version,   Context),
+                            mustache:get(name,      Context),
+                            mustache:get(line,      Context))].
 
 -spec username() -> string().
 username() -> "admin".
