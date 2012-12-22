@@ -22,8 +22,7 @@
 
 -define(EXPIRE_TIMER, 15000).
 
--record(state, {history_name          :: atom(),
-                severity_metric_names :: list(),
+-record(state, {severity_metric_names :: list(),
                 most_recent_version   :: string(),
                 popcorn_node          :: #popcorn_node{}}).
 
@@ -48,8 +47,7 @@ init([]) ->
         Microseconds = popcorn_util:retention_time_to_microsec(Retention_Interval),
         Oldest_TS    = ?NOW - Microseconds,
         Severity_Num = popcorn_util:severity_to_number(Severity)
-        %I = mnesia:select(State#state.history_name, ets:fun2ms(fun(#log_message{timestamp = TS, severity = S} = Log_Message) when TS < Oldest_TS andalso S =:= Severity_Num -> Log_Message end)),
-        %?POPCORN_DEBUG_MSG("I = ~p", [I])
+        %%TODO: mnesia:delete...
       end, Retentions),
 
     gen_fsm:start_timer(?EXPIRE_TIMER, expire_log_messages),
@@ -59,7 +57,7 @@ init([]) ->
 'LOGGING'({log_message, Popcorn_Node, Log_Message}, State) ->
     try
         %% log the message
-        mnesia:dirty_write(State#state.history_name, Log_Message),
+        mnesia:dirty_write(popcorn_history, Log_Message),
 
         %% increment the severity counter for this node
         folsom_metrics:notify({proplists:get_value(Log_Message#log_message.severity, State#state.severity_metric_names), {inc, 1}}),
@@ -105,7 +103,6 @@ init([]) ->
 'LOGGING'({deserialize_popcorn_node, Popcorn_Node}, _From, State) ->
     Node_Name        = Popcorn_Node#popcorn_node.node_name,
     Prefix           = <<"raw_logs__">>,
-    History_Name     = binary_to_atom(<<Prefix/binary, Node_Name/binary>>, latin1),
 
     ets:insert(current_roles, {Popcorn_Node#popcorn_node.role, self()}),
 
@@ -120,8 +117,7 @@ init([]) ->
     %% create the metrics
     lists:foreach(fun({_, N}) -> folsom_metrics:new_counter(N) end, Severity_Metric_Names),
 
-    {reply, ok, 'LOGGING', State#state{history_name          = History_Name,
-                                       severity_metric_names = Severity_Metric_Names,
+    {reply, ok, 'LOGGING', State#state{severity_metric_names = Severity_Metric_Names,
                                        popcorn_node          = Popcorn_Node}};
 
 'LOGGING'({set_popcorn_node, Popcorn_Node}, _From, State) ->
@@ -129,13 +125,6 @@ init([]) ->
 
     Node_Name        = Popcorn_Node#popcorn_node.node_name,
     Prefix           = <<"raw_logs__">>,
-    History_Name     = binary_to_atom(<<Prefix/binary, Node_Name/binary>>, latin1),
-
-    %% create the mnesia table to stpre the raw logs for this node
-    {atomic, ok} = mnesia:create_table(History_Name, [{disc_copies, [node()]},
-                                                      {record_name, log_message},
-                                                      {index,       [#log_message.severity]},     %% this can't be the first element in the record
-                                                      {attributes,  record_info(fields, log_message)}]),
 
     %% add this node to the "roles" tets table
     ets:insert(current_roles, {Popcorn_Node#popcorn_node.role, self()}),
@@ -151,8 +140,7 @@ init([]) ->
     %% create the metrics
     lists:foreach(fun({_, N}) -> folsom_metrics:new_counter(N) end, Severity_Metric_Names),
 
-    {reply, ok, 'LOGGING', State#state{history_name          = History_Name,
-                                       severity_metric_names = Severity_Metric_Names,
+    {reply, ok, 'LOGGING', State#state{severity_metric_names = Severity_Metric_Names,
                                        popcorn_node          = Popcorn_Node}};
 
 'LOGGING'(get_message_counts, _From, State) ->
@@ -189,8 +177,4 @@ handle_event(Event, StateName, State)                 -> {stop, {StateName, unde
 handle_sync_event(Event, _From, StateName, State)     -> {stop, {StateName, undefined_event, Event}, State}.
 handle_info(_Info, StateName, State)                  -> {next_state, StateName, State}.
 terminate(_Reason, _StateName, State)                 -> ok.
-
 code_change(_OldVsn, StateName, StateData, _Extra)    -> {ok, StateName, StateData}.
-
-
-

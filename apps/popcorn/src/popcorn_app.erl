@@ -53,13 +53,24 @@ init([]) ->
       {error, {_Node, {already_exists,_Node}}} -> io:format(" recovering schema...")
     end,
     ok = mnesia:start(),
+    %% create the mnesia table to stpre the raw logs for this node
     io:format(" done!\n"),
 
     io:format("Ensuring required mnesia tables exist..."),
-    mnesia:create_table(known_nodes,  [{disc_copies, [node()]},
-                                       {record_name, popcorn_node},
-                                       {attributes,  record_info(fields, popcorn_node)}]),
-    io:format(" done!\n"),
+    io:format("\n\t[popcorn_history: ~p]",
+       [mnesia:create_table(known_nodes,  [{disc_copies, [node()]},
+                                           {record_name, popcorn_node},
+                                           {attributes,  record_info(fields, popcorn_node)}])]),
+    io:format("\n\t[popcorn_history: ~p]",
+       [mnesia:create_table(popcorn_history, [{disc_copies, [node()]},
+                                              {record_name, log_message},
+                                              {index,       [#log_message.log_product,
+                                                             #log_message.log_version,
+                                                             #log_message.log_module,
+                                                             #log_message.log_line,
+                                                             #log_message.timestamp]},
+                                              {attributes,  record_info(fields, log_message)}])]),
+    io:format("\n... done!\n"),
 
     io:format("Creating global metrics..."),
     folsom_metrics:new_counter(?TOTAL_EVENT_COUNTER),
