@@ -40,6 +40,43 @@ handle(Req, State) ->
                                      {ok, Reply, State}
             end;
 
+        {{<<"POST">>, _}, {<<"/clear_alert">>, _}} ->
+            {ok, Post, _Req2} = cowboy_req:body_qs(Req),
+            Alert = proplists:get_value(<<"alert">>, Post, <<>>),
+            Counter = base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global])),
+            triage_handler:clear_alert(Counter),
+            {ok, Reply} = cowboy_req:reply(200, Req),
+            {ok, Reply, State};
+
+        {{<<"GET">>, _}, {<<"/alerts">>, _}} ->
+            {All, _} = cowboy_req:qs_val(<<"all">>, Req),
+            ?POPCORN_DEBUG_MSG("http request for alerts (~p)", [All]),
+            case session_handler:is_session_authed_and_valid(Req) of
+                false -> Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
+                         {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
+                         {ok, Reply, State};
+                true  ->
+                        %% spawn the stream fsm
+                        {ok, Stream_Pid} = supervisor:start_child(dashboard_stream_sup, []),
+
+                        %% create the stream object
+                        Stream_Id = popcorn_util:random_id(),
+                        Stream = #stream{stream_id        = Stream_Id,
+                                         stream_pid       = Stream_Pid,
+                                         client_pid       = undefined},
+
+                        %% assign to the fsm
+                        gen_fsm:send_event(Stream_Pid, {connect, Stream}),
+
+                        Context = dict:from_list([{stream_id, binary_to_list(Stream_Id)},
+                                                  {all,       All}]),
+
+                        TFun        = mustache:compile(view_alerts),
+                        Output      = mustache:render(view_alerts, TFun, Context),
+                        {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
+                        {ok, Reply, State}
+            end;
+
         {{<<"GET">>, _}, {<<"/">>, _}} ->
             ?POPCORN_DEBUG_MSG("http request for dashboard"),
             case session_handler:is_session_authed_and_valid(Req) of

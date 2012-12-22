@@ -67,7 +67,7 @@ handle_info({udp, Socket, _Host, _Port, Bin}, State) ->
                 Running_Pid
         end,
 
-    safe_notify({triage_event, Popcorn_Node, Node_Pid, Log_Message, Is_New_Node}),
+    triage_handler:safe_notify(Popcorn_Node, Node_Pid, Log_Message, Is_New_Node),
 
     inet:setopts(Socket, [{active, once}]),
     {noreply, State};
@@ -114,6 +114,8 @@ decode_protobuffs_message(Encoded_Message) ->
                                 message      = check_undefined(Message),
                                 hashtags     = Hashtags,
                                 mentions     = Mentions,
+                                log_product  = Popcorn_Node#popcorn_node.role,
+                                log_version  = Popcorn_Node#popcorn_node.version,
                                 log_module   = check_undefined(Module),
                                 log_function = check_undefined(Function),
                                 log_line     = check_undefined(Line),
@@ -123,10 +125,3 @@ decode_protobuffs_message(Encoded_Message) ->
 
 check_undefined(<<>>) -> undefined;
 check_undefined(Value) -> Value.
-
-safe_notify(Event) ->
-    case whereis(triage_handler) of
-        undefined -> {error, no_error_triage};
-        Pid -> gen_event:sync_notify(Pid, Event)
-    end.
-    

@@ -47,7 +47,8 @@ handle_loop(Req, State) ->
             handle_loop(Req, State);
         {new_node, Node} ->
             Total_Message_Count = folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER),
-            Data = [{node_name, Node#popcorn_node.node_name},
+            Data = [{node_count, ets:info(current_nodes, size)},
+                    {node_name, Node#popcorn_node.node_name},
                     {node_hash, re:replace(base64:encode(Node#popcorn_node.node_name), "=", "_", [{return, binary}, global])},
                     {percent_of_all_events, ?PERCENT(1 / Total_Message_Count)},
                     {total_messages, 1},
@@ -57,14 +58,17 @@ handle_loop(Req, State) ->
             io:format("New node: ~p~n", [Data]),
             Event = lists:flatten(mochijson:encode({struct, Data})),
             chunk_event("new_node", Event, Req, State);
-        {new_metric, Counter} ->
-            io:format("New metric: ~p~n", [Counter]),
-            Data = triage_handler:counter_data(Counter),
-            Event = lists:flatten(mochijson:encode({struct, Data})),
-            chunk_event("new_metric", Event, Req, State);
         {update_counters, NewCounters} ->
             io:format("Update Counters: ~p~n", [NewCounters]),
-            Event = lists:flatten(mochijson:encode({struct, NewCounters})),
+            Event =
+                lists:flatten(mochijson:encode(
+                    case lists:keytake(counter, 1, NewCounters) of
+                        false ->
+                            {struct, NewCounters};
+                        {value, {counter, Counter}, Rest} ->
+                            CounterData = triage_handler:counter_data(Counter),
+                            {struct, [{counter, {struct, CounterData}} | Rest]}
+                    end)),
             chunk_event("update_counters", Event, Req, State);
         Other ->
             ?POPCORN_DEBUG_MSG("streaming handler received unknown message: ~p", [Other]),
