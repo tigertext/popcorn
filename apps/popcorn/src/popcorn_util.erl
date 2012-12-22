@@ -3,7 +3,8 @@
 
 -include("include/popcorn.hrl").
 
--export([hour/0,
+-export([unique_id/0,
+         hour/0,
          retention_time_to_microsec/1,
          last_24_hours/0,
          severity_to_number/1,
@@ -13,6 +14,9 @@
          format_log_message/1,
          opt/2,
          head_includes/0]).
+
+unique_id() -> {_, S} = flake_server:id(62),
+               list_to_binary(S).
 
 hour() -> integer_to_list(erlang:trunc(folsom_utils:now_epoch() / 3600)).
 

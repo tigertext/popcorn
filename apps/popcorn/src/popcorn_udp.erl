@@ -109,11 +109,13 @@ decode_protobuffs_message(Encoded_Message) ->
                                  role      = check_undefined(Node_Role),
                                  version   = check_undefined(Node_Version)},
 
-    Log_Message  = #log_message{timestamp    = ?NOW,     %% this should be part of the protobuffs packet?
+    Log_Message  = #log_message{message_id   = ?PU:unique_id(),
+                                timestamp    = ?NOW,     %% this should be part of the protobuffs packet?
                                 severity     = check_undefined(Severity),
                                 message      = check_undefined(Message),
                                 hashtags     = Hashtags,
                                 mentions     = Mentions,
+                                log_nodename = Popcorn_Node#popcorn_node.node_name,
                                 log_product  = Popcorn_Node#popcorn_node.role,
                                 log_version  = Popcorn_Node#popcorn_node.version,
                                 log_module   = check_undefined(Module),

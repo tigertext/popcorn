@@ -12,7 +12,7 @@ start() 			-> [application:start(App) || App <-
 										[ranch, cowboy, mustache,
 										 protobuffs, inets, mochiweb,
 										 webmachine, folsom, mnesia,
-                     popcorn
+                     flake, popcorn
 										 ]].
 
 %% @spec stop() -> ok
