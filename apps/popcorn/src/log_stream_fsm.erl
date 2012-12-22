@@ -61,9 +61,23 @@ init([]) ->
                      O -> {next_state, 'STREAMING', State#state{idle_loops_disconnected = O + 1}}
                  end
     end;
+
+'STREAMING'(set_time_stream, State) ->
+    %% when we set it to "current", we clear the browser, send the 100 most recent events, and then stream all going forward
+    Stream = State#state.stream,
+    Stream#stream.client_pid ! clear_log,
+
+    {next_state, 'STREAMING', State};
+
+'STREAMING'({set_time_previous, Start_Date, Start_Time, End_Date, End_Time}, State) ->
+    Stream = State#state.stream,
+    Stream#stream.client_pid ! clear_log,
+
+    {next_state,' STREAMING', State};
+
 'STREAMING'({update_severities, New_Severities}, State) ->
     Severity_Filter = lists:map(fun(S) -> list_to_integer(S) end, string:tokens(binary_to_list(New_Severities), ",")),
-    Stream      = State#state.stream,
+    Stream          = State#state.stream,
     Applied_Filters = Stream#stream.applied_filters,
 
     Applied_Filters2 = case proplists:get_value('severities', Applied_Filters) of

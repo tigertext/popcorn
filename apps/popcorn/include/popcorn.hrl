@@ -22,6 +22,8 @@
 -define(POPCORN_ALERT_MSG(Msg, Args),      io:format("~s\n", [lists:flatten(io_lib:format(Msg, Args))]), lager:alert(Msg, Args)).
 -define(POPCORN_EMERGENCY_MSG(Msg, Args),  io:format("~s\n", [lists:flatten(io_lib:format(Msg, Args))]), lager:emergency(Msg, Args)).
 
+-define(PU, popcorn_util).
+
 -record(stream,  {stream_id       :: string(),
                   stream_pid      :: pid(),
                   client_pid      :: pid(),
@@ -32,9 +34,11 @@
                        role      :: binary(),
                        version   :: binary()}).
 
--record(log_message, {severity     :: integer(),
+-record(log_message, {message_id   :: binary(),
+                      severity     :: integer(),
                       message      :: binary(),
                       timestamp    :: number(),
+                      log_nodename :: binary(),
                       log_product  :: binary(),
                       log_version  :: binary(),
                       log_module   :: binary(),      %% underscore in the name is to prevent confusion with BIF and types

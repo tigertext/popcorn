@@ -54,7 +54,7 @@ handle_path(<<"GET">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
             handle_loop(Reply, State)
     end;
 
-handle_path(<<"PUT">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
+handle_path(<<"POST">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
     Stream_Pid    = lists:nth(1, ets:select(current_log_streams, ets:fun2ms(fun(#stream{stream_id  = SID,
                                                                                         stream_pid = SPID}) when SID =:= Stream_Id -> SPID end))),
 
@@ -62,6 +62,15 @@ handle_path(<<"PUT">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
     case proplists:get_value(<<"severities">>, Vals) of
         undefined      -> ok;
         New_Severities -> gen_fsm:send_event(Stream_Pid, {update_severities, New_Severities})
+    end,
+
+    case proplists:get_value(<<"time_filter_type">>, Vals) of
+        undefined        -> ok;
+        <<"stream">>     -> gen_fsm:send_event(Stream_Pid, set_time_stream);
+        <<"previous">>   -> gen_fsm:send_event(Stream_Pid, {set_time_previous, proplists:get_value(<<"start_date">>, Vals),
+                                                                               proplists:get_value(<<"start_time">>, Vals),
+                                                                               proplists:get_value(<<"end_date">>,   Vals),
+                                                                               proplists:get_value(<<"end_time">>,   Vals)})
     end,
 
     {ok, Reply} = cowboy_req:reply(204, [], [], Req),
@@ -93,8 +102,6 @@ handle_path(<<"GET">>, [<<"log">>], Req, State) ->
                                                 [] -> lists:map(fun(SN) -> binary_to_list(popcorn_util:number_to_severity(SN)) end, popcorn_util:all_severity_numbers());
                                                 _  -> Severities
                                             end,
-
-                                            ?POPCORN_DEBUG_MSG("Applied_Severity_Filters = ~p", [Applied_Severity_Filters]),
 
                  Applied_Role_Filters = Roles,
 
@@ -131,10 +138,18 @@ handle_loop(Req, State) ->
             {ok, Req, State};
         {cowboy_req, resp_sent} ->
             handle_loop(Req, State);
+        clear_log ->
+            Enveloped = {struct, [{"message_type", "command"},
+                                  {"payload",      {struct, [{"name", "clear"}]}}]},
+            Event     = lists:flatten(mochijson:encode(Enveloped)),
+            case cowboy_req:chunk(lists:flatten(["data: ", Event, "\n\n"]), Req) of
+                ok -> handle_loop(Req, State);
+                {error, closed} -> {ok, Req, State}
+             end;
         {new_message, Log_Message} ->
-            Params      = popcorn_util:format_log_message(Log_Message),
-            Json_Event  = {struct, Params},
-            Event       = lists:flatten(mochijson:encode(Json_Event)),
+            Enveloped   = {struct, [{"message_type", "log_message"},
+                                    {"payload",      {struct, popcorn_util:format_log_message(Log_Message)}}]},
+            Event       = lists:flatten(mochijson:encode(Enveloped)),
             case cowboy_req:chunk(lists:flatten(["data: ", Event, "\n\n"]), Req) of
                 ok -> handle_loop(Req, State);
                 {error, closed} -> {ok, Req, State}

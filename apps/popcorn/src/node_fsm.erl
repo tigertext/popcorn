@@ -57,7 +57,10 @@ init([]) ->
 'LOGGING'({log_message, Popcorn_Node, Log_Message}, State) ->
     try
         %% log the message
-        mnesia:dirty_write(popcorn_history, Log_Message),
+        case mnesia:dirty_write(popcorn_history, Log_Message) of
+            ok -> ok;
+            O  -> ?POPCORN_WARN_MSG("failed to write log entry because: ~p", [O])
+        end,
 
         %% increment the severity counter for this node
         folsom_metrics:notify({proplists:get_value(Log_Message#log_message.severity, State#state.severity_metric_names), {inc, 1}}),

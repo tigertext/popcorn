@@ -33,7 +33,8 @@ is_session_authed_and_valid(Req) ->
                              end
             end
     catch
-        _:_ -> false
+        A:B -> ?POPCORN_WARN_MSG("Exception in session_handler:is_session_authed_and_valid: ~p:~p", [A, B]),
+               false
     end.
 
 return_404(Req, State) ->
