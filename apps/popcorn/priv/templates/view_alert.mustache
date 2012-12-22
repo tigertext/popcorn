@@ -24,7 +24,7 @@
 
           <div class="nav-collapse collapse" id="main-menu">
             <div class="auth pull-right">
-              <img class="avatar" src="images/littke.png">
+              <img class="avatar" src="/images/littke.png">
               <span class="name">{{username}}</span><br/>
               <span class="links">
                 <a href="/settings">Settings</a>
@@ -61,26 +61,28 @@
             <section id="alerts">
               <a name="alerts">
                 <header>
-                  <div class="pull-right">
-                    {{#header_button}}
-                    <a class="btn btn-small" href="{{href}}">{{label}}</a>
-                    {{/header_button}}
-                  </div>
-                  <h1>Alerts</h1>
+                  <h1>{{name}}:{{line}} at {{product}} {{version}}</h1>
                 </header>
               </a>
-              <table id="alerts" class="table table-striped full-section table-hover">
-                <tbody>
-                  {{#alerts}}
-                  <tr id="{{location}}">
-                    <td><a href="/alert/{{location}}" class='btn btn-mini btn-details'>...</a></td>
-                    <td><a href="#" class="btn btn-mini btn-clear">Clear</a></td>
-                    <td>{{name}} line {{line}}<br/>{{message}}</td>
-                    <td><span class="recent">{{recent}}</span> recent / <span class="seen">{{count}}</span> seen</td>
-                    <td align="right">{{product}} {{version}}</td>
-                  </tr>
-                  {{/alerts}}
-                </tbody>
+              <table id="logs" class="table table-striped full-section table-hover">
+                  <table id="log-messages" class="table table-striped full-section table-hover">
+                    <thead>
+                      <tr>
+                        <th>Time</th>
+                        <th>Severity</th>
+                        <th>Message</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {{#logs}}
+                      <tr>
+                        <td>{{time}}</td>
+                        <td>{{message_severity}}</td>
+                        <td>{{message}}</td>
+                      </tr>
+                      {{/logs}}
+                    </tbody>
+                  </table>
               </table>
             </section>
 
@@ -92,22 +94,5 @@
     <script src="/js/jquery.min.js"></script>
     <script src="/bootstrap/js/bootstrap-dropdown.js"></script>
     <script src="/bootstrap/js/bootstrap-collapse.js"></script>
-    <script src="/js/dashboard.js" type="text/javascript"></script>
-    <script type="text/javascript">
-      $(function() {
-          var streamSource = new EventSource("/dashboard/stream/{{stream_id}}");
-
-          streamSource.addEventListener(
-            'update_counters',
-            function(event) {
-              var counters = JSON.parse(event.data);
-              if(counters.counter) updateAlertRow('#alerts', counters.counter);
-            },
-            false);
-
-          setClearOnClick('.btn-clear');
-        });
-    </script>
-
   </body>
 </html>
