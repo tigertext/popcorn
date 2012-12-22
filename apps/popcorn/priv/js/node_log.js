@@ -109,24 +109,30 @@ $(document).ready(function() {
 
   $('#log-timestamp').popover({html: true,
                                trigger: 'click',
-                               title: 'Message Timestamp',
+                               title: 'Message Timestamp<div style="float:right;"><button class="close" id="close-timestamp">&times;</button></div>',
                                placement: 'bottom',
                                content: timestampPopoverContent});
 
-  $('#log-timestamp').click(function() {
+  $('#log-timestamp').click(function(e) {
     $('#absolute-date-start').datepicker();
     $('#absolute-date-end').datepicker();
     $('#absolute-time-start').timepicker();
     $('#absolute-time-end').timepicker();
+    e.preventDefault();
+  });
+
+  $('#close-timestamp').live('click', function(e) {
+    $('#log-timestamp').popover('hide');
+    e.preventDefault();
   });
 
   $('input[name=timestamp-radio]').live('change', function() {
     if ($(this).val() == 'absolute') {
-      $('#timespan-absolute').show();
-      $('#timespan-relative').hide();
+      $('#timespan-absolute').slideDown();
+      $('#timespan-relative').slideUp();
     } else if($(this).val() == 'relative') {
-      $('#timespan-relative').show();
-      $('#timespan-absolute').hide();
+      $('#timespan-relative').slideDown();
+      $('#timespan-absolute').slideUp();
     }
   });
 
