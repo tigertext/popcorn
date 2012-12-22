@@ -1,3 +1,6 @@
+apps/popcorn/priv/css/popcorn.css
+node_modules
+Mnesia*
 erl_crash.dump
 .DS_Store
 deps

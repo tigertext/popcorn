@@ -11,14 +11,22 @@
          mention_count/0,
          alert_count_today/0,
          alert_count/0,
+         alert_lines/0,
          known_nodes/0,
          username/0]).
+
+-spec alert_lines() -> pos_integer().
+alert_lines() ->
+  case application:get_env(popcorn, dashboard_alert_lines) of
+    {ok, Value} -> Value;
+    _ -> 3
+  end.
 
 -spec head_includes() -> list().
 head_includes() -> popcorn_util:head_includes().
 
 -spec node_count() -> integer().
-node_count() -> length(ets:tab2list(current_nodes)).
+node_count() -> ets:info(current_nodes, size).
 
 -spec event_count() -> integer().
 event_count() -> folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER).
@@ -30,21 +38,18 @@ hashtag_count() -> 0.
 mention_count() -> 0.
 
 -spec alert_count_today() -> integer().
-alert_count_today() -> gen_event:call(triage_handler, triage_handler, {alerts_for_today}).
+alert_count_today() -> triage_handler:alert_count_today().
 
 -spec alert_count() -> integer().
-alert_count() -> gen_event:call(triage_handler, triage_handler, {total_alerts}).
+alert_count() -> triage_handler:alert_count().
 
-alerts() ->
-    [dict:from_list([{count, Num} | triage_handler:counter_data(Counter)])
-     || {Counter, Num} <- gen_event:call(triage_handler, triage_handler, {alerts})
-    ].
+alerts() -> [dict:from_list(Alert) || Alert <- triage_handler:recent_alerts(alert_lines())].
 
 -spec known_nodes() -> list().
 known_nodes() ->
     Total_Message_Count = folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER),
     lists:map(fun({Node, Pid}) ->
-        Message_Counts  = gen_fsm:sync_send_event(Pid, get_message_counts),
+        Message_Counts  = node_fsm:get_message_counts(Pid),
         Node_List       = binary_to_list(Node),
         Node_Properties = [{'node_name',             Node_List},
                            {'node_hash',             re:replace(base64:encode(Node), "=", "_", [{return, list}, global])},
@@ -57,4 +62,4 @@ known_nodes() ->
       end, ets:tab2list(current_nodes)).
 
 -spec username() -> string().
-username() -> "marc".
+username() -> "admin".
