@@ -26,7 +26,7 @@ $(document).ready(function() {
     appliedFilters['severities'] = severitiesOn;
     updateHistoryState();
 
-    $.ajax({type:'PUT',url:'/log/stream/' + streamId,
+    $.ajax({type:'POST',url:'/log/stream/' + streamId,
             data:'severities=' + severitiesOn,
             success:function() { },
             error:function() {
@@ -66,24 +66,14 @@ $(document).ready(function() {
                      e.preventDefault();
                  });
 
+  // todo: consider making this cleaner and more maintainable... jquery's dom builder style maybe?
   var timestampPopoverContent = '<label class="radio timestamp-radio-label">' +
-                                  '<input type="radio" name="timestamp-radio" value="relative" checked></input>' +
-                                  'Relative' +
-                                  '<div id="timespan-relative">' +
-                                    '<span class="timestamp-description">Show the past<br /></span>' +
-                                    '<input type="text" id="relative-val"></input>' +
-                                    '<select id="relative-unit">' +
-                                      '<option val="minutes">minutes</option>' +
-                                      '<option val="hours">hours</option>' +
-                                      '<option val="days">days</option>' +
-                                      '<option val="weeks">weeks</option>' +
-                                    '</select>' +
-                                    '<div class="timestamp-change"><a href="#" class="btn btn-mini">apply</a></div>' +
-                                  '</div>' +
+                                  '<input type="radio" name="timestamp-radio" value="current" checked></input>' +
+                                  'Current Stream' +
                                 '</label>' +
                                 '<label class="radio timestamp-radio-label">' +
-                                  '<input type="radio" name="timestamp-radio" value="absolute"></input>' +
-                                  'Absolute' +
+                                  '<input type="radio" name="timestamp-radio" value="previous"></input>' +
+                                  'Earlier' +
                                   '<div id="timespan-absolute" style="display:none;">' +
                                     '<span class="timestamp-description">From</span>' +
                                     '<div class="input-append date" id="absolute-date-start" data-date="12-02-2012" data-date-format="dd-mm-yyyy">' +
@@ -103,8 +93,8 @@ $(document).ready(function() {
                                       '<span class="add-on"><i class="icon-time"></i></span>' +
                                       '<input type="text" class="timepicker-default input-small" readonly>' +
                                     '</div>' +
-                                    '<div class="timestamp-change"><a href="#" class="btn btn-mini">apply</a></div>' +
                                   '</div>' +
+                                  '<div class="timestamp-change"><a href="#" class="btn btn-mini" id="apply-time">apply</a></div>' +
                                 '</label>';
 
   $('#log-timestamp').popover({html: true,
@@ -126,11 +116,31 @@ $(document).ready(function() {
     e.preventDefault();
   });
 
+  $('#apply-time').live('click', function(e) {
+    e.preventDefault();
+    if ($('input[name=timestamp-radio]:checked').val() == 'current') {
+      $.ajax({type:'POST',url:'/log/stream/' + streamId,
+              data:'time_filter_type=stream',
+              success:function() { },
+              error:function() {
+                alert('Unable to update time filter');
+              }});
+    } else if ($('input[name=timestamp-radio]:checked').val() == 'previous') {
+      $.ajax({type:'POST',url:'/log/stream/' + streamId,
+              data:'time_filter_type=previous',
+              success:function() { },
+              error:function() {
+                alert('Unable to update time filter');
+              }});
+    }
+
+  });
+
   $('input[name=timestamp-radio]').live('change', function() {
-    if ($(this).val() == 'absolute') {
+    if ($(this).val() == 'previous') {
       $('#timespan-absolute').slideDown();
       $('#timespan-relative').slideUp();
-    } else if($(this).val() == 'relative') {
+    } else if($(this).val() == 'current') {
       $('#timespan-relative').slideDown();
       $('#timespan-absolute').slideUp();
     }
@@ -152,6 +162,10 @@ $(document).ready(function() {
       }
     }
   }
+
+  execute_command = function(command_payload) {
+
+  },
 
   showNewLogMessage = function(log_message) {
     var row = $('<tr />');

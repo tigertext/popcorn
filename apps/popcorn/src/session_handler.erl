@@ -22,7 +22,6 @@ try_start_authed_session(IP_Address, Username, Password) ->
     end.
 
 is_session_authed_and_valid(Req) ->
-    ?POPCORN_DEBUG_MSG("Cookies = ~p", [cowboy_req:cookies(Req)]),
     try cowboy_req:cookie(<<"popcorn-session-key">>, Req) of
         {Session_Key, _} ->
             case Session_Key of
