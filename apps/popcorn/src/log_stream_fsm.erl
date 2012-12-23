@@ -38,42 +38,46 @@ init([]) ->
 'STARTING'({connect, Stream}, State) ->
     %% add to the ets table
     ets:insert(current_log_streams, Stream),
-
     {next_state, 'STARTING', State#state{stream = Stream}};
 'STARTING'({set_client_pid, Pid}, State) ->
     Stream  = State#state.stream,
     Stream2 = lists:nth(1, ets:select(current_log_streams, ets:fun2ms(fun(Stream3) when Stream3#stream.stream_id =:= Stream#stream.stream_id -> Stream3 end))),
     Stream3 = Stream2#stream{client_pid = Pid},
     ets:insert(current_log_streams, Stream3),
-
     {next_state, 'STREAMING', State#state{stream = Stream3}}.
 'STARTING'(Other, _From, State) ->
     {noreply, undefined, 'STARTING', State}.
 
 'STREAMING'({timeout, _From, idle_disconnect}, State) ->
-    gen_fsm:start_timer(?IDLE_DISCONNECT_TIMER, idle_disconnect),
     Is_Connected = (State#state.stream)#stream.client_pid =/= undefined andalso
                    erlang:is_process_alive((State#state.stream)#stream.client_pid),
     case Is_Connected of
         true ->  {next_state, 'STREAMING', State#state{idle_loops_disconnected = 0}};
         false -> case State#state.idle_loops_disconnected of
                      4 -> {stop, normal, State};
-                     O -> {next_state, 'STREAMING', State#state{idle_loops_disconnected = O + 1}}
+                     O -> gen_fsm:start_timer(?IDLE_DISCONNECT_TIMER, idle_disconnect),
+                          {next_state, 'STREAMING', State#state{idle_loops_disconnected = O + 1}}
                  end
     end;
 
 'STREAMING'(set_time_stream, State) ->
     %% when we set it to "current", we clear the browser, send the 100 most recent events, and then stream all going forward
     Stream = State#state.stream,
-    Stream#stream.client_pid ! clear_log,
+    case Stream#stream.stream_mode of
+        history -> Stream#stream.client_pid ! clear_log;
+        _       -> ok
+    end,
 
-    {next_state, 'STREAMING', State};
+    Stream2 = Stream#stream{stream_mode = stream},
+
+    {next_state, 'STREAMING', State#state{stream = Stream2}};
 
 'STREAMING'({set_time_previous, Start_Date, Start_Time, End_Date, End_Time}, State) ->
     Stream = State#state.stream,
     Stream#stream.client_pid ! clear_log,
 
-    {next_state,' STREAMING', State};
+    Stream2 = Stream#stream{stream_mode = history},
+    {next_state, 'STREAMING', State#state{stream = Stream2}};
 
 'STREAMING'({update_severities, New_Severities}, State) ->
     Severity_Filter = lists:map(fun(S) -> list_to_integer(S) end, string:tokens(binary_to_list(New_Severities), ",")),

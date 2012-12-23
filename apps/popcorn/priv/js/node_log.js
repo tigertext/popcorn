@@ -34,7 +34,13 @@ $(document).ready(function() {
             }});
   });
 
+  $('.icon-remove').click(function(e) {
+    e.preventDefault();
+    $('#log-messages tr:gt(0)').remove();
+  });
+
   $('.icon-pause').click(function(e) {
+    e.preventDefault();
     var data = 'stream_id=' + encodeURIComponent(streamId);
     $.ajax({type:'POST',url:'/log/stream/pause',data:data,
             success:function(data,textStatus,xhr) {
@@ -53,8 +59,8 @@ $(document).ready(function() {
             error:function(xhr,textStatus) {
               alert('Unable to toggle pause state');
             }});
-    e.preventDefault();
   });
+
   $('.close-popover').live('click', function() {
     $('.show-more').popover('hide');
   });
@@ -163,8 +169,12 @@ $(document).ready(function() {
     }
   }
 
-  execute_command = function(command_payload) {
-
+  executeCommand = function(command_payload) {
+    if (command_payload['name'] == 'clear') {
+      $('#log-messages tr:gt(0)').remove();
+    } else {
+      console.log('Unrecognized command: ' + command);
+    }
   },
 
   showNewLogMessage = function(log_message) {

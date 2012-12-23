@@ -53,14 +53,7 @@ username() -> "admin".
 
 -spec streaming_url(dict()) -> string().
 streaming_url(Context) ->
-    {ok, Http_Listen_Host} = get_opt_env(popcorn, http_listen_host, "localhost"),
-    {ok, Http_Listen_Port} = get_opt_env(popcorn, http_listen_port, 9125),
-
-    "http://" ++
-        Http_Listen_Host ++
-        ":" ++
-        integer_to_list(Http_Listen_Port) ++
-        "/log/stream/" ++ mustache:get(stream_id, Context).
+    "/log/stream/" ++ mustache:get(stream_id, Context).
 
 get_opt_env(Mod, Var, Default) ->
     case application:get_env(Mod, Var) of

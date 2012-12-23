@@ -116,6 +116,7 @@ handle_path(<<"GET">>, [<<"log">>], Req, State) ->
                  %% create the stream object
                  Log_Stream = #stream{stream_id        = popcorn_util:random_id(),
                                       stream_pid       = Stream_Pid,
+                                      stream_mode      = stream,
                                       client_pid       = undefined,
                                       applied_filters  = Default_Filters,
                                       paused           = false},
