@@ -37,13 +37,14 @@ send_recent_log_line(Count, Last_Key_Checked, Stream) ->
               _         -> mnesia:dirty_prev(popcorn_history, Last_Key_Checked)
           end,
 
-    %% TODO some error checking on this next line
-    Log_Message = lists:nth(1, mnesia:dirty_read(popcorn_history, Key)),
-
-    case is_filtered_out(Log_Message, Stream#stream.max_timestamp, Stream#stream.applied_filters) of
-        false -> gen_fsm:send_all_state_event(self(), {new_message, older, Log_Message}),
-                 send_recent_log_line(Count - 1, Key, Stream);
-        true  -> send_recent_log_line(Count, Key, Stream)
+    case Key of
+        '$end_of_table' -> ok;
+        _               -> Log_Message = lists:nth(1, mnesia:dirty_read(popcorn_history, Key)),
+                           case is_filtered_out(Log_Message, Stream#stream.max_timestamp, Stream#stream.applied_filters) of
+                               false -> gen_fsm:send_all_state_event(self(), {new_message, older, Log_Message}),
+                                        send_recent_log_line(Count - 1, Key, Stream);
+                               true  -> send_recent_log_line(Count, Key, Stream)
+                           end
     end.
 
 init([]) ->
@@ -89,42 +90,6 @@ init([]) ->
     %% and update the state so we can use timestamps instead of select/4 in a transaction
     Stream = State#state.stream,
     send_recent_log_line(100, undefined, Stream),
-    {next_state, 'STREAMING', State};
-
-'STREAMING'({init_log_lines, current}, State) ->
-    %% leaving some previous attempts at solving this problem for review... TODO remove these
-    %F = fun() -> mnesia:select(popcorn_history, [{'$1', [], ['$1']}], 100, read) end,
-    %{atomic, {Recent_Messages, _}} = mnesia:transaction(F),
-
-    %{atomic, Recent_Messages} =
-    %  mnesia:transaction(fun() ->
-    %      Q1 = qlc:q([X || X <- mnesia:table(popcorn_history)]),
-    %      Q2 = qlc:sort(Q1, 
-    %             {order,
-    %              fun(Log_Message1, Log_Message2) ->
-    %                  Log_Message1#log_message.timestamp < Log_Message2#log_message.timestamp
-    %                end}),
-    %      qlc:eval(Q2)
-    %    end),
-
-    %lists:foreach(fun(Recent_Message) ->
-    %      gen_fsm:send_all_state_event(self(), {new_message, Recent_Message})
-    %  end, Recent_Messages),
-
-    Keys = lists:foldl(fun(_, undefined) ->
-                            [mnesia:dirty_last(popcorn_history)];
-                          (_, Keys) ->
-                            Keys ++ [mnesia:dirty_prev(popcorn_history, lists:last(Keys))]
-             end, undefined, lists:seq(1, 100)),
-
-    lists:map(fun(Key) ->
-        Log_Message = lists:nth(1, mnesia:dirty_read(popcorn_history, Key)),
-        gen_fsm:send_all_state_event(self(), {new_message, Log_Message})
-      end, lists:reverse(Keys)),
-
-    {next_state, 'STREAMING', State};
-'STREAMING'({init_log_lines, previous}, State) ->
-    %% TODO, query the 100 before a max timestamp
     {next_state, 'STREAMING', State};
 
 'STREAMING'(set_time_stream, State) ->
@@ -182,6 +147,9 @@ init([]) ->
 
     Stream2 = Stream#stream{applied_filters = Applied_Filters2},
 
+    Stream#stream.client_pid ! clear_log,
+    gen_fsm:send_event_after(0, init_log_lines),
+
     {next_state, 'STREAMING', State#state{stream = Stream2}};
 'STREAMING'(Other, State) ->
     {next_state, 'STREAMING', State}.
@@ -234,4 +202,9 @@ update_filters(Applied_Filters, Stream_Id) ->
 
 is_filtered_out(Log_Message, Max_Timestamp, Filters) ->
     Severity_Restricted = not lists:member(Log_Message#log_message.severity, proplists:get_value('severities', Filters, [])),
-    Severity_Restricted.
+    Time_Restricted = case Max_Timestamp of
+                          undefined -> false;
+                          _         -> Log_Message#log_message.timestamp > Max_Timestamp
+                      end,
+
+    Severity_Restricted orelse Time_Restricted.

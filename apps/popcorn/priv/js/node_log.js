@@ -94,7 +94,7 @@ $(document).ready(function() {
                                 '</label>' +
                                 '<label class="radio timestamp-radio-label">' +
                                   '<input type="radio" name="timestamp-radio" value="previous"></input>' +
-                                  'Earlier' +
+                                  'Earlier (UTC)' +
                                   '<div id="timespan-absolute" style="display:none;">' +
                                     '<span class="timestamp-description">Limit</span>' +
                                     '<div class="input-append date" id="absolute-date-start" data-date="' + defaultDate + '" data-date-format="mm-dd-yyyy">' +
