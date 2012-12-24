@@ -72,6 +72,21 @@ $(document).ready(function() {
                      e.preventDefault();
                  });
 
+  var today = new Date();
+  var defaultDate = today.getMonth() + 1 + '-' + today.getDate() + '-' + today.getFullYear();
+  var defaultTime = '';
+  if (today.getHours() < 13) {
+    if (today.getHours() < 10) {
+      defaultTime += '0';
+    }
+    defaultTime += today.getHours() + ':00 AM';
+  } else {
+    var h = today.getHours() - 12;
+    if (h < 10) {
+      defaultTime += '0';
+    }
+    defaultTime += h + ':00 PM'
+  }
   // todo: consider making this cleaner and more maintainable... jquery's dom builder style maybe?
   var timestampPopoverContent = '<label class="radio timestamp-radio-label">' +
                                   '<input type="radio" name="timestamp-radio" value="current" checked></input>' +
@@ -81,23 +96,14 @@ $(document).ready(function() {
                                   '<input type="radio" name="timestamp-radio" value="previous"></input>' +
                                   'Earlier' +
                                   '<div id="timespan-absolute" style="display:none;">' +
-                                    '<span class="timestamp-description">From</span>' +
-                                    '<div class="input-append date" id="absolute-date-start" data-date="12-02-2012" data-date-format="dd-mm-yyyy">' +
+                                    '<span class="timestamp-description">Limit</span>' +
+                                    '<div class="input-append date" id="absolute-date-start" data-date="' + defaultDate + '" data-date-format="mm-dd-yyyy">' +
                                       '<span class="add-on"><i class="icon-th"></i></span>' +
-                                      '<input type="text" value="12-02-2012" readonly style="width:145px;">' +
+                                      '<input type="text" id="selected-date-value" value="' + defaultDate + '" readonly style="width:145px;"></input>' +
                                     '</div>' +
-                                    '<div class="input-append bootstrap-timepicker-component" id="absolute-time-start">' +
+                                    '<div class="input-append bootstrap-timepicker-component">' +
                                       '<span class="add-on"><i class="icon-time"></i></span>' +
-                                      '<input type="text" class="timepicker-default input-small" readonly>' +
-                                    '</div>' +
-                                    '<span class="timestamp-description">To</span>' +
-                                    '<div class="input-append date" id="absolute-date-end" data-date="12-02-2012" data-date-format="dd-mm-yyyy">' +
-                                      '<span class="add-on"><i class="icon-th"></i></span>' +
-                                      '<input type="text" value="12-02-2012" readonly style="width:145px;">' +
-                                    '</div>' +
-                                    '<div class="input-append bootstrap-timepicker-component" id="absolute-time-end">' +
-                                      '<span class="add-on"><i class="icon-time"></i></span>' +
-                                      '<input type="text" class="timepicker-default input-small" readonly>' +
+                                      '<input type="text" value="' + defaultTime + '" class="timepicker-default input-small" id="absolute-time-start" readonly></input>' +
                                     '</div>' +
                                   '</div>' +
                                   '<div class="timestamp-change"><a href="#" class="btn btn-mini" id="apply-time">apply</a></div>' +
@@ -112,8 +118,7 @@ $(document).ready(function() {
   $('#log-timestamp').click(function(e) {
     $('#absolute-date-start').datepicker();
     $('#absolute-date-end').datepicker();
-    $('#absolute-time-start').timepicker();
-    $('#absolute-time-end').timepicker();
+    $('#absolute-time-start').timepicker({'defaultTime': 'current'});
     e.preventDefault();
   });
 
@@ -133,7 +138,9 @@ $(document).ready(function() {
               }});
     } else if ($('input[name=timestamp-radio]:checked').val() == 'previous') {
       $.ajax({type:'POST',url:'/log/stream/' + streamId,
-              data:'time_filter_type=previous',
+              data:'time_filter_type=previous' +
+                   '&max_date=' + encodeURIComponent($('#selected-date-value').val()) +
+                   '&max_time=' + encodeURIComponent($('#absolute-time-start').val()),
               success:function() { },
               error:function() {
                 alert('Unable to update time filter');
@@ -175,10 +182,18 @@ $(document).ready(function() {
     } else {
       console.log('Unrecognized command: ' + command);
     }
-  },
+  };
 
   showNewLogMessage = function(log_message) {
-    var row = $('<tr />');
+    showLogMessage('top', log_message);
+  };
+
+  showOldLogMessage = function(log_message) {
+    showLogMessage('bottom', log_message);
+  };
+
+  showLogMessage = function(location, log_message) {
+    var row = $('<tr />').attr('data-timestamp', log_message['timestamp']);
     var cell = $('<td />').css('padding-right', '12px');
     var more = $('<a />').attr('href', '#')
                           .attr('rel', 'popover')
@@ -200,10 +215,14 @@ $(document).ready(function() {
     row.append($('<td />').html(log_message.message_severity));
     row.append($('<td />').html(log_message.message));
 
-    $('#log-messages tbody').prepend(row);
+    if (location == 'top') {
+      $('#log-messages tbody').prepend(row);
+    } else if (location == 'bottom') {
+      $('#log-messages tbody').append(row);
+    }
 
-    // truncate the table to 500 rows // TODO make this less static
-    while ($('#log-messages tr').length > 500) {
+    // truncate the table to 100 rows // TODO make this less static
+    while ($('#log-messages tr').length > 100) {
       $('#log-messages tr:last').remove();
     }
   }

@@ -64,6 +64,7 @@ init([]) ->
     io:format("\n\t[popcorn_history: ~p]",
        [mnesia:create_table(popcorn_history, [{disc_copies, [node()]},
                                               {record_name, log_message},
+                                              {type,        ordered_set},
                                               {index,       [#log_message.log_product,
                                                              #log_message.log_version,
                                                              #log_message.log_module,

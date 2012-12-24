@@ -89,7 +89,8 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
                        lists:append(["<label class='checkbox popover-label'><input type='checkbox'>#" ++ Hashtag ++ "</label>" || Hashtag <- Hashtags]) ++ 
                        "<br /><button class='btn btn-mini' type='button'>Apply Filter</button>",
 
-  [{'time',             Formatted_Time},
+  [{'timestamp',        Timestamp},
+   {'time',             Formatted_Time},
    {'datetime',         Formatted_DateTime},
    {'find_more_html',   Find_More_Html},
    {'log_product',      binary_to_list(opt(Product, <<"Unknown">>))},

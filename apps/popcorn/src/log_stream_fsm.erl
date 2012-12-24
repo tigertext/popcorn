@@ -4,6 +4,7 @@
 
 -include("include/popcorn.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
+-include_lib("stdlib/include/qlc.hrl").
 
 -define(IDLE_DISCONNECT_TIMER,      5000).
 
@@ -28,6 +29,23 @@
 
 start_link() -> gen_fsm:start_link(?MODULE, [], []).
 
+send_recent_log_line(0, _, _) -> ok;
+send_recent_log_line(_, '$end_of_table', _) -> ok;
+send_recent_log_line(Count, Last_Key_Checked, Stream) ->
+    Key = case Last_Key_Checked of
+              undefined -> mnesia:dirty_last(popcorn_history);
+              _         -> mnesia:dirty_prev(popcorn_history, Last_Key_Checked)
+          end,
+
+    %% TODO some error checking on this next line
+    Log_Message = lists:nth(1, mnesia:dirty_read(popcorn_history, Key)),
+
+    case is_filtered_out(Log_Message, Stream#stream.max_timestamp, Stream#stream.applied_filters) of
+        false -> gen_fsm:send_all_state_event(self(), {new_message, older, Log_Message}),
+                 send_recent_log_line(Count - 1, Key, Stream);
+        true  -> send_recent_log_line(Count, Key, Stream)
+    end.
+
 init([]) ->
     process_flag(trap_exit, true),
 
@@ -44,6 +62,12 @@ init([]) ->
     Stream2 = lists:nth(1, ets:select(current_log_streams, ets:fun2ms(fun(Stream3) when Stream3#stream.stream_id =:= Stream#stream.stream_id -> Stream3 end))),
     Stream3 = Stream2#stream{client_pid = Pid},
     ets:insert(current_log_streams, Stream3),
+
+    %% when the client pid changes, it's a reconnect or initial connection, so 
+    %% we send some log lines down
+    Stream3#stream.client_pid ! clear_log,
+    gen_fsm:send_event_after(0, init_log_lines),
+
     {next_state, 'STREAMING', State#state{stream = Stream3}}.
 'STARTING'(Other, _From, State) ->
     {noreply, undefined, 'STARTING', State}.
@@ -60,23 +84,88 @@ init([]) ->
                  end
     end;
 
+'STREAMING'(init_log_lines, State) ->
+    %% send some log lines, based on the current state,
+    %% and update the state so we can use timestamps instead of select/4 in a transaction
+    Stream = State#state.stream,
+    send_recent_log_line(100, undefined, Stream),
+    {next_state, 'STREAMING', State};
+
+'STREAMING'({init_log_lines, current}, State) ->
+    %% leaving some previous attempts at solving this problem for review... TODO remove these
+    %F = fun() -> mnesia:select(popcorn_history, [{'$1', [], ['$1']}], 100, read) end,
+    %{atomic, {Recent_Messages, _}} = mnesia:transaction(F),
+
+    %{atomic, Recent_Messages} =
+    %  mnesia:transaction(fun() ->
+    %      Q1 = qlc:q([X || X <- mnesia:table(popcorn_history)]),
+    %      Q2 = qlc:sort(Q1, 
+    %             {order,
+    %              fun(Log_Message1, Log_Message2) ->
+    %                  Log_Message1#log_message.timestamp < Log_Message2#log_message.timestamp
+    %                end}),
+    %      qlc:eval(Q2)
+    %    end),
+
+    %lists:foreach(fun(Recent_Message) ->
+    %      gen_fsm:send_all_state_event(self(), {new_message, Recent_Message})
+    %  end, Recent_Messages),
+
+    Keys = lists:foldl(fun(_, undefined) ->
+                            [mnesia:dirty_last(popcorn_history)];
+                          (_, Keys) ->
+                            Keys ++ [mnesia:dirty_prev(popcorn_history, lists:last(Keys))]
+             end, undefined, lists:seq(1, 100)),
+
+    lists:map(fun(Key) ->
+        Log_Message = lists:nth(1, mnesia:dirty_read(popcorn_history, Key)),
+        gen_fsm:send_all_state_event(self(), {new_message, Log_Message})
+      end, lists:reverse(Keys)),
+
+    {next_state, 'STREAMING', State};
+'STREAMING'({init_log_lines, previous}, State) ->
+    %% TODO, query the 100 before a max timestamp
+    {next_state, 'STREAMING', State};
+
 'STREAMING'(set_time_stream, State) ->
     %% when we set it to "current", we clear the browser, send the 100 most recent events, and then stream all going forward
     Stream = State#state.stream,
-    case Stream#stream.stream_mode of
-        history -> Stream#stream.client_pid ! clear_log;
-        _       -> ok
+    case Stream#stream.max_timestamp of
+        undefined -> ok;
+        _         -> Stream#stream.client_pid ! clear_log,
+                     gen_fsm:send_event_after(0, init_log_lines)
     end,
 
-    Stream2 = Stream#stream{stream_mode = stream},
+    Stream2 = Stream#stream{max_timestamp = undefined},
 
     {next_state, 'STREAMING', State#state{stream = Stream2}};
 
-'STREAMING'({set_time_previous, Start_Date, Start_Time, End_Date, End_Time}, State) ->
+'STREAMING'({set_time_previous, Max_Date, Max_Time}, State) ->
     Stream = State#state.stream,
-    Stream#stream.client_pid ! clear_log,
 
-    Stream2 = Stream#stream{stream_mode = history},
+    [MonthS, DayS, YearS]     = string:tokens(binary_to_list(Max_Date), "-"),
+    [HourS,  MinModS]         = string:tokens(binary_to_list(Max_Time), ":"),
+    [MinS,   ModS]            = string:tokens(MinModS, " "),
+
+    Month  = list_to_integer(MonthS),
+    Day    = list_to_integer(DayS),
+    Year   = list_to_integer(YearS),
+    Minute = list_to_integer(MinS),
+    Hour   = case MinModS of
+                 "PM" -> list_to_integer(HourS) + 12;
+                 _    -> list_to_integer(HourS)
+             end,
+
+    Gregorian_Seconds = calendar:datetime_to_gregorian_seconds({{Year, Month, Day}, {Hour, Minute, 0}}),
+    Max_Timestamp     = date_util:gregorian_seconds_to_epoch(Gregorian_Seconds) * 1000000,  %% because we use microseconds
+
+    case Stream#stream.max_timestamp of
+        Max_Timestamp -> ok;    %% no change
+        _             -> Stream#stream.client_pid ! clear_log,
+                         gen_fsm:send_event_after(0, init_log_lines)
+    end,
+
+    Stream2 = Stream#stream{max_timestamp = Max_Timestamp},
     {next_state, 'STREAMING', State#state{stream = Stream2}};
 
 'STREAMING'({update_severities, New_Severities}, State) ->
@@ -100,15 +189,18 @@ init([]) ->
 'STREAMING'(Other, _From, State) ->
     {noreply, undefined, 'STREAMING', State}.
 
-handle_event({new_message, Log_Message}, State_Name, State) ->
+handle_event({new_message, Newer_or_older, Log_Message}, State_Name, State) ->
     Stream    = State#state.stream,
     Should_Stream = Stream#stream.paused =:= false andalso
                     is_pid(Stream#stream.client_pid) andalso
-                    is_filtered_out(Log_Message, Stream#stream.applied_filters) =:= false,
+                    is_filtered_out(Log_Message, Stream#stream.max_timestamp, Stream#stream.applied_filters) =:= false,
 
     case Should_Stream of
         false -> ok;
-        true  -> Stream#stream.client_pid ! {new_message, Log_Message}
+        true  -> case Newer_or_older of
+                     newer -> Stream#stream.client_pid ! {new_message, Log_Message};
+                     older -> Stream#stream.client_pid ! {old_message, Log_Message}
+                 end
     end,
 
     {next_state, State_Name, State};
@@ -140,6 +232,6 @@ update_filters(Applied_Filters, Stream_Id) ->
     Stream2 = Stream#stream{applied_filters = Applied_Filters},
     ets:insert(current_log_streams, Stream2).
 
-is_filtered_out(Log_Message, Filters) ->
+is_filtered_out(Log_Message, Max_Timestamp, Filters) ->
     Severity_Restricted = not lists:member(Log_Message#log_message.severity, proplists:get_value('severities', Filters, [])),
     Severity_Restricted.
