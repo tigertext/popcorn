@@ -29,7 +29,9 @@ head_includes() -> popcorn_util:head_includes().
 node_count() -> ets:info(current_nodes, size).
 
 -spec event_count() -> integer().
-event_count() -> folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER).
+event_count() ->
+    [{popcorn_counters, _, Total_Message_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_EVENT_COUNTER),
+    Total_Message_Count.
 
 -spec hashtag_count() -> integer().
 hashtag_count() -> 0.
@@ -47,7 +49,7 @@ alerts() -> [dict:from_list(Alert) || Alert <- triage_handler:recent_alerts(aler
 
 -spec known_nodes() -> list().
 known_nodes() ->
-    Total_Message_Count = folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER),
+    [{popcorn_counters, _, Total_Message_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_EVENT_COUNTER),
     lists:map(fun({Node, Pid}) ->
         Message_Counts  = node_fsm:get_message_counts(Pid),
         Node_List       = binary_to_list(Node),

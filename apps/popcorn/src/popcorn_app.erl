@@ -29,7 +29,12 @@ start_phase(deserialize_mnesia, _Start_Type, _Phase_Args) ->
         ok = gen_fsm:sync_send_event(Pid, {deserialize_popcorn_node, Popcorn_Node}),
         ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid})
       end, mnesia:dirty_all_keys(known_nodes)),
-    io:format(" done!\n").
+    io:format(" done!\n"),
+
+    io:format("Ensuring counters have a default value...\n"),
+      io:format("\n\t[TOTAL_EVENT_COUNTER: ~p]",
+        [mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_EVENT_COUNTER, 0)]),
+    io:format("\n done!\n").
 
 init([]) ->
     io:format("CWD: ~p\n", [filename:absname("")]),
@@ -71,11 +76,9 @@ init([]) ->
                                                              #log_message.log_line,
                                                              #log_message.timestamp]},
                                               {attributes,  record_info(fields, log_message)}])]),
+    io:format("\n\t[popcorn_counters: ~p]",
+       [mnesia:create_table(popcorn_counters, [{disc_copies, [node()]}])]),
     io:format("\n... done!\n"),
-
-    io:format("Creating global metrics..."),
-    folsom_metrics:new_counter(?TOTAL_EVENT_COUNTER),
-    io:format(" done!\n"),
 
     io:format("Starting http listener..."),
     {ok, Http_Listen_Port} = application:get_env(popcorn, http_listen_port),

@@ -164,8 +164,9 @@ handle_info(update_counters, State) ->
         true  -> ok
     end,
 
+    [{popcorn_counters, _, Event_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_EVENT_COUNTER),
     NewCounters =
-        [{event_count,       folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER)},
+        [{event_count,       Event_Count},
          {alert_count_today, folsom_metrics:get_metric_value(Day)},
          {alert_count,       folsom_metrics:get_metric_value("total_alerts")}],
 
@@ -202,6 +203,8 @@ update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
         _ -> ok
     end,
 
+    [{popcorn_counters, _, Event_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_EVENT_COUNTER),
+
     NewCounters =
         [   {node_hash,         re:replace(base64:encode(Node#popcorn_node.node_name), "=", "_", [{return, binary}, global])},
             {node_count,        case Node_Pid of
@@ -210,7 +213,7 @@ update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
                                         proplists:get_value(total, node_fsm:get_message_counts(Node_Pid), 0)
                                 end},
             {counter,           Counter},
-            {event_count,       folsom_metrics:get_metric_value(?TOTAL_EVENT_COUNTER)},
+            {event_count,       Event_Count},
             {alert_count_today, folsom_metrics:get_metric_value(Day)},
             {alert_count,       folsom_metrics:get_metric_value("total_alerts")}],
 
