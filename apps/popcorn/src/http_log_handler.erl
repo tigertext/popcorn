@@ -67,10 +67,8 @@ handle_path(<<"POST">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
     case proplists:get_value(<<"time_filter_type">>, Vals) of
         undefined        -> ok;
         <<"stream">>     -> gen_fsm:send_event(Stream_Pid, set_time_stream);
-        <<"previous">>   -> gen_fsm:send_event(Stream_Pid, {set_time_previous, proplists:get_value(<<"start_date">>, Vals),
-                                                                               proplists:get_value(<<"start_time">>, Vals),
-                                                                               proplists:get_value(<<"end_date">>,   Vals),
-                                                                               proplists:get_value(<<"end_time">>,   Vals)})
+        <<"previous">>   -> gen_fsm:send_event(Stream_Pid, {set_time_previous, proplists:get_value(<<"max_date">>, Vals),
+                                                                               proplists:get_value(<<"max_time">>, Vals)})
     end,
 
     {ok, Reply} = cowboy_req:reply(204, [], [], Req),
@@ -116,6 +114,7 @@ handle_path(<<"GET">>, [<<"log">>], Req, State) ->
                  %% create the stream object
                  Log_Stream = #stream{stream_id        = popcorn_util:random_id(),
                                       stream_pid       = Stream_Pid,
+                                      max_timestamp    = undefined,  %% being explicit here
                                       client_pid       = undefined,
                                       applied_filters  = Default_Filters,
                                       paused           = false},
@@ -146,8 +145,16 @@ handle_loop(Req, State) ->
                 ok -> handle_loop(Req, State);
                 {error, closed} -> {ok, Req, State}
              end;
+        {old_message, Log_Message} ->
+            Enveloped   = {struct, [{"message_type", "old_message"},
+                                    {"payload",      {struct, popcorn_util:format_log_message(Log_Message)}}]},
+            Event       = lists:flatten(mochijson:encode(Enveloped)),
+            case cowboy_req:chunk(lists:flatten(["data: ", Event, "\n\n"]), Req) of
+                ok -> handle_loop(Req, State);
+                {error, closed} -> {ok, Req, State}
+            end;
         {new_message, Log_Message} ->
-            Enveloped   = {struct, [{"message_type", "log_message"},
+            Enveloped   = {struct, [{"message_type", "new_message"},
                                     {"payload",      {struct, popcorn_util:format_log_message(Log_Message)}}]},
             Event       = lists:flatten(mochijson:encode(Enveloped)),
             case cowboy_req:chunk(lists:flatten(["data: ", Event, "\n\n"]), Req) of

@@ -26,8 +26,7 @@ is_session_authed_and_valid(Req) ->
         {Session_Key, _} ->
             case Session_Key of
                 undefined -> false;
-                _         -> io:format("Session_Key = ~p\n", [Session_Key]),
-                             case ets:lookup(current_connected_users, Session_Key) of
+                _         -> case ets:lookup(current_connected_users, Session_Key) of
                                  [] -> false;
                                  _  -> true
                              end

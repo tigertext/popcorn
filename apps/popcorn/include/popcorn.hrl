@@ -25,6 +25,7 @@
 -define(PU, popcorn_util).
 
 -record(stream,  {stream_id       :: string(),
+                  max_timestamp   :: number() | undefined,
                   stream_pid      :: pid(),
                   client_pid      :: pid(),
                   applied_filters :: list(),
