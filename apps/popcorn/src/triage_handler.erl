@@ -86,7 +86,11 @@ handle_call(total_alerts, State) ->
 
 handle_call(alerts_for_today, State) ->
     Day_Key = day_key(),
-    [{popcorn_counters, _, Day_Alerts}] = mnesia:dirty_read(popcorn_counters, Day_Key),
+    Day_Alerts = case mnesia:dirty_read(popcorn_counters, Day_Key) of
+                     None when length(None) =:= 0 -> 0;
+                     [{popcorn_counters, _, V}]   -> V
+                 end,
+
     {ok, Day_Alerts, State};
 handle_call({alerts, Count}, State) ->
     Alerts =
@@ -159,6 +163,10 @@ handle_info(update_counters, State) ->
         end, ets:tab2list(current_nodes)),
 
     Day_Key = day_key(),
+
+    %% TODO, perhaps this should be optimized
+    true = ets:insert(triage_error_keys, {key, Day_Key}),
+
     Day_Count = mnesia:dirty_update_counter(popcorn_counters, Day_Key, 0),
 
     [{popcorn_counters, _, Event_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_EVENT_COUNTER),
@@ -182,9 +190,13 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
-    Count_Key   = key(Product,Version,Module,Line),
-    Day_Key     = day_key(),
-    Recent_Key  = recent_key(Count_Key),
+    Count_Key           = key(Product,Version,Module,Line),
+    Recent_Counter_Key  = recent_key(Count_Key),
+    Day_Key             = day_key(),
+
+    %% TODO perhaps these next 2 lines should be optimized, store in state if we have added to the ets table?
+    true = ets:insert(triage_error_keys, {key, Count_Key}),
+    true = ets:insert(triage_error_keys, {key, Day_Key}),
 
     case mnesia:dirty_update_counter(popcorn_counters, Count_Key, 0) of
         0 -> mnesia:dirty_update_counter(popcorn_counters, Day_Key, 1);
@@ -192,7 +204,7 @@ update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
     end,
 
     mnesia:dirty_update_counter(popcorn_counters, Count_Key, 1),
-    Recent_Value = mnesia:dirty_update_counter(popcorn_counters, Recent_Key, 1),
+    Recent_Value = mnesia:dirty_update_counter(popcorn_counters, Recent_Counter_Key, 1),
 
     case Recent_Value of
         1 -> mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_ALERT_COUNTER, 1);
@@ -215,11 +227,6 @@ update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
             {alert_count,       Alert_Count}],
 
     dashboard_stream_fsm:broadcast({update_counters, NewCounters}).
-
-new_metric(Counter) ->
-    true = ets:insert(triage_error_keys, {key, Counter}),
-    mnesia:dirty_update_counter(popcorn_counters, Counter, 0),
-    mnesia:dirty_update_counter(popcorn_counters, recent_key(Counter), 0).
 
 key(Product,Version,Module,Line) ->
     binary_to_list(<<Product/binary, ":-:", Version/binary, ":-:", Module/binary, ":-:", Line/binary>>).

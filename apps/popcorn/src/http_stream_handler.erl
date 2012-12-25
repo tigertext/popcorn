@@ -59,7 +59,6 @@ handle_loop(Req, State) ->
             Event = lists:flatten(mochijson:encode({struct, Data})),
             chunk_event("new_node", Event, Req, State);
         {update_counters, NewCounters} ->
-            io:format("Update Counters: ~p~n", [NewCounters]),
             Event =
                 lists:flatten(mochijson:encode(
                     case lists:keytake(counter, 1, NewCounters) of
