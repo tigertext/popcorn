@@ -66,7 +66,7 @@ init([]) ->
         folsom_metrics:notify({proplists:get_value(Log_Message#log_message.severity, State#state.severity_metric_names), {inc, 1}}),
 
         %% increment the total event counter
-        folsom_metrics:notify({?TOTAL_EVENT_COUNTER, {inc, 1}}),
+        mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_EVENT_COUNTER, 1),
 
         %% ensure the metric exists for this hour, severity combination and increment
         Prefix    = <<"_popcorn__">>,
