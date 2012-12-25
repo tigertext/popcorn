@@ -1,6 +1,10 @@
 -module(triage_handler).
 -author('martin@tigertext.com').
+-author('marc.e.campbell@gamil.com').
+
 -behaviour(gen_event).
+
+-export([start_link/0]).
 
 -export([init/1,
          handle_call/2,
@@ -24,6 +28,8 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 
 -record(state, {timer :: reference()}).
+
+start_link() -> gen_event:start({local, triage_handler}).
 
 safe_notify(Popcorn_Node, Node_Pid, Log_Message, Is_New_Node) ->
     case whereis(?MODULE) of
@@ -64,7 +70,6 @@ init(_) ->
     catch
         _:badarg -> ok
     end,
-    folsom_metrics:new_counter("total_alerts"),
     Timer = erlang:send_after(?UPDATE_INTERVAL, self(), update_counters),
     {ok, #state{timer = Timer}}.
 
@@ -74,8 +79,11 @@ handle_call({data, Counter}, State) ->
             _ -> #alert{}
         end,
     {ok, data(V), State};
+
 handle_call(total_alerts, State) ->
-    {ok, folsom_metrics:get_metric_value("total_alerts"), State};
+    [{popcorn_counters, _, Alert_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_ALERT_COUNTER),
+    {ok, Alert_Count, State};
+
 handle_call(alerts_for_today, State) ->
     Day = day_key(),
     Value = case folsom_metrics:metric_exists(Day) of
@@ -99,10 +107,10 @@ handle_call({clear, Counter}, State) ->
         _ ->
             folsom_metrics:delete_metric(Key),
             folsom_metrics:new_counter(Key),
-            folsom_metrics:notify({"total_alerts", {dec, 1}}),
+            Total_Alert_Count = mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_ALERT_COUNTER, -1),
             NewCounters =
                 [{counter,      Counter},
-                 {alert_count,  folsom_metrics:get_metric_value("total_alerts")}],
+                 {alert_count,  Total_Alert_Count}],
             dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
             {ok, ok, reset_timer(State)}
     catch
@@ -165,10 +173,11 @@ handle_info(update_counters, State) ->
     end,
 
     [{popcorn_counters, _, Event_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_EVENT_COUNTER),
+    [{popcorn_counters, _, Alert_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_ALERT_COUNTER),
     NewCounters =
         [{event_count,       Event_Count},
          {alert_count_today, folsom_metrics:get_metric_value(Day)},
-         {alert_count,       folsom_metrics:get_metric_value("total_alerts")}],
+         {alert_count,       Alert_Count}],
 
     dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
     {ok, reset_timer(State)};
@@ -199,11 +208,12 @@ update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
     folsom_metrics:notify({recent_key(Counter), {inc, 1}}),
 
     case folsom_metrics:get_metric_value(recent_key(Counter)) of
-        1 -> folsom_metrics:notify({"total_alerts", {inc, 1}});
+        1 -> mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_ALERT_COUNTER, 1);
         _ -> ok
     end,
 
     [{popcorn_counters, _, Event_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_EVENT_COUNTER),
+    [{popcorn_counters, _, Alert_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_ALERT_COUNTER),
 
     NewCounters =
         [   {node_hash,         re:replace(base64:encode(Node#popcorn_node.node_name), "=", "_", [{return, binary}, global])},
@@ -215,7 +225,7 @@ update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
             {counter,           Counter},
             {event_count,       Event_Count},
             {alert_count_today, folsom_metrics:get_metric_value(Day)},
-            {alert_count,       folsom_metrics:get_metric_value("total_alerts")}],
+            {alert_count,       Alert_Count}],
 
     dashboard_stream_fsm:broadcast({update_counters, NewCounters}).
 

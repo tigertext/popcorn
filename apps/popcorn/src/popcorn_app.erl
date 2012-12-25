@@ -20,6 +20,9 @@
 start(_StartType, _StartArgs) -> supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 stop(_State) -> ok.
 
+start_phase(triage_setup, _Start_Type, _Phase_Args) ->
+    gen_event:add_handler(triage_handler, triage_handler, []);
+
 start_phase(deserialize_mnesia, _Start_Type, _Phase_Args) ->
     io:format("Reloading previously known nodes...\n"),
     lists:foreach(fun(Known_Node) ->
@@ -34,13 +37,12 @@ start_phase(deserialize_mnesia, _Start_Type, _Phase_Args) ->
     io:format("Ensuring counters have a default value...\n"),
       io:format("\n\t[TOTAL_EVENT_COUNTER: ~p]",
         [mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_EVENT_COUNTER, 0)]),
+      io:format("\n\t[TOTAL_ALERT_COUNTER: ~p]",
+        [mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_ALERT_COUNTER, 0)]),
     io:format("\n done!\n").
 
 init([]) ->
     io:format("CWD: ~p\n", [filename:absname("")]),
-
-    {ok, _} = gen_event:start({local, triage_handler}),
-    gen_event:add_handler(triage_handler, triage_handler, []),
 
     io:format("Creating ets tables..."),
     current_connected_users =   ets:new(current_connected_users,  [named_table, set, public]),
@@ -98,10 +100,10 @@ init([]) ->
     cowboy:start_http(http_handler, 100, [{port, Http_Listen_Port}], [{dispatch, Http_Dispatch}]),
     io:format(" done!\n"),
 
-
     Children = [
                   {popcorn_server, {popcorn_server, start_link, []}, permanent, 5000, worker, [popcorn_server]},
                   {popcorn_udp,    {popcorn_udp,    start_link, []}, permanent, 5000, worker, [popcorn_udp]},
+                  {triage_handler, {triage_handler, start_link, []}, permanent, 5000, worker, [triage_handler]},
 
                   {connected_user_sup,   {supervisor, start_link, [{local, connected_user_sup},   ?MODULE, [connected_user_fsm]]},   permanent, infinity, supervisor, []},
                   {node_sup,             {supervisor, start_link, [{local, node_sup},             ?MODULE, [node_fsm]]},             permanent, infinity, supervisor, []},
