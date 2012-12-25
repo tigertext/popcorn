@@ -85,12 +85,9 @@ handle_call(total_alerts, State) ->
     {ok, Alert_Count, State};
 
 handle_call(alerts_for_today, State) ->
-    Day = day_key(),
-    Value = case folsom_metrics:metric_exists(Day) of
-                false -> folsom_metrics:new_counter(Day), 0;
-                true  -> folsom_metrics:get_metric_value(Day)
-            end,
-    {ok, Value, State};
+    Day_Key = day_key(),
+    [{popcorn_counters, _, Day_Alerts}] = mnesia:dirty_read(popcorn_counters, Day_Key),
+    {ok, Day_Alerts, State};
 handle_call({alerts, Count}, State) ->
     Alerts =
         [   case ets:lookup(triage_error_data, Counter) of
@@ -102,22 +99,17 @@ handle_call({alerts, Count}, State) ->
     {ok, FinalList, State};
 handle_call({clear, Counter}, State) ->
     Key = recent_key(Counter),
-    try folsom_metrics:get_metric_value(Key) of
-        0 -> {ok, ok, State};
-        _ ->
-            folsom_metrics:delete_metric(Key),
-            folsom_metrics:new_counter(Key),
-            Total_Alert_Count = mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_ALERT_COUNTER, -1),
-            NewCounters =
-                [{counter,      Counter},
-                 {alert_count,  Total_Alert_Count}],
-            dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
-            {ok, ok, reset_timer(State)}
-    catch
-        _:Error ->
-            io:format("Error trying to get ~p: ~p~n~p", [Key, Error, erlang:get_stacktrace()]),
-            {ok, ok, State}
-    end;
+
+    mnesia:dirty_delete(popcorn_counters, Key),
+    mnesia:dirty_update_counter(popcorn_counters, Key, 0),
+
+    Total_Alert_Count = mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_ALERT_COUNTER, -1),
+    NewCounters =
+        [{counter,      Counter},
+         {alert_count,  Total_Alert_Count}],
+    dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
+    {ok, ok, reset_timer(State)};
+
 handle_call({messages, Product, Version, Module, Line}, State) ->
     P = list_to_binary(Product),
     V = list_to_binary(Version),
@@ -166,17 +158,15 @@ handle_info(update_counters, State) ->
             dashboard_stream_fsm:broadcast({update_counters, NodeCounters})
         end, ets:tab2list(current_nodes)),
 
-    Day = day_key(),
-    case folsom_metrics:metric_exists(Day) of
-        false -> new_metric(Day);
-        true  -> ok
-    end,
+    Day_Key = day_key(),
+    Day_Count = mnesia:dirty_update_counter(popcorn_counters, Day_Key, 0),
 
     [{popcorn_counters, _, Event_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_EVENT_COUNTER),
     [{popcorn_counters, _, Alert_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_ALERT_COUNTER),
+
     NewCounters =
         [{event_count,       Event_Count},
-         {alert_count_today, folsom_metrics:get_metric_value(Day)},
+         {alert_count_today, Day_Count},
          {alert_count,       Alert_Count}],
 
     dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
@@ -192,29 +182,26 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
-    Counter = key(Product,Version,Module,Line),
-    Day = day_key(),
-    case folsom_metrics:metric_exists(Day) of
-        false -> new_metric(Day);
-        true  -> ok
-    end,
-    case folsom_metrics:metric_exists(Counter) of
-        false ->
-            folsom_metrics:notify({Day, {inc, 1}}),
-            new_metric(Counter);
-        true  -> ok
-    end,
-    folsom_metrics:notify({Counter, {inc, 1}}),
-    folsom_metrics:notify({recent_key(Counter), {inc, 1}}),
+    Count_Key   = key(Product,Version,Module,Line),
+    Day_Key     = day_key(),
+    Recent_Key  = recent_key(Count_Key),
 
-    case folsom_metrics:get_metric_value(recent_key(Counter)) of
+    case mnesia:dirty_update_counter(popcorn_counters, Count_Key, 0) of
+        0 -> mnesia:dirty_update_counter(popcorn_counters, Day_Key, 1);
+        _ -> ok
+    end,
+
+    mnesia:dirty_update_counter(popcorn_counters, Count_Key, 1),
+    Recent_Value = mnesia:dirty_update_counter(popcorn_counters, Recent_Key, 1),
+
+    case Recent_Value of
         1 -> mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_ALERT_COUNTER, 1);
         _ -> ok
     end,
 
     [{popcorn_counters, _, Event_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_EVENT_COUNTER),
     [{popcorn_counters, _, Alert_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_ALERT_COUNTER),
-
+    [{popcorn_counters, _, Day_Count}]   = mnesia:dirty_read(popcorn_counters, Day_Key),
     NewCounters =
         [   {node_hash,         re:replace(base64:encode(Node#popcorn_node.node_name), "=", "_", [{return, binary}, global])},
             {node_count,        case Node_Pid of
@@ -222,17 +209,17 @@ update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
                                     Node_Pid ->
                                         proplists:get_value(total, node_fsm:get_message_counts(Node_Pid), 0)
                                 end},
-            {counter,           Counter},
+            {counter,           Count_Key},
             {event_count,       Event_Count},
-            {alert_count_today, folsom_metrics:get_metric_value(Day)},
+            {alert_count_today, Day_Count},
             {alert_count,       Alert_Count}],
 
     dashboard_stream_fsm:broadcast({update_counters, NewCounters}).
 
 new_metric(Counter) ->
     true = ets:insert(triage_error_keys, {key, Counter}),
-    folsom_metrics:new_counter(Counter),
-    folsom_metrics:new_counter(recent_key(Counter)).
+    mnesia:dirty_update_counter(popcorn_counters, Counter, 0),
+    mnesia:dirty_update_counter(popcorn_counters, recent_key(Counter), 0).
 
 key(Product,Version,Module,Line) ->
     binary_to_list(<<Product/binary, ":-:", Version/binary, ":-:", Module/binary, ":-:", Line/binary>>).
@@ -263,9 +250,13 @@ data(Alert) ->
                  | Basic_Properties];
             _ -> Basic_Properties
         end,
+
+    [{popcorn_counters, _, Location_Count}] = mnesia:dirty_read(popcorn_counters, Alert#alert.location),
+    [{popcorn_counters, _, Recent_Location_Count}] = mnesia:dirty_read(popcorn_counters, recent_key(Alert#alert.location)),
+
     [{location, re:replace(base64:encode(Alert#alert.location), "=", "_", [{return, list}, global])},
-     {count,    folsom_metrics:get_metric_value(Alert#alert.location)},
-     {recent,   folsom_metrics:get_metric_value(recent_key(Alert#alert.location))}
+     {count,    Location_Count},
+     {recent,   Recent_Location_Count}
      | All_Properties].
 
 list(B) when is_binary(B) -> binary_to_list(B);
@@ -277,9 +268,11 @@ reverse_limit_and_filter(Alerts, Count) ->
 reverse_limit_and_filter([], _Count, Acc) -> lists:reverse(Acc);
 reverse_limit_and_filter(_Alerts, Count, Acc) when length(Acc) == Count -> lists:reverse(Acc);
 reverse_limit_and_filter([Alert | Alerts], Count, Acc) ->
+    Location_Count = mnesia:dirty_update_counter(popcorn_counters, recent_key(Alert#alert.location)),
+
     reverse_limit_and_filter(
         Alerts, Count,
-        case folsom_metrics:get_metric_value(recent_key(Alert#alert.location)) of
+        case Location_Count of
             0 -> Acc;
             _ -> [data(Alert) | Acc]
         end).
