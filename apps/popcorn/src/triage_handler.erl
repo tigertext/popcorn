@@ -135,12 +135,15 @@ handle_cast({triage_event, #popcorn_node{} = Node, Node_Pid,
         when Severity < 4, is_binary(Product), is_binary(Version), is_binary(Module), is_binary(Line) ->
     true = ets:insert(triage_error_data, #alert{location=key(Product,Version,Module,Line), log=Log_Entry}),
     case Is_New_Node of
-        true -> dashboard_stream_fsm:broadcast({new_node, Node});
+        true ->
+            outbound_notifier:notify(new_node, Node),
+            dashboard_stream_fsm:broadcast({new_node, Node});
         false -> ok
     end,
     update_counter(Node,Node_Pid,Product,Version,Module,Line),
     {noreply, reset_timer(State)};
 handle_cast({triage_event, #popcorn_node{} = Node, _Node_Pid, _Log_Message, true}, State) ->
+    outbound_notifier:notify(new_node, Node),
     dashboard_stream_fsm:broadcast({new_node, Node}),
     {noreply, State};
 handle_cast({triage_event, #popcorn_node{}, _Node_Pid, _Log_Message, false}, State) ->
@@ -221,6 +224,7 @@ update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
             {alert_count_today, Day_Count},
             {alert_count,       Alert_Count}],
 
+    outbound_notifier:notify(new_event, Count_Key),
     dashboard_stream_fsm:broadcast({update_counters, NewCounters}).
 
 key(Product,Version,Module,Line) ->
