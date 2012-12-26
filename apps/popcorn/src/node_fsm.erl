@@ -63,7 +63,7 @@ init([]) ->
         end,
 
         %% increment the severity counter for this node
-        folsom_metrics:notify({proplists:get_value(Log_Message#log_message.severity, State#state.severity_metric_names), {inc, 1}}),
+        mnesia:dirty_update_counter(popcorn_counters, proplists:get_value(Log_Message#log_message.severity, State#state.severity_metric_names), 1),
 
         %% increment the total event counter
         mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_EVENT_COUNTER, 1),
@@ -78,18 +78,8 @@ init([]) ->
         Node_Severity_History_Counter = binary_to_atom(<<Prefix/binary, Sep/binary, Node_Name/binary, Sep/binary, SeverityB/binary, Sep/binary, Hour/binary>>, latin1),
         Total_Severity_History_Counter = binary_to_atom(<<Prefix/binary, Sep/binary, SeverityB/binary, Sep/binary, Hour/binary>>, latin1),
 
-        case folsom_metrics:metric_exists(Node_Severity_History_Counter) of
-            false -> folsom_metrics:new_counter(Node_Severity_History_Counter);
-            true  -> ok
-        end,
-
-        case folsom_metrics:metric_exists(Total_Severity_History_Counter) of
-            false -> folsom_metrics:new_counter(Total_Severity_History_Counter);
-            true  -> ok
-        end,
-
-        folsom_metrics:notify({Node_Severity_History_Counter, {inc, 1}}),
-        folsom_metrics:notify({Total_Severity_History_Counter, {inc, 1}}),
+        mnesia:dirty_update_counter(popcorn_counters, Node_Severity_History_Counter, 1),
+        mnesia:dirty_update_counter(popcorn_counters, Total_Severity_History_Counter, 1),
 
         %% Notify any streams connected
         Log_Streams = ets:tab2list(current_log_streams),
@@ -117,9 +107,6 @@ init([]) ->
                                 {Level, Severity_Counter_Name}
                               end, lists:seq(0, 7)),
 
-    %% create the metrics
-    lists:foreach(fun({_, N}) -> folsom_metrics:new_counter(N) end, Severity_Metric_Names),
-
     {reply, ok, 'LOGGING', State#state{severity_metric_names = Severity_Metric_Names,
                                        popcorn_node          = Popcorn_Node}};
 
@@ -141,14 +128,14 @@ init([]) ->
                               end, lists:seq(0, 7)),
 
     %% create the metrics
-    lists:foreach(fun({_, N}) -> folsom_metrics:new_counter(N) end, Severity_Metric_Names),
+    lists:foreach(fun({_, N}) -> mnesia:dirty_update_counter(popcorn_counters, N, 0) end, Severity_Metric_Names),
 
     {reply, ok, 'LOGGING', State#state{severity_metric_names = Severity_Metric_Names,
                                        popcorn_node          = Popcorn_Node}};
 
 'LOGGING'(get_message_counts, _From, State) ->
     Severity_Counts = lists:map(fun({Severity, Metric_Name}) ->
-                          {lager_util:num_to_level(Severity), folsom_metrics:get_metric_value(Metric_Name)}
+                          {lager_util:num_to_level(Severity), mnesia:dirty_update_counter(popcorn_counters, Metric_Name, 0)}
                         end, State#state.severity_metric_names),
     Total_Count     = lists:foldl(fun({_, Count}, Total) -> Total + Count end, 0, Severity_Counts),
 
@@ -166,10 +153,8 @@ init([]) ->
 		Time_And_Name = lists:zip(Hours_Ago, Metric_Names),
 
     Values = lists:map(fun({Hour_Ago, Metric_Name}) ->
-                 Value = case folsom_metrics:metric_exists(Metric_Name) of
-                             false -> 0;
-                      			 true  -> folsom_metrics:get_metric_value(Metric_Name)
-                 				 end,
+                 %% this is just to simplify the code, instead of a read, check if exists, this returns a quick value...
+                 Value = mnesia:dirty_update_counter(popcorn_counters, Metric_Name, 0),
 								 [{'hours_ago', 0 - Hour_Ago},
 									{'count',     Value}]
                end, Time_And_Name),
