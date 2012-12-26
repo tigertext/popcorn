@@ -55,7 +55,7 @@ handle(Req, State) ->
                          {ok, Reply, State};
                 true  ->
                     Context     = dict:from_list(triage_handler:decode_location(Alert)),
-                    TFun        = mustache:compile(view_alert),
+                    TFun        = pcache:get(rendered_templates, view_alert),
                     Output      = mustache:render(view_alert, TFun, Context),
                     {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
                     {ok, Reply, State}
@@ -84,7 +84,7 @@ handle(Req, State) ->
                         Context = dict:from_list([{stream_id, binary_to_list(Stream_Id)},
                                                   {all,       All}]),
 
-                        TFun        = mustache:compile(view_alerts),
+                        TFun        = pcache:get(rendered_templates, view_alerts),
                         Output      = mustache:render(view_alerts, TFun, Context),
                         {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
                         {ok, Reply, State}
@@ -111,7 +111,7 @@ handle(Req, State) ->
 
                         Context = dict:from_list([{stream_id, binary_to_list(Stream_Id)}]),
 
-                        TFun        = mustache:compile(view_dashboard),
+                        TFun        = pcache:get(rendered_templates, view_dashboard),
                         Output      = mustache:render(view_dashboard, TFun, Context),
                         {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
                         {ok, Reply, State}

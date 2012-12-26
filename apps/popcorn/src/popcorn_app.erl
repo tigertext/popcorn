@@ -52,6 +52,8 @@ init([]) ->
     current_roles =             ets:new(current_roles,            [named_table, bag, public]),
     io:format(" done!\n"),
 
+    pcache_server:start_link(rendered_templates, mustache, compile, 16, 43200000), %% 43200000 = 12 hours
+
     %% ensure we have a mnesia schema created
     io:format("Starting mnesia..."),
     stopped = mnesia:stop(),
