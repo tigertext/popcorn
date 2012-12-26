@@ -1,19 +1,14 @@
 -module(triage_handler).
 -author('martin@tigertext.com').
 -author('marc.e.campbell@gamil.com').
+-author('elbrujohalcon@inaka.net').
 
--behaviour(gen_event).
+-behaviour(gen_server).
 
 -export([start_link/0]).
 
--export([init/1,
-         handle_call/2,
-         handle_event/2,
-         handle_info/2,
-         terminate/2,
-         day_key/0,
-         code_change/3
-]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, 
+         terminate/2, code_change/3]).
 
 -define(UPDATE_INTERVAL, 10000).
 
@@ -29,35 +24,34 @@
 
 -record(state, {timer :: reference()}).
 
-start_link() -> gen_event:start({local, triage_handler}).
+start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 safe_notify(Popcorn_Node, Node_Pid, Log_Message, Is_New_Node) ->
-    case whereis(?MODULE) of
-        undefined -> {error, no_error_triage};
-        Pid -> gen_event:sync_notify(Pid, {triage_event, Popcorn_Node, Node_Pid, Log_Message, Is_New_Node})
-    end.
+    gen_server:cast(?MODULE, {triage_event, Popcorn_Node, Node_Pid, Log_Message, Is_New_Node}).
 
 decode_location(Alert) ->
     Counter = base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global])),
     Parts = re:split(Counter, <<":-:">>, [{return, list}]),
     lists:zip([product, version, name, line], Parts).
 
-log_messages(Product, Version, Name, Line) -> gen_event:call(?MODULE, ?MODULE, {messages, Product, Version, Name, Line}).
+log_messages(Product, Version, Name, Line) -> gen_server:call(?MODULE, {messages, Product, Version, Name, Line}).
 
-counter_data(Counter) -> gen_event:call(?MODULE, ?MODULE, {data, Counter}).
+counter_data(Counter) -> gen_server:call(?MODULE, {data, Counter}).
 
-alert_count() -> gen_event:call(?MODULE, ?MODULE, total_alerts).
+alert_count() -> gen_server:call(?MODULE, total_alerts).
 
-alert_count_today() -> gen_event:call(?MODULE, ?MODULE, alerts_for_today).
+alert_count_today() -> gen_server:call(?MODULE, alerts_for_today).
 
-all_alerts(true = _Include_Cleared) -> gen_event:call(?MODULE, ?MODULE, {alerts, all});
-all_alerts(_) -> gen_event:call(?MODULE, ?MODULE, {alerts, recent}).
+all_alerts(true = _Include_Cleared) -> gen_server:call(?MODULE, {alerts, all});
+all_alerts(_) -> gen_server:call(?MODULE, {alerts, recent}).
 
-recent_alerts(Count) -> gen_event:call(?MODULE, ?MODULE, {alerts, Count}).
+recent_alerts(Count) -> gen_server:call(?MODULE, {alerts, Count}).
 
 clear_alert(Alert) ->
     Counter = base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global])),
-    gen_event:call(?MODULE, ?MODULE, {clear, binary_to_list(Counter)}).
+    gen_server:call(?MODULE, {clear, binary_to_list(Counter)}).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 init(_) ->
     try ets:new(triage_error_keys, [named_table, set, public, {keypos, 2}]) of
@@ -73,26 +67,24 @@ init(_) ->
     Timer = erlang:send_after(?UPDATE_INTERVAL, self(), update_counters),
     {ok, #state{timer = Timer}}.
 
-handle_call({data, Counter}, State) ->
+handle_call({data, Counter}, _From, State) ->
     V = case ets:lookup(triage_error_data, Counter) of
             [#alert{} = Alert] -> Alert;
             _ -> #alert{}
         end,
-    {ok, data(V), State};
-
-handle_call(total_alerts, State) ->
+    {reply, data(V), State};
+handle_call(total_alerts, _From, State) ->
     [{popcorn_counters, _, Alert_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_ALERT_COUNTER),
-    {ok, Alert_Count, State};
-
-handle_call(alerts_for_today, State) ->
+    {reply, Alert_Count, State};
+handle_call(alerts_for_today, _From, State) ->
     Day_Key = day_key(),
     Day_Alerts = case mnesia:dirty_read(popcorn_counters, Day_Key) of
                      None when length(None) =:= 0 -> 0;
                      [{popcorn_counters, _, V}]   -> V
                  end,
 
-    {ok, Day_Alerts, State};
-handle_call({alerts, Count}, State) ->
+    {reply, Day_Alerts, State};
+handle_call({alerts, Count}, _From, State) ->
     Alerts =
         [   case ets:lookup(triage_error_data, Counter) of
                 [#alert{} = Alert] -> Alert;
@@ -100,8 +92,8 @@ handle_call({alerts, Count}, State) ->
             end || {key, Counter} <- ets:tab2list(triage_error_keys), string:str(Counter, ":") =/= 0 ],
     Sorted = lists:keysort(#alert.timestamp, Alerts),
     FinalList = reverse_limit_and_filter(Sorted, Count),
-    {ok, FinalList, State};
-handle_call({clear, Counter}, State) ->
+    {reply, FinalList, State};
+handle_call({clear, Counter}, _From, State) ->
     Key = recent_key(Counter),
 
     mnesia:dirty_delete(popcorn_counters, Key),
@@ -112,9 +104,8 @@ handle_call({clear, Counter}, State) ->
         [{counter,      Counter},
          {alert_count,  Total_Alert_Count}],
     dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
-    {ok, ok, reset_timer(State)};
-
-handle_call({messages, Product, Version, Module, Line}, State) ->
+    {reply, ok, reset_timer(State)};
+handle_call({messages, Product, Version, Module, Line}, _From, State) ->
     P = list_to_binary(Product),
     V = list_to_binary(Version),
     M = list_to_binary(Module),
@@ -124,11 +115,11 @@ handle_call({messages, Product, Version, Module, Line}, State) ->
                 ets:fun2ms(
                     fun(#log_message{log_product = LP, log_version = LV, log_module = LM, log_line = LL} = Log_Message)
                         when LP == P, LV == V, LM == M, LL == L -> Log_Message end)),
-    {ok, Messages, State};
-handle_call(_Request, State) ->
-    {ok, ok, State}.
+    {reply, Messages, State};
+handle_call(_Request, _From, State) ->
+    {reply, ok, State}.
 
-handle_event({triage_event, #popcorn_node{} = Node, Node_Pid,
+handle_cast({triage_event, #popcorn_node{} = Node, Node_Pid,
               #log_message{log_product=Product, log_version=Version,
                            log_module=Module, log_line=Line, severity=Severity} = Log_Entry,
               Is_New_Node}, State)
@@ -139,18 +130,15 @@ handle_event({triage_event, #popcorn_node{} = Node, Node_Pid,
         false -> ok
     end,
     update_counter(Node,Node_Pid,Product,Version,Module,Line),
-    {ok, reset_timer(State)};
-
-handle_event({triage_event, #popcorn_node{} = Node, _Node_Pid, _Log_Message, true}, State) ->
+    {noreply, reset_timer(State)};
+handle_cast({triage_event, #popcorn_node{} = Node, _Node_Pid, _Log_Message, true}, State) ->
     dashboard_stream_fsm:broadcast({new_node, Node}),
-    {ok, State};
-
-handle_event({triage_event, #popcorn_node{}, _Node_Pid, _Log_Message, false}, State) ->
-    {ok, State};
-
-handle_event(Event, State) ->
+    {noreply, State};
+handle_cast({triage_event, #popcorn_node{}, _Node_Pid, _Log_Message, false}, State) ->
+    {noreply, State};
+handle_cast(Event, State) ->
     io:format("Unexpected event: ~p~n", [Event]),
-    {ok, State}.
+    {noreply, State}.
 
 handle_info(update_counters, State) ->
     lists:foreach(
@@ -178,16 +166,14 @@ handle_info(update_counters, State) ->
          {alert_count,       Alert_Count}],
 
     dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
-    {ok, reset_timer(State)};
+    {noreply, reset_timer(State)};
 handle_info(_Info, State) ->
-    {ok, State}.
+    {noreply, State}.
 
-terminate(_Reason, _State) ->
-    ok.
+terminate(_Reason, _State) -> ok.
+code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
-code_change(_OldVsn, State, _Extra) ->
-    %% TODO version number should be read here, or else we don't support upgrades
-    {ok, State}.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
     Count_Key           = key(Product,Version,Module,Line),
