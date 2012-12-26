@@ -20,8 +20,6 @@
 
 -export([get_message_counts/1]).
 
--define(EXPIRE_TIMER, 15000).
-
 -record(state, {severity_metric_names :: list(),
                 most_recent_version   :: string(),
                 popcorn_node          :: #popcorn_node{}}).
@@ -37,22 +35,7 @@ start_link() -> gen_fsm:start_link(?MODULE, [], []).
 init([]) ->
     process_flag(trap_exit, true),
 
-    gen_fsm:start_timer(?EXPIRE_TIMER, expire_log_messages),
-
     {ok, 'LOGGING', #state{}}.
-
-'LOGGING'({timeout, _From, expire_log_messages}, State) ->
-    {ok, Retentions} = application:get_env(popcorn, log_retention),
-    lists:foreach(fun({Severity, Retention_Interval}) ->
-        Microseconds = popcorn_util:retention_time_to_microsec(Retention_Interval),
-        Oldest_TS    = ?NOW - Microseconds,
-        Severity_Num = popcorn_util:severity_to_number(Severity)
-        %%TODO: mnesia:delete...
-      end, Retentions),
-
-    gen_fsm:start_timer(?EXPIRE_TIMER, expire_log_messages),
-
-    {next_state, 'LOGGING', State};
 
 'LOGGING'({log_message, Popcorn_Node, Log_Message}, State) ->
     try
