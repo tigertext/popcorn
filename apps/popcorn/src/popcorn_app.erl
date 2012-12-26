@@ -20,9 +20,6 @@
 start(_StartType, _StartArgs) -> supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 stop(_State) -> ok.
 
-start_phase(triage_setup, _Start_Type, _Phase_Args) ->
-    gen_event:add_handler(triage_handler, triage_handler, []);
-
 start_phase(deserialize_mnesia, _Start_Type, _Phase_Args) ->
     io:format("Reloading previously known nodes...\n"),
     lists:foreach(fun(Known_Node) ->
