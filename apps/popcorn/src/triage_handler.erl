@@ -275,7 +275,7 @@ reverse_limit_and_filter(Alerts, Count) ->
 reverse_limit_and_filter([], _Count, Acc) -> lists:reverse(Acc);
 reverse_limit_and_filter(_Alerts, Count, Acc) when length(Acc) == Count -> lists:reverse(Acc);
 reverse_limit_and_filter([Alert | Alerts], Count, Acc) ->
-    Location_Count = mnesia:dirty_update_counter(popcorn_counters, recent_key(Alert#alert.location)),
+    Location_Count = mnesia:dirty_update_counter(popcorn_counters, recent_key(Alert#alert.location), 0),
 
     reverse_limit_and_filter(
         Alerts, Count,
