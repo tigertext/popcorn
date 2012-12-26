@@ -7,7 +7,14 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--record(state, {}).
+-record(state, {trigger     :: atom(),
+                mod         :: atom(),
+                mod_state   :: term()}).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-callback handler_name(InitArgs::term()) -> atom().
+-callback init(InitArgs::term()) -> {ok, State::term()} | ignore | {stop, Reason::term()}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -23,9 +30,20 @@ start_link(Trigger, Module, InitArgs) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-init({Trigger, Module, InitArgs}) -> {ok, #state{}}.
+init({Trigger, Module, InitArgs}) ->
+    case Module:init(InitArgs) of
+        {ok, State} ->
+            ok = gen_event_caster:start(outbound_notifier, self()),
+            {ok, #state{trigger = Trigger, mod = Module, mod_state = State}};
+        ignore -> ignore;
+        {stop, Reason} -> {stop, Reason}
+    end.
 
-handle_cast(_, State)       -> {noreply, State}.
+handle_cast({Trigger, Data}, State = #state{trigger = Trigger}) ->
+    io:format("~p handled by ~p: ~p~n", [Trigger, State#state.mod, Data]),
+    {noreply, State};
+handle_cast(_OtherEvent, State) ->
+    {noreply, State}.
 
 handle_call(_,_,State)      -> {reply, ok, State}.
 
@@ -34,7 +52,6 @@ handle_info(_Msg, State)    -> {noreply, State}.
 code_change(_, _, State)    -> {noreply, State}.
 
 terminate(_, _)             -> ok.
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

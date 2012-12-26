@@ -15,7 +15,7 @@ start_handlers_sup() -> supervisor:start_link({local, outbound_notifier_handler_
 -spec init(main) -> _.
 init(main) ->
     {ok,
-     {  {one_for_one, 5, 10},
+     {  {one_for_all, 5, 10},
         [
             {?MODULE, {?MODULE, start_link, []}, permanent, 5000, worker, [?MODULE]},
             {handler_sup, {?MODULE, start_handlers_sup, []}, permanent, 5000, supervisor, []}
