@@ -54,7 +54,19 @@ handle(Req, State) ->
                          {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
                          {ok, Reply, State};
                 true  ->
-                    Context     = dict:from_list(triage_handler:decode_location(Alert)),
+                    Location    = triage_handler:decode_location(Alert),
+                    Log_Messages=
+                        triage_handler:log_messages(
+                            proplists:get_value(product,   Location),
+                            proplists:get_value(version,   Location),
+                            proplists:get_value(name,      Location),
+                            proplists:get_value(line,      Location),
+                            undefined,
+                            case application:get_env(popcorn, alert_page_size) of
+                                {ok, Val} -> Val;
+                                _         -> 10
+                            end),
+                    Context     = dict:from_list([{log_messages, Log_Messages} | Location]),
                     TFun        = mustache:compile(view_alert),
                     Output      = mustache:render(view_alert, TFun, Context),
                     {ok, Reply} = cowboy_req:reply(200, [], Output, Req),

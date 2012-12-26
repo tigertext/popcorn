@@ -7,8 +7,7 @@
 
 -export([start_link/0]).
 
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, 
-         terminate/2, code_change/3]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -define(UPDATE_INTERVAL, 10000).
 
@@ -16,7 +15,7 @@
 
 -export([counter_data/1, all_alerts/1, recent_alerts/1,
          alert_count_today/0, alert_count/0, clear_alert/1,
-         safe_notify/4, log_messages/4, decode_location/1]).
+         safe_notify/4, log_messages/6, decode_location/1]).
 
 -include_lib("lager/include/lager.hrl").
 -include("include/popcorn.hrl").
@@ -34,7 +33,8 @@ decode_location(Alert) ->
     Parts = re:split(Counter, <<":-:">>, [{return, list}]),
     lists:zip([product, version, name, line], Parts).
 
-log_messages(Product, Version, Name, Line) -> gen_server:call(?MODULE, {messages, Product, Version, Name, Line}).
+log_messages(Product, Version, Name, Line, Starting_Timestamp, Page_Size) ->
+    gen_server:call(?MODULE, {messages, Product, Version, Name, Line, Starting_Timestamp, Page_Size}).
 
 counter_data(Counter) -> gen_server:call(?MODULE, {data, Counter}).
 
@@ -105,16 +105,25 @@ handle_call({clear, Counter}, _From, State) ->
          {alert_count,  Total_Alert_Count}],
     dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
     {reply, ok, reset_timer(State)};
-handle_call({messages, Product, Version, Module, Line}, _From, State) ->
+handle_call({messages, Product, Version, Module, Line, Starting_Timestamp, Page_Size}, _From, State) ->
     P = list_to_binary(Product),
     V = list_to_binary(Version),
     M = list_to_binary(Module),
     L = list_to_binary(Line),
-    Messages = mnesia:dirty_select(
-                popcorn_history,
-                ets:fun2ms(
-                    fun(#log_message{log_product = LP, log_version = LV, log_module = LM, log_line = LL} = Log_Message)
-                        when LP == P, LV == V, LM == M, LL == L -> Log_Message end)),
+    Messages =
+        case mnesia:transaction(
+                fun() ->
+                    mnesia:select(
+                        popcorn_history,
+                        ets:fun2ms(
+                            fun(#log_message{timestamp = TS, log_product = LP, log_version = LV, log_module = LM, log_line = LL} = Log_Message)
+                                when LP == P, LV == V, LM == M, LL == L, (Starting_Timestamp == undefined orelse TS > Starting_Timestamp) -> Log_Message end),
+                        Page_Size,
+                        read)
+                end) of
+            {atomic, {Ms, _}} -> Ms;
+            {atomic, '$end_of_table'} -> []
+        end,
     {reply, Messages, State};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
