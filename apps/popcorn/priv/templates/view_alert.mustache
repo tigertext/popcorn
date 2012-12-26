@@ -76,11 +76,12 @@
                     <tbody>
                       {{#logs}}
                       <tr>
-                        <td>{{time}}</td>
+                        <td>{{datetime}}</td>
                         <td>{{message_severity}}</td>
                         <td>{{message}}</td>
                       </tr>
                       {{/logs}}
+                      {{next_page}}
                     </tbody>
                   </table>
               </table>
@@ -94,5 +95,48 @@
     <script src="/js/jquery.min.js"></script>
     <script src="/bootstrap/js/bootstrap-dropdown.js"></script>
     <script src="/bootstrap/js/bootstrap-collapse.js"></script>
+    <script type="text/javascript">
+      function addEvents(baseHRef, anchor, events) {
+        if(events.length == 0) {
+          $(anchor).parent().parent().remove();
+        } else {
+          var i = 0;
+          for(i = 0; i < events.length; i++) {
+            var event = events[i];
+            var row =
+              "<tr>" +
+                "<td>" + event.datetime + "</td>" +
+                "<td>" + event.message_severity + "</td>" +
+                "<td>" + event.message + "</td>" +
+              "</tr>";
+            $(anchor).parent().parent().before(row);
+          }
+          var nextPageUrl = baseHRef + "?since=" + events[i-1].timestamp;
+          $(anchor).attr("href", nextPageUrl);
+        }
+        console.log(events);
+      }
+
+      $("td.load-more a").click(
+        function (e) {
+          e.preventDefault();
+          var hrefParts = this.href.split("?");
+          var anchor = this;
+          $.ajax(
+            { type: 'POST',
+              url:  this.href,
+              data: hrefParts[1],
+              success:
+                function(data, textStatus, xhr) {
+                  addEvents(hrefParts[0], anchor, JSON.parse(data))
+                },
+              error:
+                function(xhr, textStatus) {
+                  alert('Unable to load more events: ' + textStatus);
+                }
+            });
+          console.log("load from: " + this.href);
+        })
+    </script>
   </body>
 </html>
