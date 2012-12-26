@@ -52,7 +52,9 @@ init([]) ->
     current_roles =             ets:new(current_roles,            [named_table, bag, public]),
     io:format(" done!\n"),
 
-    pcache_server:start_link(rendered_templates, mustache, compile, 16, 43200000), %% 43200000 = 12 hours
+    Cache_Ttl = get_cache_ttl(application:get_env(popcorn, template_cache_ttl)),
+    pcache_server:start_link(rendered_templates, mustache, compile, 16, Cache_Ttl), 
+    io:format("Template cache expire policy is ~p milliseconds~n", [Cache_Ttl]),
 
     %% ensure we have a mnesia schema created
     io:format("Starting mnesia..."),
@@ -130,6 +132,5 @@ init([Module]) ->
         }
     }.
 
-
-
-
+get_cache_ttl({ok, Val}) -> Val;
+get_cache_ttl(undefined) -> 43200000. % 12 hours
