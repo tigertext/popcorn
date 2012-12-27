@@ -15,7 +15,7 @@
 
 -callback handler_name(InitArgs::term()) -> atom().
 -callback init(InitArgs::term()) -> {ok, State::term()} | ignore | {stop, Reason::term()}.
--callback handle_event(Trigger::atom(), Data::term(), State::term()) -> {ok, State::term()} | {stop, Reason::term(), State::term()}.
+-callback handle_event(Event::atom(), Data::term(), State::term()) -> {ok, State::term()} | {stop, Reason::term(), State::term()}.
 -callback handle_call(Call::term(), State::term()) -> {ok, Reply::term(), State::term()} | {stop, Reason::term(), Reply::term(), State::term()}.
 -callback handle_info(Info::term(), State::term()) -> {ok, State::term()} | {stop, Reason::term(), State::term()}.
 -callback terminate(Reason::term(), State::term()) -> _.
@@ -43,38 +43,52 @@ init({Trigger, Module, InitArgs}) ->
         {stop, Reason} -> {stop, Reason}
     end.
 
-handle_cast({Trigger, Data}, State = #state{trigger = '_'}) ->
-    io:format("~p handled by ~p: ~p~n", [Trigger, State#state.mod, Data]),
-    case (State#state.mod):handle_event(Trigger, Data, State#state.mod_state) of
+%% trigger = '_' means 'any event'
+handle_cast({Event, Data}, State = #state{trigger = '_'}) ->
+    io:format("~p handled by ~p: ~p~n", [Event, State#state.mod, Data]),
+    try (State#state.mod):handle_event(Event, Data, State#state.mod_state) of
         {ok, NewState} ->
             {noreply, State#state{mod_state = NewState}};
         {stop, Reason, NewState} ->
             {stop, Reason, State#state{mod_state = NewState}}
+    catch
+        _:{stop, Reason, NewState} ->
+            {stop, Reason, State#state{mod_state = NewState}}
     end;
-handle_cast({Trigger, Data}, State = #state{trigger = Trigger}) ->
-    io:format("~p handled by ~p: ~p~n", [Trigger, State#state.mod, Data]),
-    case (State#state.mod):handle_event(Trigger, Data, State#state.mod_state) of
+%% trigger = '[Event]' means 'that event'
+handle_cast({Event, Data}, State = #state{trigger = Event}) ->
+    io:format("~p handled by ~p: ~p~n", [Event, State#state.mod, Data]),
+    try (State#state.mod):handle_event(Event, Data, State#state.mod_state) of
         {ok, NewState} ->
             {noreply, State#state{mod_state = NewState}};
         {stop, Reason, NewState} ->
+            {stop, Reason, State#state{mod_state = NewState}}
+    catch
+        _:{stop, Reason, NewState} ->
             {stop, Reason, State#state{mod_state = NewState}}
     end;
 handle_cast(_OtherEvent, State) ->
     {noreply, State}.
 
 handle_call(Call, _From, State) ->
-    case (State#state.mod):handle_event(Call, State#state.mod_state) of
+    try (State#state.mod):handle_event(Call, State#state.mod_state) of
         {ok, Reply, NewState} ->
             {reply, Reply, State#state{mod_state = NewState}};
         {stop, Reason, Reply, NewState} ->
             {stop, Reason, Reply, State#state{mod_state = NewState}}
+    catch
+        _:{stop, Reason, Reply, NewState} ->
+            {stop, Reason, Reply, State#state{mod_state = NewState}}
     end.
 
 handle_info(Info, State) ->
-    case (State#state.mod):handle_info(Info, State#state.mod_state) of
+    try (State#state.mod):handle_info(Info, State#state.mod_state) of
         {ok, NewState} ->
             {noreply, State#state{mod_state = NewState}};
         {stop, Reason, NewState} ->
+            {stop, Reason, State#state{mod_state = NewState}}
+    catch
+        _:{stop, Reason, NewState} ->
             {stop, Reason, State#state{mod_state = NewState}}
     end.
 

@@ -8,7 +8,7 @@
 
 -type receiver() :: atom() | pid().
 
--record(state, {receiver :: receiver()}).
+-record(state, {receiver :: pid()}).
 -type state() :: #state{}.
 
 %% ====================================================================
@@ -28,13 +28,16 @@ start(Dispatcher, Receiver) ->
 %% ====================================================================
 %% @hidden
 -spec init(receiver()) -> {ok, state()}.
-init(Receiver) -> {ok, #state{receiver = Receiver}}.
+init(Receiver) when is_pid(Receiver) -> {ok, #state{receiver = Receiver}};
+init(Receiver) -> {ok, #state{receiver = whereis(Receiver)}}.
 
 %% @hidden
--spec handle_event(term(), state()) -> {ok, state()}.
+-spec handle_event(term(), state()) -> {ok, state()} | remove_handler.
 handle_event(Event, State) ->
-  ok = gen_server:cast(State#state.receiver, Event),
-  {ok, State}.
+  case is_process_alive(State#state.receiver) of
+    true -> {gen_server:cast(State#state.receiver, Event), State};
+    false -> remove_handler
+  end.
 
 %% @hidden
 -spec handle_call(term(), state()) -> {ok, term(), state()}.
@@ -50,7 +53,7 @@ handle_info(Info, State) ->
 %% @hidden
 -spec terminate(term(), state()) -> ok.
 terminate(Reason, State) ->
-  io:format("Source dispatcher exited (~p). exiting ~p, who was listening...~n", [State#state.receiver]),
+  io:format("Source dispatcher exited (~p). exiting ~p, who was listening...~n", [Reason, State#state.receiver]),
   exit(State#state.receiver, Reason).
 
 %% @hidden
