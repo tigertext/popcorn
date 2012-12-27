@@ -30,6 +30,9 @@ safe_notify(Popcorn_Node, Node_Pid, Log_Message, Is_New_Node) ->
 
 decode_location(Alert) ->
     Counter = base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global])),
+    do_decode_location(Counter).
+
+do_decode_location(Counter) ->
     Parts = re:split(Counter, <<":-:">>, [{return, list}]),
     lists:zip([product, version, name, line], Parts).
 
@@ -136,14 +139,14 @@ handle_cast({triage_event, #popcorn_node{} = Node, Node_Pid,
     true = ets:insert(triage_error_data, #alert{location=key(Product,Version,Module,Line), log=Log_Entry}),
     case Is_New_Node of
         true ->
-            outbound_notifier:notify(new_node, Node),
+            outbound_notifier:notify(new_node, as_proplist(Node)),
             dashboard_stream_fsm:broadcast({new_node, Node});
         false -> ok
     end,
     update_counter(Node,Node_Pid,Product,Version,Module,Line),
     {noreply, reset_timer(State)};
 handle_cast({triage_event, #popcorn_node{} = Node, _Node_Pid, _Log_Message, true}, State) ->
-    outbound_notifier:notify(new_node, Node),
+    outbound_notifier:notify(new_node, as_proplist(Node)),
     dashboard_stream_fsm:broadcast({new_node, Node}),
     {noreply, State};
 handle_cast({triage_event, #popcorn_node{}, _Node_Pid, _Log_Message, false}, State) ->
@@ -205,7 +208,9 @@ update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
     Recent_Value = mnesia:dirty_update_counter(popcorn_counters, Recent_Counter_Key, 1),
 
     case Recent_Value of
-        1 -> mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_ALERT_COUNTER, 1);
+        1 ->
+            outbound_notifier:notify(new_alert, do_decode_location(Count_Key)),
+            mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_ALERT_COUNTER, 1);
         _ -> ok
     end,
 
@@ -224,7 +229,7 @@ update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
             {alert_count_today, Day_Count},
             {alert_count,       Alert_Count}],
 
-    outbound_notifier:notify(new_event, Count_Key),
+    outbound_notifier:notify(new_event, do_decode_location(Count_Key)),
     dashboard_stream_fsm:broadcast({update_counters, NewCounters}).
 
 key(Product,Version,Module,Line) ->
@@ -287,3 +292,7 @@ reset_timer(State) ->
     erlang:cancel_timer(State#state.timer),
     Timer = erlang:send_after(?UPDATE_INTERVAL, self(), update_counters),
     State#state{timer = Timer}.
+
+as_proplist(Node) when is_record(Node, popcorn_node) ->
+    [popcorn_node | Props] = tuple_to_list(Node),
+    lists:zip(record_info(fields, popcorn_node), Props).
