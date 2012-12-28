@@ -9,7 +9,8 @@
 
 -record(state, {trigger     :: atom(),
                 mod         :: atom(),
-                mod_state   :: term()}).
+                mod_state   :: term(),
+                trigger_data:: term()}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -38,25 +39,39 @@ init({Trigger, Module, InitArgs}) ->
     case Module:init(InitArgs) of
         {ok, State} ->
             ok = gen_event_caster:start(outbound_notifier, self()),
-            {ok, #state{trigger = Trigger, mod = Module, mod_state = State}};
+            TriggerData =
+                case Trigger of
+                    Atom when is_atom(Atom) -> undefined;
+                    {repeat, _Count, Lapse} ->
+                        erlang:send_after(Lapse * 1000, self(), reset_counters),
+                        ets:new(trigger_data, [set, private, {keypos, 1}, {write_concurrency, true}])
+                end,
+            {ok, #state{trigger = Trigger, mod = Module, mod_state = State, trigger_data = TriggerData}};
         ignore -> ignore;
         {stop, Reason} -> {stop, Reason}
     end.
 
 %% trigger = '_' means 'any event'
 handle_cast({Event, Data}, State = #state{trigger = '_'}) ->
-    io:format("~p handled by ~p: ~p~n", [Event, State#state.mod, Data]),
-    try (State#state.mod):handle_event(Event, Data, State#state.mod_state) of
-        {ok, NewState} ->
-            {noreply, State#state{mod_state = NewState}};
-        {stop, Reason, NewState} ->
-            {stop, Reason, State#state{mod_state = NewState}}
+    handle_event(Event, Data, State);
+%% trigger = '{repeat, [Count], [Lapse]}' means 'more than Count events for the same alert in Lapse seconds'
+handle_cast({new_event, Data}, State = #state{trigger = {repeat, Count, _Lapse}}) ->
+    Alert = proplists:get_value(location, Data, ""),
+    try ets:update_counter(State#state.trigger_data, Alert, {2,1,Count,1}) of
+        1 -> handle_event(new_event, Data, State); %%NOTE: Threshold exceeded
+        _ -> {noreply, State}
     catch
-        _:{stop, Reason, NewState} ->
-            {stop, Reason, State#state{mod_state = NewState}}
+        _:badarg -> %%NOTE: Not yet registered
+            ets:insert(State#state.trigger_data, {Alert, 1}),
+            {noreply, State}
     end;
 %% trigger = '[Event]' means 'that event'
 handle_cast({Event, Data}, State = #state{trigger = Event}) ->
+    handle_event(Event, Data, State);
+handle_cast(_OtherEvent, State) ->
+    {noreply, State}.
+
+handle_event(Event, Data, State) ->
     io:format("~p handled by ~p: ~p~n", [Event, State#state.mod, Data]),
     try (State#state.mod):handle_event(Event, Data, State#state.mod_state) of
         {ok, NewState} ->
@@ -66,9 +81,8 @@ handle_cast({Event, Data}, State = #state{trigger = Event}) ->
     catch
         _:{stop, Reason, NewState} ->
             {stop, Reason, State#state{mod_state = NewState}}
-    end;
-handle_cast(_OtherEvent, State) ->
-    {noreply, State}.
+    end.
+
 
 handle_call(Call, _From, State) ->
     try (State#state.mod):handle_event(Call, State#state.mod_state) of
@@ -81,6 +95,10 @@ handle_call(Call, _From, State) ->
             {stop, Reason, Reply, State#state{mod_state = NewState}}
     end.
 
+handle_info(reset_counters, State = #state{trigger = {repeat, _Count, Lapse}}) ->
+    true = ets:delete_all_objects(State#state.trigger_data),
+    erlang:send_after(Lapse * 1000, self(), reset_counters),
+    {noreply, State};
 handle_info(Info, State) ->
     try (State#state.mod):handle_info(Info, State#state.mod_state) of
         {ok, NewState} ->
@@ -99,6 +117,9 @@ code_change(_, _, State) -> {noreply, State}.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 -spec process_name(atom(), atom(), term()) -> atom().
+process_name({repeat,_,_}, Module, InitArgs) ->
+    Name = Module:handler_name(InitArgs),
+    list_to_atom(?MODULE_STRING ++ "-repeat-" ++ atom_to_list(Name));
 process_name(Trigger, Module, InitArgs) ->
     Name = Module:handler_name(InitArgs),
     list_to_atom(?MODULE_STRING ++ [$- | atom_to_list(Trigger)] ++ [$- | atom_to_list(Name)]).

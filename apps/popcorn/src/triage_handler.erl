@@ -229,7 +229,7 @@ update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
             {alert_count_today, Day_Count},
             {alert_count,       Alert_Count}],
 
-    outbound_notifier:notify(new_event, do_decode_location(Count_Key)),
+    outbound_notifier:notify(new_event, [{location, Count_Key} | do_decode_location(Count_Key)]),
     dashboard_stream_fsm:broadcast({update_counters, NewCounters}).
 
 key(Product,Version,Module,Line) ->
