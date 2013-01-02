@@ -47,6 +47,39 @@ handle(Req, State) ->
             {ok, Reply} = cowboy_req:reply(200, Req),
             {ok, Reply, State};
 
+        {{<<"POST">>, _}, {<<"/alert/", Alert/binary>>, _}} ->
+            {ok, Post_Vals, _Req2} = cowboy_req:body_qs(Req),
+            case session_handler:is_session_authed_and_valid(Req) of
+                false -> Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
+                         {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
+                         {ok, Reply, State};
+                true  ->
+                    Since =
+                        case proplists:get_value(<<"since">>, Post_Vals) of
+                            undefined -> undefined;
+                            BinSince -> list_to_integer(binary_to_list(BinSince))
+                        end,
+                    ?POPCORN_DEBUG_MSG("http request for alert ~s (since ~p)", [Alert, Since]),
+                    Location    = triage_handler:decode_location(Alert),
+                    Log_Messages=
+                        triage_handler:log_messages(
+                            proplists:get_value(product,   Location),
+                            proplists:get_value(version,   Location),
+                            proplists:get_value(name,      Location),
+                            proplists:get_value(line,      Location),
+                            Since,
+                            case application:get_env(popcorn, alert_page_size) of
+                                {ok, Val} -> Val;
+                                _         -> 10
+                            end),
+                    Jsons =
+                        [jsonify(popcorn_util:format_log_message(Log_Message))
+                         || Log_Message <- Log_Messages],
+                    Output = lists:flatten(mochijson:encode({array, Jsons})),
+                    {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
+                    {ok, Reply, State}
+            end;
+
         {{<<"GET">>, _}, {<<"/alert/", Alert/binary>>, _}} ->
             ?POPCORN_DEBUG_MSG("http request for alert ~s", [Alert]),
             case session_handler:is_session_authed_and_valid(Req) of
@@ -54,8 +87,25 @@ handle(Req, State) ->
                          {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
                          {ok, Reply, State};
                 true  ->
-                    Context     = dict:from_list(triage_handler:decode_location(Alert)),
-                    TFun        = mustache:compile(view_alert),
+                    Since =
+                        case cowboy_req:qs_val(<<"since">>, Req) of
+                            {undefined, _} -> undefined;
+                            {BinSince, _} -> list_to_integer(binary_to_list(BinSince))
+                        end,
+                    Location    = triage_handler:decode_location(Alert),
+                    Log_Messages=
+                        triage_handler:log_messages(
+                            proplists:get_value(product,   Location),
+                            proplists:get_value(version,   Location),
+                            proplists:get_value(name,      Location),
+                            proplists:get_value(line,      Location),
+                            Since,
+                            case application:get_env(popcorn, alert_page_size) of
+                                {ok, Val} -> Val;
+                                _         -> 10
+                            end),
+                    Context     = dict:from_list([{location, binary_to_list(Alert)}, {log_messages, Log_Messages} | Location]),
+                    TFun        = pcache:get(rendered_templates, view_alert),
                     Output      = mustache:render(view_alert, TFun, Context),
                     {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
                     {ok, Reply, State}
@@ -84,7 +134,7 @@ handle(Req, State) ->
                         Context = dict:from_list([{stream_id, binary_to_list(Stream_Id)},
                                                   {all,       All}]),
 
-                        TFun        = mustache:compile(view_alerts),
+                        TFun        = pcache:get(rendered_templates, view_alerts),
                         Output      = mustache:render(view_alerts, TFun, Context),
                         {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
                         {ok, Reply, State}
@@ -111,7 +161,7 @@ handle(Req, State) ->
 
                         Context = dict:from_list([{stream_id, binary_to_list(Stream_Id)}]),
 
-                        TFun        = mustache:compile(view_dashboard),
+                        TFun        = pcache:get(rendered_templates, view_dashboard),
                         Output      = mustache:render(view_dashboard, TFun, Context),
                         {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
                         {ok, Reply, State}
@@ -124,3 +174,8 @@ handle(Req, State) ->
     end.
 
 terminate(_Req, _State) -> ok.
+
+jsonify(Vals) -> {struct, [do_jsonify(Val) || Val <- Vals]}.
+do_jsonify({Key, String}) when is_list(String) -> {atom_to_binary(Key, latin1), list_to_binary(String)};
+do_jsonify({Key, Atom}) when is_atom(Atom) -> {atom_to_binary(Key, latin1), atom_to_binary(Atom, latin1)};
+do_jsonify({Key, Other}) -> {atom_to_binary(Key, latin1), Other}.

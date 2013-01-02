@@ -27,7 +27,7 @@ handle_path(<<"GET">>, [<<"node">>, Node_Name], Req, State) ->
                  {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
                  {ok, Reply, State};
         true  -> Context     = dict:from_list([{node_name, Node_Name}]),
-                 TFun        = mustache:compile(view_node),
+                 TFun        = pcache:get(rendered_templates, view_node),
                  Output      = mustache:render(view_node, TFun, Context),
                  {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
                  {ok, Reply, State}

@@ -20,9 +20,6 @@
 start(_StartType, _StartArgs) -> supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 stop(_State) -> ok.
 
-start_phase(triage_setup, _Start_Type, _Phase_Args) ->
-    gen_event:add_handler(triage_handler, triage_handler, []);
-
 start_phase(deserialize_mnesia, _Start_Type, _Phase_Args) ->
     io:format("Reloading previously known nodes...\n"),
     lists:foreach(fun(Known_Node) ->
@@ -51,6 +48,10 @@ init([]) ->
     current_dashboard_streams = ets:new(current_dashboard_streams,[named_table, set, public, {keypos, #stream.stream_id}]),
     current_roles =             ets:new(current_roles,            [named_table, bag, public]),
     io:format(" done!\n"),
+
+    Cache_Ttl = get_cache_ttl(application:get_env(popcorn, template_cache_ttl)),
+    pcache_server:start_link(rendered_templates, mustache, compile, 16, Cache_Ttl), 
+    io:format("Template cache expire policy is ~p milliseconds~n", [Cache_Ttl]),
 
     %% ensure we have a mnesia schema created
     io:format("Starting mnesia..."),
@@ -128,6 +129,5 @@ init([Module]) ->
         }
     }.
 
-
-
-
+get_cache_ttl({ok, Val}) -> Val;
+get_cache_ttl(undefined) -> 43200000. % 12 hours
