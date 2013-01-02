@@ -3,6 +3,7 @@
 
 -define(TOTAL_EVENT_COUNTER,         binary_to_atom(<<"total_events">>, latin1)).
 -define(TOTAL_ALERT_COUNTER,         binary_to_atom(<<"total_alerts">>, latin1)).
+-define(NODE_EVENT_COUNTER(Node),    popcorn_util:node_event_counter(Node)).
 
 -define(PERCENT(Value),              round(Value * 100 * math:pow(10, 2)) / math:pow(10, 2)).
 -define(NOW,                         folsom_utils:now_epoch_micro()).

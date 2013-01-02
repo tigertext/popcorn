@@ -155,7 +155,7 @@ handle_info(update_counters, State) ->
            ({Node_Name, Node_Pid}) ->
             NodeCounters =
                 [{node_hash,  re:replace(base64:encode(Node_Name), "=", "_", [{return, binary}, global])},
-                 {node_count, proplists:get_value(total, node_fsm:get_message_counts(Node_Pid), 0)}],
+                 {node_count, mnesia:dirty_update_counter(popcorn_counters, ?NODE_EVENT_COUNTER(Node_Name), 0)}],
             dashboard_stream_fsm:broadcast({update_counters, NodeCounters})
         end, ets:tab2list(current_nodes)),
 
@@ -211,11 +211,7 @@ update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
     [{popcorn_counters, _, Day_Count}]   = mnesia:dirty_read(popcorn_counters, Day_Key),
     NewCounters =
         [   {node_hash,         re:replace(base64:encode(Node#popcorn_node.node_name), "=", "_", [{return, binary}, global])},
-            {node_count,        case Node_Pid of
-                                    undefined -> 0;
-                                    Node_Pid ->
-                                        proplists:get_value(total, node_fsm:get_message_counts(Node_Pid), 0)
-                                end},
+            {node_count,        mnesia:dirty_update_counter(popcorn_counters, ?NODE_EVENT_COUNTER(Node#popcorn_node.node_name), 0)},
             {counter,           Count_Key},
             {event_count,       Event_Count},
             {alert_count_today, Day_Count},
