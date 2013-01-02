@@ -3,7 +3,8 @@
 
 -include("include/popcorn.hrl").
 
--export([unique_id/0,
+-export([node_event_counter/1,
+         unique_id/0,
          hour/0,
          retention_time_to_microsec/1,
          last_24_hours/0,
@@ -14,6 +15,10 @@
          format_log_message/1,
          opt/2,
          head_includes/0]).
+
+node_event_counter(Node_Name) ->
+    Prefix = <<"node_events__">>,
+    <<Prefix/binary, Node_Name/binary>>.
 
 unique_id() -> {_, S} = flake_server:id(62),
                list_to_binary(S).

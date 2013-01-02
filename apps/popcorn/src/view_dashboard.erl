@@ -51,14 +51,14 @@ alerts() -> [dict:from_list(Alert) || Alert <- triage_handler:recent_alerts(aler
 known_nodes() ->
     [{popcorn_counters, _, Total_Message_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_EVENT_COUNTER),
     lists:map(fun({Node, Pid}) ->
-        Message_Counts  = node_fsm:get_message_counts(Pid),
+        [{popcorn_counters, _, Node_Message_Count}] = mnesia:dirty_read(popcorn_counters, ?NODE_EVENT_COUNTER(Node)),
         Node_List       = binary_to_list(Node),
         Node_Properties = [{'node_name',             Node_List},
                            {'node_hash',             re:replace(base64:encode(Node), "=", "_", [{return, list}, global])},
-                           {'total_messages',        proplists:get_value(total, Message_Counts, 0)},
+                           {'total_messages',        Node_Message_Count},
                            {'percent_of_all_events', case Total_Message_Count of
                                                         0 -> 0;
-                                                        _ -> ?PERCENT(proplists:get_value(total, Message_Counts, 0) / Total_Message_Count)
+                                                        _ -> ?PERCENT(Node_Message_Count / Total_Message_Count)
                                                      end},
                            {'alert_count',           0},
                            {'hashtag_count',         0},

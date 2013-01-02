@@ -53,6 +53,7 @@ delete_recent_log_line(Severity_Num, Oldest_Ts, Last_Key_Checked) ->
                                 {Severity_Num, TS} when TS < Oldest_Ts ->
                                     %% purge this and iterate
                                     mnesia:dirty_delete(popcorn_history, Log_Message#log_message.message_id),
+                                    mnesia:dirty_update_counter(popcorn_counters, ?NODE_EVENT_COUNTER(Log_Message#log_message.log_nodename), -1),
                                     mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_EVENT_COUNTER, -1),
                                     delete_recent_log_line(Severity_Num, Oldest_Ts, Key);
                                 {Severity_Num, _} ->

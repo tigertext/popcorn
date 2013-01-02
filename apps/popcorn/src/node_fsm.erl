@@ -1,3 +1,36 @@
+%%%
+%%% Copyright 2012
+%%%
+%%% Licensed under the Apache License, Version 2.0 (the "License");
+%%% you may not use this file except in compliance with the License.
+%%% You may obtain a copy of the License at
+%%%
+%%%     http://www.apache.org/licenses/LICENSE-2.0
+%%%
+%%% Unless required by applicable law or agreed to in writing, software
+%%% distributed under the License is distributed on an "AS IS" BASIS,
+%%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%%% See the License for the specific language governing permissions and
+%%% limitations under the License.
+%%%
+
+
+%%%-------------------------------------------------------------------
+%%% File:      node_fsm.erl
+%%% @author    Marc Campbell <marc.e.campbell@gmail.com>
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------
+
+%%%
+%%% IMPORTANT
+%%% ---------
+%%%
+%%% A node_fsm can be a busy fsm, and making synchronous calls into it is highly
+%%% discouraged.  It's better to leave this process alone to collect log messages
+%%% and move other reading logic out
+%%%
+
 -module(node_fsm).
 -author('marc.e.campbell@gmail.com').
 -behavior(gen_fsm).
@@ -18,16 +51,8 @@
     'LOGGING'/2,
     'LOGGING'/3]).
 
--export([get_message_counts/1]).
-
 -record(state, {most_recent_version   :: string(),
                 popcorn_node          :: #popcorn_node{}}).
-
-get_message_counts(Node_Pid) ->
-    case erlang:is_process_alive(Node_Pid) of
-        false -> [{total, 0}];
-        true -> gen_fsm:sync_send_event(Node_Pid, get_message_counts)
-    end.
 
 start_link() -> gen_fsm:start_link(?MODULE, [], []).
 
@@ -46,6 +71,9 @@ init([]) ->
 
         %% increment the total event counter
         mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_EVENT_COUNTER, 1),
+
+        %% increment the node event counter
+        mnesia:dirty_update_counter(popcorn_counters, ?NODE_EVENT_COUNTER(Popcorn_Node#popcorn_node.node_name), 1),
 
         %% Notify any streams connected
         Log_Streams = ets:tab2list(current_log_streams),
@@ -70,21 +98,16 @@ init([]) ->
 'LOGGING'({set_popcorn_node, Popcorn_Node}, _From, State) ->
     mnesia:dirty_write(known_nodes, Popcorn_Node),
 
+    %% create the node counter
+    mnesia:dirty_update_counter(popcorn_counters, ?NODE_EVENT_COUNTER(Popcorn_Node#popcorn_node.node_name), 0),
+
     Node_Name        = Popcorn_Node#popcorn_node.node_name,
     Prefix           = <<"raw_logs__">>,
 
     %% add this node to the "roles" tets table
     ets:insert(current_roles, {Popcorn_Node#popcorn_node.role, self()}),
 
-    {reply, ok, 'LOGGING', State#state{popcorn_node          = Popcorn_Node}};
-
-'LOGGING'(get_message_counts, _From, State) ->
-    Severity_Counts = lists:map(fun({Severity, Metric_Name}) ->
-                          {lager_util:num_to_level(Severity), mnesia:dirty_update_counter(popcorn_counters, Metric_Name, 0)}
-                        end, State#state.severity_metric_names),
-    Total_Count     = lists:foldl(fun({_, Count}, Total) -> Total + Count end, 0, Severity_Counts),
-
-    {reply, Severity_Counts ++ [{total, Total_Count}], 'LOGGING', State}.
+    {reply, ok, 'LOGGING', State#state{popcorn_node          = Popcorn_Node}}.
 
 handle_event(Event, StateName, State)                 -> {stop, {StateName, undefined_event, Event}, State}.
 handle_sync_event(Event, _From, StateName, State)     -> {stop, {StateName, undefined_event, Event}, State}.
