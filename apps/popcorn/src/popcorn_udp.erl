@@ -103,7 +103,7 @@ decode_protobuffs_message(Encoded_Message) ->
     {{8, Line},  Rest8}        = protobuffs:decode(Rest7,           bytes),
     {{9, Pid},  <<>>}          = protobuffs:decode(Rest8,           bytes),
 
-    {Hashtags,Mentions} = get_tags(binary_to_list(Message)),
+    {Topics, Identities} = get_tags(binary_to_list(Message)),
 
     Popcorn_Node = #popcorn_node{node_name = check_undefined(Node),
                                  role      = check_undefined(Node_Role),
@@ -113,8 +113,8 @@ decode_protobuffs_message(Encoded_Message) ->
                                 timestamp    = ?NOW,     %% this should be part of the protobuffs packet?
                                 severity     = check_undefined(Severity),
                                 message      = check_undefined(Message),
-                                hashtags     = Hashtags,
-                                mentions     = Mentions,
+                                topics       = Topics,
+                                identities   = Identities,
                                 log_nodename = Popcorn_Node#popcorn_node.node_name,
                                 log_product  = Popcorn_Node#popcorn_node.role,
                                 log_version  = Popcorn_Node#popcorn_node.version,
