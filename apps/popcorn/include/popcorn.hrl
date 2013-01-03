@@ -38,16 +38,16 @@
                        role      :: binary(),
                        version   :: binary()}).
 
--record(log_message, {message_id   :: binary(),
-                      severity     :: integer(),
-                      message      :: binary(),
-                      timestamp    :: number(),
-                      log_nodename :: binary(),
-                      log_product  :: binary(),
-                      log_version  :: binary(),
-                      log_module   :: binary(),      %% underscore in the name is to prevent confusion with BIF and types
-                      hashtags =[] :: list(),
-                      mentions =[] :: list(),
-                      log_function :: binary(),
-                      log_line     :: integer(),
-                      log_pid      :: binary()}).
+-record(log_message, {message_id      :: binary(),
+                      severity        :: integer(),
+                      message         :: binary(),
+                      timestamp       :: number(),
+                      log_nodename    :: binary(),
+                      log_product     :: binary(),
+                      log_version     :: binary(),
+                      log_module      :: binary(),      %% underscore in the name is to prevent confusion with BIF and types
+                      topics     = [] :: list(),
+                      identities = [] :: list(),
+                      log_function    :: binary(),
+                      log_line        :: integer(),
+                      log_pid         :: binary()}).
