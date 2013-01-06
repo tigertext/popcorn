@@ -1,5 +1,5 @@
 ./rebar skip_deps=true compile;
-erlc -o apps/popcorn/ebin/ 
+erlc -o apps/popcorn/ebin/ apps/popcorn/test/*.erl
 
 CONFIG=rel/files/sys.config
 

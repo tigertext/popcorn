@@ -1,7 +1,9 @@
 -module(popcorn).
 
 -export([
-         start/0, stop/0
+         start/0,
+         stop/0,
+         test/0
         ]).
 
 -define(SERVER, popcorn_server).
@@ -20,3 +22,8 @@ start() 			-> [application:start(App) || App <-
 stop() ->
     application:stop(popcorn).
 
+%% @spec test() -> ok
+%% @doc Test the popcorn server.
+test() ->
+    [eunit:test(Module) || Module <-
+       [node_fsm_tests, popcorn_udp_tests]].
