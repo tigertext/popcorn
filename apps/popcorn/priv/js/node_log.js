@@ -213,7 +213,7 @@ $(document).ready(function() {
     row.append(cell);
     row.append($('<td />').html(log_message.time));
     row.append($('<td />').html(log_message.message_severity));
-    row.append($('<td />').html(log_message.message));
+    row.append($('<td />').addClass('log-message').html(log_message.message));
 
     if (location == 'top') {
       $('#log-messages tbody').prepend(row);

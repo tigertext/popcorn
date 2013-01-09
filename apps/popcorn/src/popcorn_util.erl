@@ -3,7 +3,8 @@
 
 -include("include/popcorn.hrl").
 
--export([unique_id/0,
+-export([node_event_counter/1,
+         unique_id/0,
          hour/0,
          retention_time_to_microsec/1,
          last_24_hours/0,
@@ -14,6 +15,10 @@
          format_log_message/1,
          opt/2,
          head_includes/0]).
+
+node_event_counter(Node_Name) ->
+    Prefix = <<"node_events__">>,
+    <<Prefix/binary, Node_Name/binary>>.
 
 unique_id() -> {_, S} = flake_server:id(62),
                list_to_binary(S).
@@ -69,8 +74,14 @@ opt(<<>>, Default)      -> Default;
 opt(undefined, Default) -> Default;
 opt(Value, _)           -> Value.
 
+apply_links([], In) -> In;
+apply_links(Identities, In) ->
+    Identity = lists:nth(1, Identities),
+    Out = re:replace(binary_to_list(In), "@" ++ Identity, "<a href=\"#\">@" ++ Identity ++ "</a>", [global, {return, list}]),
+    apply_links(lists:nthtail(1, Identities), list_to_binary(Out)).
+
 format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_function=Function, log_line=Line, log_pid=Pid,
-                                severity=Severity, message=Message, hashtags=Hashtags, mentions=Mentions, log_product=Product,
+                                severity=Severity, message=Message, topics=Topics, identities=Identities, log_product=Product,
                                 log_version=Version}) ->
   UTC_Timestamp = calendar:now_to_universal_time({Timestamp div 1000000000000, 
                                                   Timestamp div 1000000 rem 1000000,
@@ -85,11 +96,15 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
                        "<label class='checkbox popover-label'><input type='checkbox'>Function: " ++ binary_to_list(opt(Function, <<"Not set">>)) ++ "</label>" ++
                        "<label class='checkbox popover-label'><input type='checkbox'>Line: " ++ binary_to_list(opt(Line, <<"?">>)) ++ " in " ++ binary_to_list(opt(Module, <<"not set">>)) ++ "</label>" ++
                        "<label class='checkbox popover-label'><input type='checkbox'>Pid: " ++ binary_to_list(opt(Pid, <<"Not set">>)) ++ "</label>" ++
-                       lists:append(["<label class='checkbox popover-label'><input type='checkbox'>@" ++ Mention ++ "</label>" || Mention <- Mentions]) ++
-                       lists:append(["<label class='checkbox popover-label'><input type='checkbox'>#" ++ Hashtag ++ "</label>" || Hashtag <- Hashtags]) ++ 
+                       lists:append(["<label class='checkbox popover-label'><input type='checkbox'>@" ++ Identity ++ "</label>" || Identity <- Identities]) ++
+                       lists:append(["<label class='checkbox popover-label'><input type='checkbox'>#" ++ Topic ++ "</label>" || Topic <- Topics]) ++ 
                        "<br /><button class='btn btn-mini' type='button'>Apply Filter</button>",
 
+  Linked_Message = apply_links(Identities, Message),
+
   [{'timestamp',        Timestamp},
+   {'topics',           {array, Topics}},
+   {'identities',       {array, Identities}},
    {'time',             Formatted_Time},
    {'datetime',         Formatted_DateTime},
    {'find_more_html',   Find_More_Html},
@@ -100,7 +115,7 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
    {'log_line',         binary_to_list(opt(Line, <<"??">>))},
    {'log_pid',          binary_to_list(opt(Pid, <<"?">>))},
    {'message_severity', binary_to_list(popcorn_util:number_to_severity(Severity))},
-   {'message',          binary_to_list(Message)}].
+   {'message',          binary_to_list(Linked_Message)}].
 
 css_file() ->
     case file:read_file_info(code:priv_dir(popcorn) ++ "/css/popcorn.css") of
