@@ -28,7 +28,7 @@ setup() ->
         [lists:nth(random:uniform(length(AllowedChars)), AllowedChars)] ++ Acc
        end, [], lists:seq(1, 12)),
 
-    Popcorn_Node = #popcorn_node{node_name = list_to_binary(Random_Node_Name),
+    Popcorn_Node = #popcorn_node{node_name = list_to_binary("Test_" ++ Random_Node_Name ++ "@local"),
                                  role      = <<"Test">>,
                                  version   = <<"1.0.0">>},
 
