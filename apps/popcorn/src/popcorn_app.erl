@@ -102,9 +102,11 @@ init([]) ->
     io:format(" done!\n"),
 
     Children = [
-                  {popcorn_server, {popcorn_server, start_link, []}, permanent, 5000, worker, [popcorn_server]},
-                  {popcorn_udp,    {popcorn_udp,    start_link, []}, permanent, 5000, worker, [popcorn_udp]},
-                  {triage_handler, {triage_handler, start_link, []}, permanent, 5000, worker, [triage_handler]},
+                  {popcorn_server,    {popcorn_server,    start_link, []}, permanent, 5000, worker, [popcorn_server]},
+                  {popcorn_udp,       {popcorn_udp,       start_link, []}, permanent, 5000, worker, [popcorn_udp]},
+                  {triage_handler,    {triage_handler,    start_link, []}, permanent, 5000, worker, [triage_handler]},
+
+                  {outbound_notifier, {outbound_notifier, start_sup,  []}, permanent, 5000, worker, [outbound_notifier]},
 
                   {history_optimizer, {history_optimizer, start_link, []}, permanent, 5000, worker, []},
 
