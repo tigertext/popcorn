@@ -64,10 +64,7 @@ init([]) ->
 'LOGGING'({log_message, Popcorn_Node, Log_Message}, State) ->
     try
         %% log the message
-        case mnesia:dirty_write(popcorn_history, Log_Message) of
-            ok -> ok;
-            O  -> ?POPCORN_WARN_MSG("failed to write log entry because: ~p", [O])
-        end,
+        mnesia:dirty_write(popcorn_history, Log_Message) =:= ok orelse ?POPCORN_ERROR_MSG("failed to write log entry"),
 
         %% increment the total event counter
         mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_EVENT_COUNTER, 1),
