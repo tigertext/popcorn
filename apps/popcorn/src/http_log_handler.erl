@@ -125,7 +125,7 @@ handle_path(<<"GET">>, [<<"log">>], Req, State) ->
                  Context = dict:from_list([{stream_id,       binary_to_list(Log_Stream#stream.stream_id)},
                                           {default_filters, dict:from_list(Default_Filters)}]),
 
-                 TFun        = mustache:compile(view_log),
+                 TFun        = pcache:get(rendered_templates, view_log),
                  Output      = mustache:render(view_log, TFun, Context),
                  {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
                  {ok, Reply, State}
