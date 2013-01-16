@@ -80,11 +80,11 @@
                     </div>
                     <div class="span2">
                         <div class="kpi">{{hashtag_count}}</div>
-                        <div><small>#hashtags</small></div>
+                        <div><small>#topics</small></div>
                     </div>
                     <div class="span2">
                         <div class="kpi">{{mention_count}}</div>
-                        <div><small>@mentions</small></div>
+                        <div><small>@identities</small></div>
                     </div>
                     <div class="span2">
                         <div id="alert_count_today" class="kpi">{{alert_count_today}}</div>
@@ -111,7 +111,7 @@
                         <tr id="{{location}}">
                           <td><a href="/alert/{{location}}" class='btn btn-mini btn-details'>...</a></td>
                           <td><a href="#" class="btn btn-mini btn-clear">Clear</a></td>
-                          <td>{{name}} line {{line}}<br/>{{message}}</td>
+                          <td style="max-width:600px;">{{name}} line {{line}}<br/>{{message}}</td>
                           <td><span class="recent">{{recent}}</span> recent / <span class="seen">{{count}}</span> seen</td>
                           <td align="right">{{product}} {{version}}</td>
                         </tr>
@@ -135,8 +135,8 @@
                         <th>Event Count</th>
                         <th>% All Events</th>
                         <th>Alerts</th>
-                        <th>#hashtags</th>
-                        <th>@mentions</th>
+                        <th>#topics</th>
+                        <th>@identities</th>
                       </tr>
                     </thead>
                     <tbody>

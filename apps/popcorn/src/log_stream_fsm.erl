@@ -64,6 +64,9 @@ init([]) ->
     Stream3 = Stream2#stream{client_pid = Pid},
     ets:insert(current_log_streams, Stream3),
 
+    %% let the log_stream_manager know of this pid
+    log_stream_manager:add_stream_pid(self()),
+
     %% when the client pid changes, it's a reconnect or initial connection, so 
     %% we send some log lines down
     Stream3#stream.client_pid ! clear_log,
@@ -190,6 +193,9 @@ handle_sync_event(is_paused, _From, State_Name, State) ->
 handle_sync_event(Event, _From, StateName, State)     -> {stop, {StateName, undefined_event, Event}, State}.
 handle_info(_Info, StateName, State)                  -> {next_state, StateName, State}.
 terminate(_Reason, _StateName, State)                 ->
+    %% let the log_stream_manager remove this pid
+    log_stream_manager:del_stream_pid(self()),
+
     Stream_Id = (State#state.stream)#stream.stream_id,
     1 = ets:select_delete(current_log_streams, ets:fun2ms(fun(#stream{stream_id = SID}) when SID =:= Stream_Id -> true end)),
     ok.
