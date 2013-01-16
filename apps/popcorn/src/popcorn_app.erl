@@ -108,7 +108,8 @@ init([]) ->
 
                   {outbound_notifier, {outbound_notifier, start_sup,  []}, permanent, 5000, worker, [outbound_notifier]},
 
-                  {history_optimizer, {history_optimizer, start_link, []}, permanent, 5000, worker, []},
+                  {history_optimizer,   {history_optimizer,   start_link, []}, permanent, 5000, worker, []},
+                  {log_stream_manager,  {log_stream_manager,  start_link, []}, permanent, 5000, worker, []},
 
                   {connected_user_sup,   {supervisor, start_link, [{local, connected_user_sup},   ?MODULE, [connected_user_fsm]]},   permanent, infinity, supervisor, []},
                   {node_sup,             {supervisor, start_link, [{local, node_sup},             ?MODULE, [node_fsm]]},             permanent, infinity, supervisor, []},

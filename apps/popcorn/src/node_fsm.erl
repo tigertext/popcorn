@@ -64,7 +64,7 @@ init([]) ->
 'LOGGING'({log_message, Popcorn_Node, Log_Message}, State) ->
     try
         %% log the message
-        mnesia:dirty_write(popcorn_history, Log_Message) =:= ok orelse ?POPCORN_ERROR_MSG("failed to write log entry"),
+        ok = mnesia:dirty_write(popcorn_history, Log_Message),
 
         %% increment the total event counter
         mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_EVENT_COUNTER, 1),
@@ -73,10 +73,7 @@ init([]) ->
         mnesia:dirty_update_counter(popcorn_counters, ?NODE_EVENT_COUNTER(Popcorn_Node#popcorn_node.node_name), 1),
 
         %% Notify any streams connected
-        Log_Streams = ets:tab2list(current_log_streams),
-        lists:foreach(fun(Log_Stream) ->
-            gen_fsm:send_all_state_event(Log_Stream#stream.stream_pid, {new_message, newer, Log_Message})
-          end, Log_Streams)
+        log_stream_manager:new_log_message(Log_Message)
     catch
         _:Error ->
             io:format("Couldn't log message:~nMessage: ~p~nNode: ~p~nError: ~p~nStack: ~p~n",
