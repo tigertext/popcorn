@@ -60,7 +60,7 @@ delete_recent_log_line(Severity_Num, Oldest_Ts, Last_Key_Checked) ->
                                         _ ->
                                             ok
                                     end,
-                                    mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_EVENT_COUNTER, -1),
+                                    system_counters:decrement(total_event_counter, 1),
                                     delete_recent_log_line(Severity_Num, Oldest_Ts, Key);
                                 {Severity_Num, _} ->
                                     %% stop iterating
