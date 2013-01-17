@@ -35,6 +35,8 @@
 -author('marc.e.campbell@gmail.com').
 -behavior(gen_fsm).
 
+-define(COUNTER_WRITE_TIMER, 5000).
+
 -include("include/popcorn.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
 
@@ -52,14 +54,17 @@
     'LOGGING'/3]).
 
 -record(state, {most_recent_version   :: string(),
-                popcorn_node          :: #popcorn_node{}}).
+                popcorn_node          :: #popcorn_node{},
+                event_counter         :: number()}).
 
 start_link() -> gen_fsm:start_link(?MODULE, [], []).
 
 init([]) ->
     process_flag(trap_exit, true),
 
-    {ok, 'LOGGING', #state{}}.
+    erlang:send_after(?COUNTER_WRITE_TIMER, self(), write_counter),
+
+    {ok, 'LOGGING', #state{event_counter = 0}}.
 
 'LOGGING'({log_message, Popcorn_Node, Log_Message}, State) ->
     try
@@ -69,9 +74,6 @@ init([]) ->
         %% increment the total event counter
         mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_EVENT_COUNTER, 1),
 
-        %% increment the node event counter
-        mnesia:dirty_update_counter(popcorn_counters, ?NODE_EVENT_COUNTER(Popcorn_Node#popcorn_node.node_name), 1),
-
         %% Notify any streams connected
         log_stream_manager:new_log_message(Log_Message)
     catch
@@ -79,7 +81,7 @@ init([]) ->
             io:format("Couldn't log message:~nMessage: ~p~nNode: ~p~nError: ~p~nStack: ~p~n",
                         [Log_Message, Popcorn_Node, Error, erlang:get_stacktrace()])
     end,
-    {next_state, 'LOGGING', State}.
+    {next_state, 'LOGGING', State#state{event_counter = State#state.event_counter + 1}}.
 
 'LOGGING'({deserialize_popcorn_node, Popcorn_Node}, _From, State) ->
     Node_Name        = Popcorn_Node#popcorn_node.node_name,
@@ -103,8 +105,19 @@ init([]) ->
 
     {reply, ok, 'LOGGING', State#state{popcorn_node          = Popcorn_Node}}.
 
+handle_event(decrement_counter, State_Name, State) ->
+    {next_state, State_Name, State#state{event_counter = State#state.event_counter - 1}};
+
 handle_event(Event, StateName, State)                 -> {stop, {StateName, undefined_event, Event}, State}.
 handle_sync_event(Event, _From, StateName, State)     -> {stop, {StateName, undefined_event, Event}, State}.
+
+handle_info(write_counter, State_Name, State) ->
+    Popcorn_Node = State#state.popcorn_node,
+    mnesia:dirty_update_counter(popcorn_counters, ?NODE_EVENT_COUNTER(Popcorn_Node#popcorn_node.node_name), State#state.event_counter),
+    erlang:send_after(?COUNTER_WRITE_TIMER, self(), write_counter),
+
+    {next_state, State_Name, State#state{event_counter = 0}};
+
 handle_info(_Info, StateName, State)                  -> {next_state, StateName, State}.
 terminate(_Reason, _StateName, State)                 -> ok.
 code_change(_OldVsn, StateName, StateData, _Extra)    -> {ok, StateName, StateData}.

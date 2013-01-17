@@ -28,7 +28,7 @@
 
 -include("include/popcorn.hrl").
 
--define(SEVERITY_RETENTION_TIMER, 6000).   %% One minute
+-define(SEVERITY_RETENTION_TIMER, 60000).   %% One minute
 
 -export([start_link/0]).
 
@@ -53,7 +53,13 @@ delete_recent_log_line(Severity_Num, Oldest_Ts, Last_Key_Checked) ->
                                 {Severity_Num, TS} when TS < Oldest_Ts ->
                                     %% purge this and iterate
                                     mnesia:dirty_delete(popcorn_history, Log_Message#log_message.message_id),
-                                    mnesia:dirty_update_counter(popcorn_counters, ?NODE_EVENT_COUNTER(Log_Message#log_message.log_nodename), -1),
+                                    case ets:lookup(current_nodes, Log_Message#log_message.log_nodename) of
+                                        Node_Pids when length(Node_Pids) =:= 1 ->
+                                            {_, Node_Pid} = lists:nth(1, Node_Pids),
+                                            gen_fsm:send_all_state_event(Node_Pid, decrement_counter);
+                                        _ ->
+                                            ok
+                                    end,
                                     mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_EVENT_COUNTER, -1),
                                     delete_recent_log_line(Severity_Num, Oldest_Ts, Key);
                                 {Severity_Num, _} ->
