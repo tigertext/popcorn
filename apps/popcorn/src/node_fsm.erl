@@ -35,7 +35,7 @@
 -author('marc.e.campbell@gmail.com').
 -behavior(gen_fsm).
 
--define(COUNTER_WRITE_TIMER, 5000).
+-define(COUNTER_WRITE_INTERVAL, 5000).
 
 -include("include/popcorn.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
@@ -62,7 +62,7 @@ start_link() -> gen_fsm:start_link(?MODULE, [], []).
 init([]) ->
     process_flag(trap_exit, true),
 
-    erlang:send_after(?COUNTER_WRITE_TIMER, self(), write_counter),
+    erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
 
     {ok, 'LOGGING', #state{event_counter = 0}}.
 
@@ -72,7 +72,7 @@ init([]) ->
         ok = mnesia:dirty_write(popcorn_history, Log_Message),
 
         %% increment the total event counter
-        mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_EVENT_COUNTER, 1),
+        system_counters:increment(total_event_counter, 1),
 
         %% Notify any streams connected
         log_stream_manager:new_log_message(Log_Message)
@@ -114,7 +114,7 @@ handle_sync_event(Event, _From, StateName, State)     -> {stop, {StateName, unde
 handle_info(write_counter, State_Name, State) ->
     Popcorn_Node = State#state.popcorn_node,
     mnesia:dirty_update_counter(popcorn_counters, ?NODE_EVENT_COUNTER(Popcorn_Node#popcorn_node.node_name), State#state.event_counter),
-    erlang:send_after(?COUNTER_WRITE_TIMER, self(), write_counter),
+    erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
 
     {next_state, State_Name, State#state{event_counter = 0}};
 

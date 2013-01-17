@@ -30,8 +30,12 @@ node_count() -> ets:info(current_nodes, size).
 
 -spec event_count() -> integer().
 event_count() ->
-    [{popcorn_counters, _, Total_Message_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_EVENT_COUNTER),
-    Total_Message_Count.
+    Event_Count = 
+      case mnesia:dirty_read(popcorn_counters, ?TOTAL_EVENT_COUNTER) of
+          [{popcorn_counters, _, Total_Message_Count}] -> Total_Message_Count;
+          [] -> 0
+      end,
+    Event_Count.
 
 -spec hashtag_count() -> integer().
 hashtag_count() -> 0.
@@ -49,16 +53,20 @@ alerts() -> [dict:from_list(Alert) || Alert <- triage_handler:recent_alerts(aler
 
 -spec known_nodes() -> list().
 known_nodes() ->
-    [{popcorn_counters, _, Total_Message_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_EVENT_COUNTER),
+    Total_Message_Count = event_count(),
     lists:map(fun({Node, Pid}) ->
-        [{popcorn_counters, _, Node_Message_Count}] = mnesia:dirty_read(popcorn_counters, ?NODE_EVENT_COUNTER(Node)),
+        Node_Event_Count = 
+          case mnesia:dirty_read(popcorn_counters, ?NODE_EVENT_COUNTER(Node)) of
+              [{popcorn_counters, _, Node_Message_Count}] -> Node_Message_Count;
+              [] -> 0
+          end,
         Node_List       = binary_to_list(Node),
         Node_Properties = [{'node_name',             Node_List},
                            {'node_hash',             re:replace(base64:encode(Node), "=", "_", [{return, list}, global])},
-                           {'total_messages',        Node_Message_Count},
+                           {'total_messages',        Node_Event_Count},
                            {'percent_of_all_events', case Total_Message_Count of
                                                         0 -> 0;
-                                                        _ -> ?PERCENT(Node_Message_Count / Total_Message_Count)
+                                                        _ -> ?PERCENT(Node_Event_Count / Total_Message_Count)
                                                      end},
                            {'alert_count',           0},
                            {'hashtag_count',         0},
