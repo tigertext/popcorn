@@ -158,7 +158,7 @@ handle_cast(Event, State) ->
 handle_info(update_counters, State) ->
     lists:foreach(
         fun({_, undefined}) -> ok;
-           ({Node_Name, Node_Pid}) ->
+           ({Node_Name, _Node_Pid}) ->
             NodeCounters =
                 [{node_hash,  re:replace(base64:encode(Node_Name), "=", "_", [{return, binary}, global])},
                  {node_count, mnesia:dirty_update_counter(popcorn_counters, ?NODE_EVENT_COUNTER(Node_Name), 0)}],
@@ -190,7 +190,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
+update_counter(Node, _Node_Pid, Product, Version, Module, Line) ->
     Count_Key           = key(Product,Version,Module,Line),
     Recent_Counter_Key  = recent_key(Count_Key),
     Day_Key             = day_key(),

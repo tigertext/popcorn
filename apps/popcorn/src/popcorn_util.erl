@@ -14,7 +14,9 @@
          random_id/0,
          format_log_message/1,
          opt/2,
-         head_includes/0]).
+         head_includes/0,
+         hexstring/1,
+         read/1]).
 
 node_event_counter(Node_Name) ->
     Prefix = <<"node_events__">>,
@@ -131,4 +133,12 @@ head_includes() ->
         dict:from_list([{'tag', Include}])
       end, Head_Includes).
 
+%% For testing
+read(Filename) ->
+    case file:read_file(Filename) of
+        {ok, Binary} -> Binary;
+        {error, _}   -> <<"">>
+    end.
 
+hexstring(<<X:128/big-unsigned-integer>>) ->
+    lists:flatten(io_lib:format("~32.16.0b", [X])).

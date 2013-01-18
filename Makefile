@@ -47,6 +47,9 @@ dialyze_plt: all
 css: popcorn.css
 popcorn.css: apps/popcorn/priv/css/popcorn.less
 	/usr/local/bin/lessc apps/popcorn/priv/css/popcorn.less > apps/popcorn/priv/css/popcorn.css
+
+templates:
+	cp apps/popcorn/priv/templates/*.mustache apps/popcorn/ebin
 	
 types:
 	typer --plt .dialyzer-R15B01.plt -r apps/popcorn/src -I apps/popcorn/include -I apps/popcorn -pa deps/*/ebin --annotate

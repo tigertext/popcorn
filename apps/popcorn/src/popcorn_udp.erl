@@ -109,6 +109,9 @@ decode_protobuffs_message(Encoded_Message) ->
                                  role      = check_undefined(Node_Role),
                                  version   = check_undefined(Node_Version)},
 
+    %% Ensure we have a module and line so we can perform rollup
+    {Module2, Line2} = location_check(Module, Line, Message),
+
     Log_Message  = #log_message{message_id   = ?PU:unique_id(),
                                 timestamp    = ?NOW,     %% this should be part of the protobuffs packet?
                                 severity     = check_undefined(Severity),
@@ -118,12 +121,22 @@ decode_protobuffs_message(Encoded_Message) ->
                                 log_nodename = Popcorn_Node#popcorn_node.node_name,
                                 log_product  = Popcorn_Node#popcorn_node.role,
                                 log_version  = Popcorn_Node#popcorn_node.version,
-                                log_module   = check_undefined(Module),
+                                log_module   = check_undefined(Module2),
                                 log_function = check_undefined(Function),
-                                log_line     = check_undefined(Line),
+                                log_line     = check_undefined(Line2),
                                 log_pid      = check_undefined(Pid)},
 
     {Popcorn_Node, Log_Message}.
 
 check_undefined(<<>>) -> undefined;
 check_undefined(Value) -> Value.
+
+%% If no module/line numbers are passed generate one on the fly
+location_check(<<>>, _, Message) ->
+    Message2 = re:replace(Message, "\"[^\"]*\"", "", [{return,binary}, global]),
+    Message3 = re:replace(Message2, "'[^']*'", "", [{return,binary}, global]),
+    Message4 = re:replace(Message3, "<[^>]*>'", "", [{return,binary}, global]),
+    Message5 = re:replace(Message4, "[0-9]*", "", [{return,binary}, global]),
+    Alt_Module = list_to_binary(popcorn_util:hexstring(erlang:md5(Message5))),
+    {Alt_Module, <<"1">>};
+location_check(Module, Line, _) -> {Module, Line}.
