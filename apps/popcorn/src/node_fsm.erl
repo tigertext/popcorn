@@ -68,8 +68,10 @@ init([]) ->
 
 'LOGGING'({log_message, Popcorn_Node, Log_Message}, State) ->
     try
+        Pid = pg2:get_closest_pid('storage'),
+
         %% log the message
-        ok = mnesia:dirty_write(popcorn_history, Log_Message),
+        gen_server:cast(Pid, {new_log_message, Log_Message}),
 
         %% increment the total event counter
         system_counters:increment(total_event_counter, 1),

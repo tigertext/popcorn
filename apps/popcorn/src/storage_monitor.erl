@@ -16,23 +16,22 @@
 
 
 %%%-------------------------------------------------------------------
-%%% File:      system_counters.erl
+%%% File:      storage_monitor.erl
 %%% @author    Marc Campbell <marc.e.campbell@gmail.com>
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------
 
--module(system_counters).
+-module(storage_monitor).
 -author('marc.e.campbell@gmail.com').
 -behavior(gen_server).
 
 -include("include/popcorn.hrl").
 
--define(COUNTER_WRITE_INTERVAL, 5000).
+-define(WORKER_HEALTH_INTERVAL, 10000).
 
 -export([start_link/0,
-         increment/2,
-         decrement/2]).
+         start_workers/0]).
 
 -export([init/1,
          handle_call/3,
@@ -41,37 +40,40 @@
          terminate/2,
          code_change/3]).
 
--record(state, {total_event_counter :: number()}).
 
 start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
-increment(Which_Counter, Increment_By) -> gen_server:cast(?MODULE, {increment, Which_Counter, Increment_By}).
-decrement(Which_Counter, Decrement_By) -> gen_server:cast(?MODULE, {decrement, Which_Counter, Decrement_By}).
+start_workers() -> gen_server:cast(?MODULE, start_workers).
 
 init([]) ->
     process_flag(trap_exit, true),
 
-    ?POPCORN_DEBUG_MSG("#system_counters starting"),
+    ?POPCORN_DEBUG_MSG("#storage_monitor starting"),
+    pg2:create('storage'),
 
-    erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
+    erlang:send_after(?WORKER_HEALTH_INTERVAL, self(), check_worker_health),
 
-    {ok, #state{total_event_counter = 0}}.
+    {ok, 'not_ready'}.
 
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
 
-handle_cast({increment, total_event_counter, V}, State) ->
-    {noreply, State#state{total_event_counter = State#state.total_event_counter + V}};
-handle_cast({decrement, total_event_counter, V}, State) ->
-    {noreply, State#state{total_event_counter = State#state.total_event_counter - V}};
+handle_cast(start_workers, 'not_ready') ->
+    ?POPCORN_DEBUG_MSG("Starting storage workers..."),
+    {ok, Storage_Options} = application:get_env(popcorn, storage),
+    Worker_Count = proplists:get_value(worker_count, Storage_Options),
+    [{ok, Pid} = supervisor:start_child(storage_sup, []) || _ <- lists:seq(1, Worker_Count)],
+    ?POPCORN_DEBUG_MSG("Created ~p storage worker(s)", [Worker_Count]),
+
+    %% pick one of the started workers and have it from the init phase
+    ok = gen_server:call(pg2:get_closest_pid('storage'), start_phase),
+
+    {noreply, 'ready'};
 
 handle_cast(_Msg, State)            -> {noreply, State}.
 
-handle_info(write_counter, State) ->
-    Pid = pg2:get_closest_pid('storage'),
-    gen_server:cast(Pid, {increment_counter, ?TOTAL_EVENT_COUNTER, State#state.total_event_counter}),
-
-    erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
-
-    {noreply, State#state{total_event_counter = 0}};
+handle_info(check_worker_health, State) ->
+    Num_Workers = length(pg2:get_local_members('storage')),
+    erlang:send_after(?WORKER_HEALTH_INTERVAL, self(), check_worker_health),
+    {noreply, State};
 
 handle_info(_Msg, State)            -> {noreply, State}.
 terminate(_Reason, _State)          -> ok.
