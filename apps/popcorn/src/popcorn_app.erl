@@ -21,6 +21,9 @@ start(_StartType, _StartArgs) -> supervisor:start_link({local, ?MODULE}, ?MODULE
 stop(_State) -> ok.
 
 start_phase(deserialize_mnesia, _Start_Type, _Phase_Args) ->
+    gen_info:start_link(),
+    rps_sup:start_link([ [{name, mnesia}, {module, gen_info}, {time, 5000}, {send, stats}] ]),
+
     io:format("Reloading previously known nodes...\n"),
     lists:foreach(fun(Known_Node) ->
         io:format("Node: ~s\n", [binary_to_list(Known_Node)]),

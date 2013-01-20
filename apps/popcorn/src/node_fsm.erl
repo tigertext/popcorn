@@ -69,6 +69,7 @@ init([]) ->
 'LOGGING'({log_message, Popcorn_Node, Log_Message}, State) ->
     try
         %% log the message
+        rps:incr(mnesia),
         ok = mnesia:dirty_write(popcorn_history, Log_Message),
 
         %% increment the total event counter
