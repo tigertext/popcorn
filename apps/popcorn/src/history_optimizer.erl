@@ -39,38 +39,6 @@
          terminate/2,
          code_change/3]).
 
-delete_recent_log_line(_, '$end_of_table', _) -> ok;
-delete_recent_log_line(Severity_Num, Oldest_Ts, Last_Key_Checked) ->
-    Key = case Last_Key_Checked of
-              undefined -> mnesia:dirty_last(popcorn_history);
-              _         -> mnesia:dirty_prev(popcorn_history, Last_Key_Checked)
-          end,
-
-    case Key of
-        '$end_of_table' -> ok;
-        _               -> Log_Message = lists:nth(1, mnesia:dirty_read(popcorn_history, Key)),
-                           case {Log_Message#log_message.severity, Log_Message#log_message.timestamp} of
-                                {Severity_Num, TS} when TS < Oldest_Ts ->
-                                    %% purge this and iterate
-                                    mnesia:dirty_delete(popcorn_history, Log_Message#log_message.message_id),
-                                    case ets:lookup(current_nodes, Log_Message#log_message.log_nodename) of
-                                        Node_Pids when length(Node_Pids) =:= 1 ->
-                                            {_, Node_Pid} = lists:nth(1, Node_Pids),
-                                            gen_fsm:send_all_state_event(Node_Pid, decrement_counter);
-                                        _ ->
-                                            ok
-                                    end,
-                                    system_counters:decrement(total_event_counter, 1),
-                                    delete_recent_log_line(Severity_Num, Oldest_Ts, Key);
-                                {Severity_Num, _} ->
-                                    %% stop iterating
-                                    ok;
-                                _ ->
-                                    %% keep iterating
-                                    delete_recent_log_line(Severity_Num, Oldest_Ts, Key)
-                           end
-    end.
-
 start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init([]) ->
@@ -94,7 +62,7 @@ handle_info(severity_retention_expire, State) ->
         Microseconds = popcorn_util:retention_time_to_microsec(Retention_Interval),
         Oldest_TS    = ?NOW - Microseconds,
         Severity_Num = popcorn_util:severity_to_number(Severity),
-        delete_recent_log_line(Severity_Num, Oldest_TS, undefined)
+        gen_server:cast(?STORAGE_PID, {expire_logs_matching, Severity_Num, Oldest_TS})
       end, Retentions),
 
     erlang:send_after(?SEVERITY_RETENTION_TIMER, self(), severity_retention_expire),

@@ -108,20 +108,7 @@ handle_call({messages, Product, Version, Module, Line, Starting_Timestamp, Page_
     V = list_to_binary(Version),
     M = list_to_binary(Module),
     L = list_to_binary(Line),
-    Messages =
-        case mnesia:transaction(
-                fun() ->
-                    mnesia:select(
-                        popcorn_history,
-                        ets:fun2ms(
-                            fun(#log_message{timestamp = TS, log_product = LP, log_version = LV, log_module = LM, log_line = LL} = Log_Message)
-                                when LP == P, LV == V, LM == M, LL == L, (Starting_Timestamp == undefined orelse TS > Starting_Timestamp) -> Log_Message end),
-                        Page_Size,
-                        read)
-                end) of
-            {atomic, {Ms, _}} -> Ms;
-            {atomic, '$end_of_table'} -> []
-        end,
+    Messages = gen_server:call(?STORAGE_PID, {search_messages, {P, V, M, L, Page_Size, Starting_Timestamp}}),
     {reply, Messages, State};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
@@ -193,18 +180,18 @@ update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
     true = ets:insert(triage_error_keys, {key, Count_Key}),
     true = ets:insert(triage_error_keys, {key, Day_Key}),
 
-    case mnesia:dirty_update_counter(popcorn_counters, Count_Key, 0) of
-        0 -> mnesia:dirty_update_counter(popcorn_counters, Day_Key, 1);
+    case ?COUNTER_VALUE(Count_Key) of
+        0 -> ?INCREMENT_COUNTER(Day_Key);
         _ -> ok
     end,
 
-    mnesia:dirty_update_counter(popcorn_counters, Count_Key, 1),
-    Recent_Value = mnesia:dirty_update_counter(popcorn_counters, Recent_Counter_Key, 1),
+    ?INCREMENT_COUNTER(Count_Key),
+    ?INCREMENT_COUNTER(Recent_Counter_Key),
 
-    case Recent_Value of
+    case ?COUNTER_VALUE(Recent_Counter_Key) of
         1 ->
             outbound_notifier:notify(new_alert, do_decode_location(Count_Key)),
-            mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_ALERT_COUNTER, 1);
+            ?INCREMENT_COUNTER(?TOTAL_ALERT_COUNTER);
         _ -> ok
     end,
 

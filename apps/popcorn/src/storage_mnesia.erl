@@ -106,7 +106,28 @@ handle_call({is_known_node, Node_Name}, _From, State) ->
      mnesia:dirty_read(known_nodes, Node_Name) =/= [],
      State};
 
+handle_call({search_messages, {P, V, M, L, Page_Size, Starting_Timestamp}}, _From, State) ->
+    Messages =
+      case mnesia:transaction(
+                fun() ->
+                    mnesia:select(
+                        popcorn_history,
+                        ets:fun2ms(
+                            fun(#log_message{timestamp = TS, log_product = LP, log_version = LV, log_module = LM, log_line = LL} = Log_Message)
+                                when LP == P, LV == V, LM == M, LL == L, (Starting_Timestamp == undefined orelse TS > Starting_Timestamp) -> Log_Message end),
+                        Page_Size,
+                        read)
+                end) of
+            {atomic, {Ms, _}} -> Ms;
+            {atomic, '$end_of_table'} -> []
+        end,
+    {reply, Messages, State};
+
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
+
+handle_cast({expire_logs_matching, Severity, Timestamp}, State) ->
+    delete_recent_log_line(Severity, Timestamp, undefined),
+    {noreply, State};
 
 handle_cast({send_recent_matching_log_lines, Pid, Count, Filters}, State) ->
     send_recent_log_line(Pid, Count, undefined, Filters),
@@ -151,6 +172,38 @@ send_recent_log_line(Pid, Count, Last_Key_Checked, Filters) ->
                            end
     end.
 
+delete_recent_log_line(_, '$end_of_table', _) -> ok;
+delete_recent_log_line(Severity_Num, Oldest_Ts, Last_Key_Checked) ->
+    Key = case Last_Key_Checked of
+              undefined -> mnesia:dirty_last(popcorn_history);
+              _         -> mnesia:dirty_prev(popcorn_history, Last_Key_Checked)
+          end,
+
+    case Key of
+        '$end_of_table' -> ok;
+        _               -> Log_Message = lists:nth(1, mnesia:dirty_read(popcorn_history, Key)),
+                           case {Log_Message#log_message.severity, Log_Message#log_message.timestamp} of
+                                {Severity_Num, TS} when TS < Oldest_Ts ->
+                                    %% purge this and iterate
+                                    mnesia:dirty_delete(popcorn_history, Log_Message#log_message.message_id),
+                                    case ets:lookup(current_nodes, Log_Message#log_message.log_nodename) of
+                                        Node_Pids when length(Node_Pids) =:= 1 ->
+                                            {_, Node_Pid} = lists:nth(1, Node_Pids),
+                                            gen_fsm:send_all_state_event(Node_Pid, decrement_counter);
+                                        _ ->
+                                            ok
+                                    end,
+                                    system_counters:decrement(total_event_counter, 1),
+                                    delete_recent_log_line(Severity_Num, Oldest_Ts, Key);
+                                {Severity_Num, _} ->
+                                    %% stop iterating
+                                    ok;
+                                _ ->
+                                    %% keep iterating
+                                    delete_recent_log_line(Severity_Num, Oldest_Ts, Key)
+                           end
+    end.
+
 %%
 %% TODO this is duplicated from log_stream_fsm for now
 %% we need to expose this so that other storage backend developers aren't required to implement
@@ -162,3 +215,5 @@ is_filtered_out(Log_Message, Filters) ->
                       end,
 
     Severity_Restricted orelse Time_Restricted.
+
+
