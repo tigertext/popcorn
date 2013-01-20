@@ -58,6 +58,13 @@ handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
 
 handle_cast(start_workers, 'not_ready') ->
     ?POPCORN_DEBUG_MSG("Starting storage workers..."),
+
+    case popcorn_util:optional_env(track_rps, false) of
+        false -> ok;
+        true  -> gen_info:start_link(),
+                 rps_sup:start_link([ [{name, storage}, {module, gen_info}, {time, 5000}, {send, stats}] ])
+    end,
+
     {ok, Storage_Options} = application:get_env(popcorn, storage),
     Worker_Count = proplists:get_value(worker_count, Storage_Options),
     [{ok, Pid} = supervisor:start_child(storage_sup, []) || _ <- lists:seq(1, Worker_Count)],
