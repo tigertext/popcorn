@@ -29,24 +29,6 @@
 
 start_link() -> gen_fsm:start_link(?MODULE, [], []).
 
-send_recent_log_line(0, _, _) -> ok;
-send_recent_log_line(_, '$end_of_table', _) -> ok;
-send_recent_log_line(Count, Last_Key_Checked, Stream) ->
-    Key = case Last_Key_Checked of
-              undefined -> mnesia:dirty_last(popcorn_history);
-              _         -> mnesia:dirty_prev(popcorn_history, Last_Key_Checked)
-          end,
-
-    case Key of
-        '$end_of_table' -> ok;
-        _               -> Log_Message = lists:nth(1, mnesia:dirty_read(popcorn_history, Key)),
-                           case is_filtered_out(Log_Message, Stream#stream.max_timestamp, Stream#stream.applied_filters) of
-                               false -> gen_fsm:send_all_state_event(self(), {new_message, older, Log_Message}),
-                                        send_recent_log_line(Count - 1, Key, Stream);
-                               true  -> send_recent_log_line(Count, Key, Stream)
-                           end
-    end.
-
 init([]) ->
     process_flag(trap_exit, true),
 
@@ -92,7 +74,8 @@ init([]) ->
     %% send some log lines, based on the current state,
     %% and update the state so we can use timestamps instead of select/4 in a transaction
     Stream = State#state.stream,
-    send_recent_log_line(100, undefined, Stream),
+    Filters = Stream#stream.applied_filters ++ [{'max_timestamp', Stream#stream.max_timestamp}],
+    gen_server:cast(?STORAGE_PID, {send_recent_matching_log_lines, self(), 100, lists:filter(fun({_, V}) -> V =/= undefined end, Filters)}),
     {next_state, 'STREAMING', State};
 
 'STREAMING'(set_time_stream, State) ->

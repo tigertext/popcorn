@@ -101,7 +101,16 @@ handle_call({counter_value, Counter}, _From, State) ->
 
     {reply, Counter_Value, State};
 
+handle_call({is_known_node, Node_Name}, _From, State) ->
+    {reply,
+     mnesia:dirty_read(known_nodes, Node_Name) =/= [],
+     State};
+
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
+
+handle_cast({send_recent_matching_log_lines, Pid, Count, Filters}, State) ->
+    send_recent_log_line(Pid, Count, undefined, Filters),
+    {noreply, State};
 
 handle_cast({new_log_message, Log_Message}, State) ->
     mnesia:dirty_write(popcorn_history, Log_Message),
@@ -115,7 +124,41 @@ handle_cast({increment_counter, Counter, Increment_By}, State) ->
     mnesia:dirty_update_counter(popcorn_counters, Counter, Increment_By),
     {noreply, State};
 
+handle_cast({add_node, Popcorn_Node}, State) ->
+    mnesia:dirty_write(known_nodes, Popcorn_Node),
+    {noreply, State};
+
 handle_cast(_Msg, State)            -> {noreply, State}.
 handle_info(_Msg, State)            -> {noreply, State}.
 terminate(_Reason, _State)          -> ok.
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
+
+send_recent_log_line(_, 0, _, _) -> ok;
+send_recent_log_line(_, _, '$end_of_table', _) -> ok;
+send_recent_log_line(Pid, Count, Last_Key_Checked, Filters) ->
+    Key = case Last_Key_Checked of
+              undefined -> mnesia:dirty_last(popcorn_history);
+              _         -> mnesia:dirty_prev(popcorn_history, Last_Key_Checked)
+          end,
+
+    case Key of
+        '$end_of_table' -> ok;
+        _               -> Log_Message = lists:nth(1, mnesia:dirty_read(popcorn_history, Key)),
+                           case is_filtered_out(Log_Message, Filters) of
+                               false -> gen_fsm:send_all_state_event(Pid, {new_message, older, Log_Message}),
+                                        send_recent_log_line(Pid, Count - 1, Key, Filters);
+                               true  -> send_recent_log_line(Pid, Count, Key, Filters)
+                           end
+    end.
+
+%%
+%% TODO this is duplicated from log_stream_fsm for now
+%% we need to expose this so that other storage backend developers aren't required to implement
+is_filtered_out(Log_Message, Filters) ->
+    Severity_Restricted = not lists:member(Log_Message#log_message.severity, proplists:get_value('severities', Filters, [])),
+    Time_Restricted = case proplists:get_value('max_timestamp', Filters) of
+                          undefined       -> false;
+                          Max_Timestamp   -> Log_Message#log_message.timestamp > Max_Timestamp
+                      end,
+
+    Severity_Restricted orelse Time_Restricted.

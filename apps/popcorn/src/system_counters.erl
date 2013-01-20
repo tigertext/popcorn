@@ -61,11 +61,11 @@ handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
 
 handle_cast({increment, Counter, V}, State) ->
     Current_Value = proplists:get_value(Counter, State#state.counters, 0),
-    Counters = proplists:delete(Counter, State#state.counters) ++ [{Counter, Current_Value + 1}],
+    Counters = proplists:delete(Counter, State#state.counters) ++ [{Counter, Current_Value + V}],
     {noreply, State#state{counters = Counters}};
 handle_cast({decrement, Counter, V}, State) ->
     Current_Value = proplists:get_value(Counter, State#state.counters, 0),
-    Counters = proplists:delete(Counter, State#state.counters) ++ [{Counter, Current_Value - 1}],
+    Counters = proplists:delete(Counter, State#state.counters) ++ [{Counter, Current_Value - V}],
     {noreply, State#state{counters = Counters}};
 
 handle_cast(_Msg, State)            -> {noreply, State}.
