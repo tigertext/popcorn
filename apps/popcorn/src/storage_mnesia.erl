@@ -92,10 +92,23 @@ handle_call(start_phase, _From, State) ->
 
     {reply, ok, State};
 
+handle_call({counter_value, Counter}, _From, State) ->
+    Counter_Value =
+      case mnesia:dirty_read(popcorn_counters, Counter) of
+          [{popcorn_counters, _, V}] -> V;
+          _ -> 0
+      end,
+
+    {reply, Counter_Value, State};
+
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
 
 handle_cast({new_log_message, Log_Message}, State) ->
     mnesia:dirty_write(popcorn_history, Log_Message),
+    {noreply, State};
+
+handle_cast({delete_counter, Counter}, State) ->
+    mnesia:dirty_delete(popcorn_counters, Counter),
     {noreply, State};
 
 handle_cast({increment_counter, Counter, Increment_By}, State) ->

@@ -74,7 +74,7 @@ init([]) ->
         gen_server:cast(Pid, {new_log_message, Log_Message}),
 
         %% increment the total event counter
-        system_counters:increment(total_event_counter, 1),
+        ?INCREMENT_COUNTER_LATER(?TOTAL_EVENT_COUNTER),
 
         %% Notify any streams connected
         log_stream_manager:new_log_message(Log_Message)
@@ -96,9 +96,6 @@ init([]) ->
 'LOGGING'({set_popcorn_node, Popcorn_Node}, _From, State) ->
     mnesia:dirty_write(known_nodes, Popcorn_Node),
 
-    %% create the node counter
-    mnesia:dirty_update_counter(popcorn_counters, ?NODE_EVENT_COUNTER(Popcorn_Node#popcorn_node.node_name), 0),
-
     Node_Name        = Popcorn_Node#popcorn_node.node_name,
     Prefix           = <<"raw_logs__">>,
 
@@ -115,7 +112,7 @@ handle_sync_event(Event, _From, StateName, State)     -> {stop, {StateName, unde
 
 handle_info(write_counter, State_Name, State) ->
     Popcorn_Node = State#state.popcorn_node,
-    mnesia:dirty_update_counter(popcorn_counters, ?NODE_EVENT_COUNTER(Popcorn_Node#popcorn_node.node_name), State#state.event_counter),
+    gen_server:cast(?STORAGE_PID, {increment_counter, ?NODE_EVENT_COUNTER(Popcorn_Node#popcorn_node.node_name), State#state.event_counter),
     erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
 
     {next_state, State_Name, State#state{event_counter = 0}};

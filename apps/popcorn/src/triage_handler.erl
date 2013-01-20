@@ -77,15 +77,11 @@ handle_call({data, Counter}, _From, State) ->
         end,
     {reply, data(V), State};
 handle_call(total_alerts, _From, State) ->
-    [{popcorn_counters, _, Alert_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_ALERT_COUNTER),
+    Alert_Count = ?COUNTER_VALUE(?TOTAL_ALERT_COUNTER),
     {reply, Alert_Count, State};
 handle_call(alerts_for_today, _From, State) ->
     Day_Key = day_key(),
-    Day_Alerts = case mnesia:dirty_read(popcorn_counters, Day_Key) of
-                     None when length(None) =:= 0 -> 0;
-                     [{popcorn_counters, _, V}]   -> V
-                 end,
-
+    Day_Alerts = ?COUNTER_VALUE(Day_Key),
     {reply, Day_Alerts, State};
 handle_call({alerts, Count}, _From, State) ->
     Alerts =
@@ -99,10 +95,9 @@ handle_call({alerts, Count}, _From, State) ->
 handle_call({clear, Counter}, _From, State) ->
     Key = recent_key(Counter),
 
-    mnesia:dirty_delete(popcorn_counters, Key),
-    mnesia:dirty_update_counter(popcorn_counters, Key, 0),
-
-    Total_Alert_Count = mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_ALERT_COUNTER, -1),
+    gen_server:cast(?STORAGE_PID, {delete_counter, Key}),
+    ?DECREMENT_COUNTER(?TOTAL_ALERT_COUNTER),
+    Total_Alert_Count = ?COUNTER_VALUE(?TOTAL_ALERT_COUNTER),
     NewCounters =
         [{counter,      Counter},
          {alert_count,  Total_Alert_Count}],
@@ -161,7 +156,7 @@ handle_info(update_counters, State) ->
            ({Node_Name, Node_Pid}) ->
             NodeCounters =
                 [{node_hash,  re:replace(base64:encode(Node_Name), "=", "_", [{return, binary}, global])},
-                 {node_count, mnesia:dirty_update_counter(popcorn_counters, ?NODE_EVENT_COUNTER(Node_Name), 0)}],
+                  {node_count, ?COUNTER_VALUE(?NODE_EVENT_COUNTER(Node_Name))}],
             dashboard_stream_fsm:broadcast({update_counters, NodeCounters})
         end, ets:tab2list(current_nodes)),
 
@@ -170,10 +165,9 @@ handle_info(update_counters, State) ->
     %% TODO, perhaps this should be optimized
     true = ets:insert(triage_error_keys, {key, Day_Key}),
 
-    Day_Count = mnesia:dirty_update_counter(popcorn_counters, Day_Key, 0),
-
-    [{popcorn_counters, _, Event_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_EVENT_COUNTER),
-    [{popcorn_counters, _, Alert_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_ALERT_COUNTER),
+    Day_Count   = ?COUNTER_VALUE(Day_Key),
+    Event_Count = ?COUNTER_VALUE(?TOTAL_EVENT_COUNTER),
+    Alert_Count = ?COUNTER_VALUE(?TOTAL_ALERT_COUNTER),
 
     NewCounters =
         [{event_count,       Event_Count},
@@ -214,12 +208,14 @@ update_counter(Node, Node_Pid, Product, Version, Module, Line) ->
         _ -> ok
     end,
 
-    [{popcorn_counters, _, Event_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_EVENT_COUNTER),
-    [{popcorn_counters, _, Alert_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_ALERT_COUNTER),
-    [{popcorn_counters, _, Day_Count}]   = mnesia:dirty_read(popcorn_counters, Day_Key),
+    Day_Count         = ?COUNTER_VALUE(Day_Key),
+    Event_Count       = ?COUNTER_VALUE(?TOTAL_EVENT_COUNTER),
+    Alert_Count       = ?COUNTER_VALUE(?TOTAL_ALERT_COUNTER),
+    Node_Event_Count  = ?COUNTER_VALUE(?NODE_EVENT_COUNTER(Node#popcorn_node.node_name)),
+
     NewCounters =
         [   {node_hash,         re:replace(base64:encode(Node#popcorn_node.node_name), "=", "_", [{return, binary}, global])},
-            {node_count,        mnesia:dirty_update_counter(popcorn_counters, ?NODE_EVENT_COUNTER(Node#popcorn_node.node_name), 0)},
+            {node_count,        Node_Event_Count},
             {counter,           Count_Key},
             {event_count,       Event_Count},
             {alert_count_today, Day_Count},
@@ -258,8 +254,8 @@ data(Alert) ->
             _ -> Basic_Properties
         end,
 
-    [{popcorn_counters, _, Location_Count}] = mnesia:dirty_read(popcorn_counters, Alert#alert.location),
-    [{popcorn_counters, _, Recent_Location_Count}] = mnesia:dirty_read(popcorn_counters, recent_key(Alert#alert.location)),
+    Location_Count        = ?COUNTER_VALUE(Alert#alert.location),
+    Recent_Location_Count = ?COUNTER_VALUE(recent_key(Alert#alert.location)),
 
     [{location, re:replace(base64:encode(Alert#alert.location), "=", "_", [{return, list}, global])},
      {count,    Location_Count},
@@ -275,7 +271,7 @@ reverse_limit_and_filter(Alerts, Count) ->
 reverse_limit_and_filter([], _Count, Acc) -> lists:reverse(Acc);
 reverse_limit_and_filter(_Alerts, Count, Acc) when length(Acc) == Count -> lists:reverse(Acc);
 reverse_limit_and_filter([Alert | Alerts], Count, Acc) ->
-    Location_Count = mnesia:dirty_update_counter(popcorn_counters, recent_key(Alert#alert.location), 0),
+    Location_Count = ?COUNTER_VALUE(recent_key(Alert#alert.location)),
 
     reverse_limit_and_filter(
         Alerts, Count,
