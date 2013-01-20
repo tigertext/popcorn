@@ -55,7 +55,8 @@
 
 -record(state, {most_recent_version   :: string(),
                 popcorn_node          :: #popcorn_node{},
-                event_counter         :: number()}).
+                event_counter         :: number(),
+                track_rps             :: boolean()}).
 
 start_link() -> gen_fsm:start_link(?MODULE, [], []).
 
@@ -64,10 +65,16 @@ init([]) ->
 
     erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
 
-    {ok, 'LOGGING', #state{event_counter = 0}}.
+    {ok, 'LOGGING', #state{event_counter = 0,
+                           track_rps     = popcorn_util:optional_env(track_rps, false)}}.
 
 'LOGGING'({log_message, Popcorn_Node, Log_Message}, State) ->
     try
+        case State#state.track_rps of
+            true  -> rps:incr(storage);
+            false -> ok
+        end,
+
         Pid = pg2:get_closest_pid('storage'),
 
         %% log the message

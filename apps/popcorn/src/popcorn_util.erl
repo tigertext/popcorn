@@ -14,7 +14,8 @@
          random_id/0,
          format_log_message/1,
          opt/2,
-         head_includes/0]).
+         head_includes/0,
+         optional_env/2]).
 
 node_event_counter(Node_Name) ->
     Prefix = <<"node_events__">>,
@@ -71,6 +72,12 @@ random_id() ->
                   [lists:nth(random:uniform(length(AllowedChars)), AllowedChars)] ++ Acc
                 end, [], lists:seq(1, Length)),
     list_to_binary(New_Key).
+
+optional_env(Key, Default) ->
+    case application:get_env(popcorn, Key) of
+        undefined -> Default;
+        {ok, Val} -> Val
+    end.
 
 opt(<<>>, Default)      -> Default;
 opt(undefined, Default) -> Default;
