@@ -44,6 +44,7 @@ handle_cast(_Msg, State) ->
 
 
 handle_info({udp, Socket, _Host, _Port, Bin}, State) ->
+    ?RPS_INCREMENT(udp_received),
     {Popcorn_Node, Log_Message} = decode_protobuffs_message(Bin),
 
     rps:incr(udp),
