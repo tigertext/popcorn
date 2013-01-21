@@ -64,9 +64,11 @@ init([]) ->
                             rps_noop -> [];
                             _        -> proplists:get_value(start_dep, Rps_Options)
                         end,
-    Rps_Sup_Params    = [{name, storage}, {module, Rps_Module}, {time, 5000}, {send, stats}],
+    Rps_Sup_Params    = [%%[{name, storage}, {module, Rps_Module}, {time, 1000}, {send, raw}],
+                         [{name, udp},     {module, Rps_Module}, {time, 5000}, {send, raw}]
+                        ],
 
-    Rps_Children      = [{rps_sup, {rps_sup, start_link, [[Rps_Sup_Params]]}, permanent, 5000, worker, []}] ++
+    Rps_Children      = [{rps_sup, {rps_sup, start_link, [Rps_Sup_Params]}, permanent, 5000, worker, []}] ++
                         lists:map(fun({Rps_Dep, Rps_Dep_Params}) ->
                             {Rps_Dep, {Rps_Dep, start_link, [Rps_Dep_Params]}, permanent, 5000, worker, []}
                           end, Rps_Deps),

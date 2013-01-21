@@ -65,11 +65,17 @@ init([]) ->
 
     erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
 
+    {ok, Rps_Options} = case application:get_env(popcorn, rps_tracking) of
+                            undefined ->  {ok, [{enabled, false}]};
+                            Rps_Config -> Rps_Config
+                        end,
+
     {ok, 'LOGGING', #state{event_counter = 0,
-                           track_rps     = popcorn_util:optional_env(track_rps, false)}}.
+                           track_rps     = proplists:get_value(enabled, Rps_Options)}}.
 
 'LOGGING'({log_message, Popcorn_Node, Log_Message}, State) ->
     try
+        %%?POPCORN_DEBUG_MSG("State#state.track_rps = ~p", [State#state.track_rps]),
         case State#state.track_rps of
             true  -> rps:incr(storage);
             false -> ok

@@ -49,13 +49,24 @@ init(Params) ->
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
 
 handle_cast({raw_stats, Name, Stats}, State) ->
-    io:format("#rps_statsd (~p) ~p~n", [Name, Stats]),
+    lists:foreach(fun({Count, Date}) ->
+        Date_Tokens = string:tokens(binary_to_list(Date), " "),
+        Time_Tokens = string:tokens(lists:nth(5, Date_Tokens), ":"),
+        Y  = lists:nth(4, Date_Tokens),
+        Mo = month_to_int(lists:nth(3, Date_Tokens)),
+        D  = lists:nth(2, Date_Tokens),
+        H  = lists:nth(1, Time_Tokens),
+        M  = lists:nth(2, Time_Tokens),
+        S  = lists:nth(3, Time_Tokens),
+
+        %% TODO extend the statsd module so that we can send "past" seconds of data
+        %% until then, we ignore the date, so it's commented out, but parsed!
+        popcorn_statsd:gauge("popcorn." ++ atom_to_list(Name), Count)
+      end, Stats),
     {noreply, State};
 
 handle_cast({stats, Name, Stats}, State) ->
-    %% popcorn_statsd:increment("popcorn." ++ atom_to_list(Name)),
-    %% TODO send to statsd, but whats the value i should send... i think i need rps to make a counter
-    %% or something.  
+    %%popcorn_statsd:increment("popcorn." ++ atom_to_list(Name)),
     {noreply, State};
 
 handle_cast(_, State) -> {noreply, State}.
@@ -64,4 +75,16 @@ handle_info(_Msg, State)            -> {noreply, State}.
 terminate(_Reason, _State)          -> ok.
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
-
+-spec month_to_int(string()) -> number().
+month_to_int("Jan") -> 1;
+month_to_int("Feb") -> 2;
+month_to_int("Mar") -> 3;
+month_to_int("Apr") -> 4;
+month_to_int("May") -> 5;
+month_to_int("Jun") -> 6;
+month_to_int("Jul") -> 7;
+month_to_int("Aug") -> 8;
+month_to_int("Sep") -> 9;
+month_to_int("Oct") -> 10;
+month_to_int("Nov") -> 11;
+month_to_int("Dec") -> 12.
