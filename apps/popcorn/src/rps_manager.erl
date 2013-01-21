@@ -16,23 +16,19 @@
 
 
 %%%-------------------------------------------------------------------
-%%% File:      system_counters.erl
+%%% File:      rps_manager.erl
 %%% @author    Marc Campbell <marc.e.campbell@gmail.com>
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------
 
--module(system_counters).
+-module(rps_manager).
 -author('marc.e.campbell@gmail.com').
 -behavior(gen_server).
 
 -include("include/popcorn.hrl").
 
--define(COUNTER_WRITE_INTERVAL, 1000).
-
--export([start_link/0,
-         increment/2,
-         decrement/2]).
+-export([start_link/0]).
 
 -export([init/1,
          handle_call/3,
@@ -41,42 +37,26 @@
          terminate/2,
          code_change/3]).
 
--record(state, {counters    :: list(),
-                rps_enabled :: boolean()}).
+-record(state, {rps_enabled  :: boolean()}).
 
 start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
-increment(Which_Counter, Increment_By) -> gen_server:cast(?MODULE, {increment, Which_Counter, Increment_By}).
-decrement(Which_Counter, Decrement_By) -> gen_server:cast(?MODULE, {decrement, Which_Counter, Decrement_By}).
 
 init([]) ->
     process_flag(trap_exit, true),
 
-    ?POPCORN_DEBUG_MSG("#system_counters starting"),
+    ?POPCORN_DEBUG_MSG("#rps_manager starting"),
 
-    erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
-
-    {ok, #state{counters = []}}.
+    {ok, #state{rps_enabled = popcorn_util:rps_enabled()}}.
 
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
 
-handle_cast({increment, Counter, V}, State) ->
-    Current_Value = proplists:get_value(Counter, State#state.counters, 0),
-    Counters = proplists:delete(Counter, State#state.counters) ++ [{Counter, Current_Value + V}],
-    {noreply, State#state{counters = Counters}};
-handle_cast({decrement, Counter, V}, State) ->
-    Current_Value = proplists:get_value(Counter, State#state.counters, 0),
-    Counters = proplists:delete(Counter, State#state.counters) ++ [{Counter, Current_Value - V}],
-    {noreply, State#state{counters = Counters}};
+handle_cast({incr, _}, #state{rps_enabled = Rps_Enabled} = State) when Rps_Enabled =:= false ->
+    {noreply, State};
+handle_cast({incr, Metric}, #state{rps_enabled = Rps_Enabled} = State) when Rps_Enabled =:= true ->
+    rps:incr(Metric),
+    {noreply, State};
 
 handle_cast(_Msg, State)            -> {noreply, State}.
-
-handle_info(write_counter, State) ->
-    [gen_server:cast(?STORAGE_PID, {increment_counter, Counter, Value}) || {Counter, Value} <- State#state.counters],
-
-    erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
-
-    {noreply, State#state{counters = []}};
-
 handle_info(_Msg, State)            -> {noreply, State}.
 terminate(_Reason, _State)          -> ok.
 code_change(_OldVsn, State, _Extra) -> {ok, State}.

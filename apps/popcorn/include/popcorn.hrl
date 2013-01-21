@@ -12,6 +12,8 @@
 -define(DECREMENT_COUNTER_LATER(Counter),     system_counters:decrement(Counter, 1)).
 -define(INCREMENT_COUNTER_LATER(Counter),     system_counters:increment(Counter, 1)).
 
+-define(RPS_INCREMENT(Metric),   gen_server:cast(rps_manager, {incr, Metric})).
+
 -define(TOTAL_EVENT_COUNTER,         binary_to_atom(<<"total_events">>, latin1)).
 -define(TOTAL_ALERT_COUNTER,         binary_to_atom(<<"total_alerts">>, latin1)).
 -define(NODE_EVENT_COUNTER(Node),    popcorn_util:node_event_counter(Node)).

@@ -46,6 +46,8 @@ handle_cast(_Msg, State) ->
 handle_info({udp, Socket, _Host, _Port, Bin}, State) ->
     {Popcorn_Node, Log_Message} = decode_protobuffs_message(Bin),
 
+    rps:incr(udp),
+
     %% create the node fsm, if necessary
     %% TODO build a cache around this, it's definitely probably a little likely to be a drag on performance
     Is_New_Node =

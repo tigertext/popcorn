@@ -102,6 +102,7 @@ handle_call({counter_value, Counter}, _From, State) ->
     {reply, Counter_Value, State};
 
 handle_call({is_known_node, Node_Name}, _From, State) ->
+    ?RPS_INCREMENT(storage_total),
     {reply,
      mnesia:dirty_read(known_nodes, Node_Name) =/= [],
      State};
@@ -110,6 +111,8 @@ handle_call({search_messages, {P, V, M, L, Page_Size, Starting_Timestamp}}, _Fro
     Messages =
       case mnesia:transaction(
                 fun() ->
+                    ?RPS_INCREMENT(storage_log_read),
+                    ?RPS_INCREMENT(storage_total),
                     mnesia:select(
                         popcorn_history,
                         ets:fun2ms(
@@ -134,18 +137,24 @@ handle_cast({send_recent_matching_log_lines, Pid, Count, Filters}, State) ->
     {noreply, State};
 
 handle_cast({new_log_message, Log_Message}, State) ->
+    ?RPS_INCREMENT(storage_log_write),
+    ?RPS_INCREMENT(storage_total),
     mnesia:dirty_write(popcorn_history, Log_Message),
     {noreply, State};
 
 handle_cast({delete_counter, Counter}, State) ->
+    ?RPS_INCREMENT(storage_total),
     mnesia:dirty_delete(popcorn_counters, Counter),
     {noreply, State};
 
 handle_cast({increment_counter, Counter, Increment_By}, State) ->
+    ?RPS_INCREMENT(storage_counter_write),
+    ?RPS_INCREMENT(storage_total),
     mnesia:dirty_update_counter(popcorn_counters, Counter, Increment_By),
     {noreply, State};
 
 handle_cast({add_node, Popcorn_Node}, State) ->
+    ?RPS_INCREMENT(storage_total),
     mnesia:dirty_write(known_nodes, Popcorn_Node),
     {noreply, State};
 
@@ -158,13 +167,19 @@ send_recent_log_line(_, 0, _, _) -> ok;
 send_recent_log_line(_, _, '$end_of_table', _) -> ok;
 send_recent_log_line(Pid, Count, Last_Key_Checked, Filters) ->
     Key = case Last_Key_Checked of
-              undefined -> mnesia:dirty_last(popcorn_history);
-              _         -> mnesia:dirty_prev(popcorn_history, Last_Key_Checked)
+              undefined -> ?RPS_INCREMENT(storage_total),
+                           ?RPS_INCREMENT(storage_index_read),
+                           mnesia:dirty_last(popcorn_history);
+              _         -> ?RPS_INCREMENT(storage_total),
+                           ?RPS_INCREMENT(storage_index_read),
+                           mnesia:dirty_prev(popcorn_history, Last_Key_Checked)
           end,
 
     case Key of
         '$end_of_table' -> ok;
-        _               -> Log_Message = lists:nth(1, mnesia:dirty_read(popcorn_history, Key)),
+        _               -> ?RPS_INCREMENT(storage_log_read),
+                           ?RPS_INCREMENT(stoage_total),
+                           Log_Message = lists:nth(1, mnesia:dirty_read(popcorn_history, Key)),
                            case is_filtered_out(Log_Message, Filters) of
                                false -> gen_fsm:send_all_state_event(Pid, {new_message, older, Log_Message}),
                                         send_recent_log_line(Pid, Count - 1, Key, Filters);
@@ -175,16 +190,23 @@ send_recent_log_line(Pid, Count, Last_Key_Checked, Filters) ->
 delete_recent_log_line(_, '$end_of_table', _) -> ok;
 delete_recent_log_line(Severity_Num, Oldest_Ts, Last_Key_Checked) ->
     Key = case Last_Key_Checked of
-              undefined -> mnesia:dirty_last(popcorn_history);
-              _         -> mnesia:dirty_prev(popcorn_history, Last_Key_Checked)
+              undefined -> ?RPS_INCREMENT(storage_total),
+                           ?RPS_INCREMENT(storage_index_read),
+                           mnesia:dirty_last(popcorn_history);
+              _         -> ?RPS_INCREMENT(storage_total),
+                           ?RPS_INCREMENT(storage_index_read),
+                           mnesia:dirty_prev(popcorn_history, Last_Key_Checked)
           end,
 
     case Key of
         '$end_of_table' -> ok;
-        _               -> Log_Message = lists:nth(1, mnesia:dirty_read(popcorn_history, Key)),
+        _               -> ?RPS_INCREMENT(storage_total),
+                           ?RPS_INCREMENT(storage_log_read),
+                           Log_Message = lists:nth(1, mnesia:dirty_read(popcorn_history, Key)),
                            case {Log_Message#log_message.severity, Log_Message#log_message.timestamp} of
                                 {Severity_Num, TS} when TS < Oldest_Ts ->
                                     %% purge this and iterate
+                                    ?RPS_INCREMENT(storage_total),
                                     mnesia:dirty_delete(popcorn_history, Log_Message#log_message.message_id),
                                     case ets:lookup(current_nodes, Log_Message#log_message.log_nodename) of
                                         Node_Pids when length(Node_Pids) =:= 1 ->
