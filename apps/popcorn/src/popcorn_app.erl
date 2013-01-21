@@ -64,8 +64,13 @@ init([]) ->
                             rps_noop -> [];
                             _        -> proplists:get_value(start_dep, Rps_Options)
                         end,
-    Rps_Sup_Params    = [%%[{name, storage}, {module, Rps_Module}, {time, 1000}, {send, raw}],
-                         [{name, udp},     {module, Rps_Module}, {time, 5000}, {send, raw}]
+    Rps_Sup_Params    = [[{name, storage_total},          {module, Rps_Module}, {time, 1000}, {send, raw}],
+                         [{name, storage_log_write},      {module, Rps_Module}, {time, 1000}, {send, raw}],
+                         [{name, storage_log_read},       {module, Rps_Module}, {time, 1000}, {send, raw}],
+                         [{name, storage_index_read},     {module, Rps_Module}, {time, 1000}, {send, raw}],
+                         [{name, storage_counter_write},  {module, Rps_Module}, {time, 1000}, {send, raw}],
+                         [{name, storage_counter_read},   {module, Rps_Module}, {time, 1000}, {send, raw}],
+                         [{name, udp_received},           {module, Rps_Module}, {time, 5000}, {send, raw}]
                         ],
 
     Rps_Children      = [{rps_sup, {rps_sup, start_link, [Rps_Sup_Params]}, permanent, 5000, worker, []}] ++
@@ -103,6 +108,7 @@ init([]) ->
                   {log_stream_manager,  {log_stream_manager,  start_link, []}, permanent, 5000, worker, []},
                   {system_counters,     {system_counters,     start_link, []}, permanent, 5000, worker, []},
                   {storage_monitor,     {storage_monitor,     start_link, []}, permanent, 5000, worker, []},
+                  {rps_manager,         {rps_manager,         start_link, []}, permanent, 5000, worker, []},
 
                   {Rps_Module,          {Rps_Module,          start_link, [Rps_Client_Config]}, permanent, 5000, worker, []},
 

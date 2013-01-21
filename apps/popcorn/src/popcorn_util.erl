@@ -17,7 +17,8 @@
          head_includes/0,
          optional_env/2,
          hexstring/1,
-         read/1]).
+         read/1,
+         rps_enabled/0]).
 
 node_event_counter(Node_Name) ->
     Prefix = <<"node_events__">>,
@@ -151,3 +152,10 @@ read(Filename) ->
 
 hexstring(<<X:128/big-unsigned-integer>>) ->
     lists:flatten(io_lib:format("~32.16.0b", [X])).
+
+rps_enabled() ->
+    {ok, Rps_Options} = case application:get_env(popcorn, rps_tracking) of
+                            undefined ->  {ok, [{enabled, false}]};
+                            Rps_Config -> Rps_Config
+                        end,
+    proplists:get_value(enabled, Rps_Options).

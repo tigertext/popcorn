@@ -55,8 +55,7 @@
 
 -record(state, {most_recent_version   :: string(),
                 popcorn_node          :: #popcorn_node{},
-                event_counter         :: number(),
-                track_rps             :: boolean()}).
+                event_counter         :: number()}).
 
 start_link() -> gen_fsm:start_link(?MODULE, [], []).
 
@@ -65,26 +64,12 @@ init([]) ->
 
     erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
 
-    {ok, Rps_Options} = case application:get_env(popcorn, rps_tracking) of
-                            undefined ->  {ok, [{enabled, false}]};
-                            Rps_Config -> Rps_Config
-                        end,
-
-    {ok, 'LOGGING', #state{event_counter = 0,
-                           track_rps     = proplists:get_value(enabled, Rps_Options)}}.
+    {ok, 'LOGGING', #state{event_counter = 0}}.
 
 'LOGGING'({log_message, Popcorn_Node, Log_Message}, State) ->
     try
-        %%?POPCORN_DEBUG_MSG("State#state.track_rps = ~p", [State#state.track_rps]),
-        case State#state.track_rps of
-            true  -> rps:incr(storage);
-            false -> ok
-        end,
-
-        Pid = pg2:get_closest_pid('storage'),
-
         %% log the message
-        gen_server:cast(Pid, {new_log_message, Log_Message}),
+        gen_server:cast(?STORAGE_PID, {new_log_message, Log_Message}),
 
         %% increment the total event counter
         ?INCREMENT_COUNTER_LATER(?TOTAL_EVENT_COUNTER),
