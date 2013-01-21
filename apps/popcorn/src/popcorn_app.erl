@@ -47,6 +47,31 @@ init([]) ->
     Storage_Module:pre_init(),
     io:format(" done!\n"),
 
+    io:format("Reading rps configuration..."),
+    {ok, Rps_Options} = case application:get_env(popcorn, rps_tracking) of
+                            undefined ->  {ok, [{enabled, false}]};
+                            Rps_Config -> Rps_Config
+                        end,
+    Rps_Module        = case proplists:get_value(enabled, Rps_Options) of
+                            false -> rps_noop;
+                            true  -> proplists:get_value(notify_module, Rps_Options)
+                        end,
+    Rps_Client_Config = case Rps_Module of
+                            rps_noop -> [];
+                            _        -> proplists:get_value(module_config, Rps_Options)
+                        end,
+    Rps_Deps          = case Rps_Module of
+                            rps_noop -> [];
+                            _        -> proplists:get_value(start_dep, Rps_Options)
+                        end,
+    Rps_Sup_Params    = [{name, storage}, {module, Rps_Module}, {time, 5000}, {send, stats}],
+
+    Rps_Children      = [{rps_sup, {rps_sup, start_link, [[Rps_Sup_Params]]}, permanent, 5000, worker, []}] ++
+                        lists:map(fun({Rps_Dep, Rps_Dep_Params}) ->
+                            {Rps_Dep, {Rps_Dep, start_link, [Rps_Dep_Params]}, permanent, 5000, worker, []}
+                          end, Rps_Deps),
+    io:format(" done!\n"),
+
     io:format("Starting http listener..."),
     {ok, Http_Listen_Port} = application:get_env(popcorn, http_listen_port),
     Http_Dispatch = [{'_', [
@@ -77,6 +102,9 @@ init([]) ->
                   {system_counters,     {system_counters,     start_link, []}, permanent, 5000, worker, []},
                   {storage_monitor,     {storage_monitor,     start_link, []}, permanent, 5000, worker, []},
 
+                  {Rps_Module,          {Rps_Module,          start_link, [Rps_Client_Config]}, permanent, 5000, worker, []},
+
+                  {rps_client_sup,       {supervisor, start_link, [{local, rps_client_sup},       ?MODULE, [Rps_Module]]},           permanent, infinity, supervisor, []},
                   {storage_sup,          {supervisor, start_link, [{local, storage_sup},          ?MODULE, [Storage_Module]]},       permanent, infinity, supervisor, []},
                   {connected_user_sup,   {supervisor, start_link, [{local, connected_user_sup},   ?MODULE, [connected_user_fsm]]},   permanent, infinity, supervisor, []},
                   {node_sup,             {supervisor, start_link, [{local, node_sup},             ?MODULE, [node_fsm]]},             permanent, infinity, supervisor, []},
@@ -84,7 +112,7 @@ init([]) ->
                   {dashboard_stream_sup, {supervisor, start_link, [{local, dashboard_stream_sup}, ?MODULE, [dashboard_stream_fsm]]}, permanent, infinity, supervisor, []}
                ],
 
-    {ok, { {one_for_one, 10000, 10}, Children} };
+    {ok, { {one_for_one, 10000, 10}, Children ++ Rps_Children} };
 
 init([Module]) ->
     {ok,

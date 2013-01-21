@@ -66,8 +66,9 @@ handle_cast(start_workers, 'not_ready') ->
     end,
 
     {ok, Storage_Options} = application:get_env(popcorn, storage),
-    Worker_Count = proplists:get_value(worker_count, Storage_Options),
-    [{ok, Pid} = supervisor:start_child(storage_sup, []) || _ <- lists:seq(1, Worker_Count)],
+    Worker_Count          = proplists:get_value(worker_count, Storage_Options),
+    [{ok, Pid}            = supervisor:start_child(storage_sup, []) || _ <- lists:seq(1, Worker_Count)],
+
     ?POPCORN_DEBUG_MSG("Created ~p storage worker(s)", [Worker_Count]),
 
     %% pick one of the started workers and have it from the init phase
