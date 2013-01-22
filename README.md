@@ -70,6 +70,6 @@ detect problems caused by changes.
 
 Thanks to the following:
 
-https://github.com/littke/inspiritas-bootstrap/
-https://github.com/eternicode/bootstrap-datepicker
+  - https://github.com/littke/inspiritas-bootstrap/
+  - https://github.com/eternicode/bootstrap-datepicker
 
