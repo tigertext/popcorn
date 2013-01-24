@@ -28,7 +28,7 @@
 
 -include("include/popcorn.hrl").
 
--export([start_link/0]).
+-export([start_link/1]).
 
 -export([init/1,
          handle_call/3,
@@ -37,9 +37,9 @@
          terminate/2,
          code_change/3]).
 
-start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+start_link(Params) -> gen_server:start_link({local, ?MODULE}, ?MODULE, Params, []).
 
-init(Config) ->
+init(Params) ->
     ?POPCORN_DEBUG_MSG("#rps_noop starting"),
 
     process_flag(trap_exit, true),
