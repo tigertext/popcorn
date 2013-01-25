@@ -11,6 +11,8 @@
 
 -define(UPDATE_INTERVAL, 10000).
 
+-record(alert, {location, log, timestamp = erlang:now()}).
+
 -export([counter_data/1, all_alerts/1, recent_alerts/1,
          alert_count_today/0, alert_count/0, clear_alert/1,
          safe_notify/4, log_messages/6, decode_location/1]).
