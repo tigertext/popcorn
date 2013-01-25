@@ -60,14 +60,9 @@ handle(Req, State) ->
                             BinSince -> list_to_integer(binary_to_list(BinSince))
                         end,
                     ?POPCORN_DEBUG_MSG("http request for alert ~s (since ~p)", [Alert, Since]),
-                    Location    = triage_handler:decode_location(Alert),
                     Log_Messages=
                         triage_handler:log_messages(
-                            proplists:get_value(product,   Location),
-                            proplists:get_value(version,   Location),
-                            proplists:get_value(name,      Location),
-                            proplists:get_value(line,      Location),
-                            Since,
+                            Alert, Since,
                             case application:get_env(popcorn, alert_page_size) of
                                 {ok, Val} -> Val;
                                 _         -> 10
@@ -92,19 +87,16 @@ handle(Req, State) ->
                             {undefined, _} -> undefined;
                             {BinSince, _} -> list_to_integer(binary_to_list(BinSince))
                         end,
-                    Location    = triage_handler:decode_location(Alert),
                     Log_Messages=
                         triage_handler:log_messages(
-                            proplists:get_value(product,   Location),
-                            proplists:get_value(version,   Location),
-                            proplists:get_value(name,      Location),
-                            proplists:get_value(line,      Location),
-                            Since,
+                            Alert, Since,
                             case application:get_env(popcorn, alert_page_size) of
                                 {ok, Val} -> Val;
                                 _         -> 10
                             end),
-                    Context     = dict:from_list([{location, binary_to_list(Alert)}, {log_messages, Log_Messages} | Location]),
+                    Location    = base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global])),
+                    Context     = dict:from_list([{location, binary_to_list(Alert)}, {log_messages, Log_Messages}
+                                                    | triage_handler:location_as_strings(Alert)]),
                     TFun        = pcache:get(rendered_templates, view_alert),
                     Output      = mustache:render(view_alert, TFun, Context),
                     {ok, Reply} = cowboy_req:reply(200, [], Output, Req),

@@ -52,7 +52,7 @@
                        version   :: binary()}).
 
 -record(log_message, {message_id      :: binary(),
-                      severity        :: integer(),
+                      severity        :: 0..9,
                       message         :: binary(),
                       timestamp       :: number(),
                       log_nodename    :: binary(),
