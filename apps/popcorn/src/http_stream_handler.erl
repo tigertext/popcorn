@@ -46,7 +46,7 @@ handle_loop(Req, State) ->
         {cowboy_req, resp_sent} ->
             handle_loop(Req, State);
         {new_node, Node} ->
-            [{popcorn_counters, _, Total_Message_Count}] = mnesia:dirty_read(popcorn_counters, ?TOTAL_EVENT_COUNTER),
+            Total_Message_Count = ?COUNTER_VALUE(?TOTAL_EVENT_COUNTER),
             Data = [{node_count, ets:info(current_nodes, size)},
                     {node_name, Node#popcorn_node.node_name},
                     {node_hash, re:replace(base64:encode(Node#popcorn_node.node_name), "=", "_", [{return, binary}, global])},

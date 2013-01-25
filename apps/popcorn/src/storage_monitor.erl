@@ -16,21 +16,22 @@
 
 
 %%%-------------------------------------------------------------------
-%%% File:      history_optimizer.erl
+%%% File:      storage_monitor.erl
 %%% @author    Marc Campbell <marc.e.campbell@gmail.com>
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------
 
--module(history_optimizer).
+-module(storage_monitor).
 -author('marc.e.campbell@gmail.com').
 -behavior(gen_server).
 
 -include("include/popcorn.hrl").
 
--define(SEVERITY_RETENTION_TIMER, 60000).   %% One minute
+-define(WORKER_HEALTH_INTERVAL, 10000).
 
--export([start_link/0]).
+-export([start_link/0,
+         start_workers/0]).
 
 -export([init/1,
          handle_call/3,
@@ -39,33 +40,47 @@
          terminate/2,
          code_change/3]).
 
+
 start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+start_workers() -> gen_server:cast(?MODULE, start_workers).
 
 init([]) ->
     process_flag(trap_exit, true),
 
-    ?POPCORN_DEBUG_MSG("#history_optimizer starting"),
-    erlang:send_after(?SEVERITY_RETENTION_TIMER, self(), severity_retention_expire),
+    ?POPCORN_DEBUG_MSG("#storage_monitor starting"),
+    pg2:create('storage'),
 
-    {ok, undefined}.
+    erlang:send_after(?WORKER_HEALTH_INTERVAL, self(), check_worker_health),
+
+    {ok, 'not_ready'}.
 
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
+
+handle_cast(start_workers, 'not_ready') ->
+    ?POPCORN_DEBUG_MSG("Starting storage workers..."),
+
+    case popcorn_util:optional_env(track_rps, false) of
+        false -> ok;
+        true  -> gen_info:start_link(),
+                 rps_sup:start_link([ [{name, storage}, {module, gen_info}, {time, 5000}, {send, stats}] ])
+    end,
+
+    {ok, Storage_Options} = application:get_env(popcorn, storage),
+    Worker_Count          = proplists:get_value(worker_count, Storage_Options),
+    [{ok, Pid}            = supervisor:start_child(storage_sup, []) || _ <- lists:seq(1, Worker_Count)],
+
+    ?POPCORN_DEBUG_MSG("Created ~p storage worker(s)", [Worker_Count]),
+
+    %% pick one of the started workers and have it from the init phase
+    ok = gen_server:call(pg2:get_closest_pid('storage'), start_phase),
+
+    {noreply, 'ready'};
+
 handle_cast(_Msg, State)            -> {noreply, State}.
 
-handle_info(severity_retention_expire, State) ->
-    {ok, Retentions} = application:get_env(popcorn, log_retention),
-    lists:foreach(fun({Severity, Retention_Interval}) ->
-        %% for effiency, we start at the end of the table, find the most recent
-        %% log line with the specified severity, delete it, and walk back.  as soon 
-        %% as we hit a log entry with the specified severity that isn't subject to 
-        %% retention deletion, we stop
-        Microseconds = popcorn_util:retention_time_to_microsec(Retention_Interval),
-        Oldest_TS    = ?NOW - Microseconds,
-        Severity_Num = popcorn_util:severity_to_number(Severity),
-        gen_server:cast(?STORAGE_PID, {expire_logs_matching, Severity_Num, Oldest_TS})
-      end, Retentions),
-
-    erlang:send_after(?SEVERITY_RETENTION_TIMER, self(), severity_retention_expire),
+handle_info(check_worker_health, State) ->
+    Num_Workers = length(pg2:get_local_members('storage')),
+    erlang:send_after(?WORKER_HEALTH_INTERVAL, self(), check_worker_health),
     {noreply, State};
 
 handle_info(_Msg, State)            -> {noreply, State}.

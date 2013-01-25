@@ -28,7 +28,7 @@
 
 -include("include/popcorn.hrl").
 
--define(COUNTER_WRITE_INTERVAL, 5000).
+-define(COUNTER_WRITE_INTERVAL, 1000).
 
 -export([start_link/0,
          increment/2,
@@ -41,7 +41,8 @@
          terminate/2,
          code_change/3]).
 
--record(state, {total_event_counter :: number()}).
+-record(state, {counters    :: list(),
+                rps_enabled :: boolean()}).
 
 start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 increment(Which_Counter, Increment_By) -> gen_server:cast(?MODULE, {increment, Which_Counter, Increment_By}).
@@ -54,23 +55,27 @@ init([]) ->
 
     erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
 
-    {ok, #state{total_event_counter = 0}}.
+    {ok, #state{counters = []}}.
 
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
 
-handle_cast({increment, total_event_counter, V}, State) ->
-    {noreply, State#state{total_event_counter = State#state.total_event_counter + V}};
-handle_cast({decrement, total_event_counter, V}, State) ->
-    {noreply, State#state{total_event_counter = State#state.total_event_counter - V}};
+handle_cast({increment, Counter, V}, State) ->
+    Current_Value = proplists:get_value(Counter, State#state.counters, 0),
+    Counters = proplists:delete(Counter, State#state.counters) ++ [{Counter, Current_Value + V}],
+    {noreply, State#state{counters = Counters}};
+handle_cast({decrement, Counter, V}, State) ->
+    Current_Value = proplists:get_value(Counter, State#state.counters, 0),
+    Counters = proplists:delete(Counter, State#state.counters) ++ [{Counter, Current_Value - V}],
+    {noreply, State#state{counters = Counters}};
 
 handle_cast(_Msg, State)            -> {noreply, State}.
 
 handle_info(write_counter, State) ->
-    mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_EVENT_COUNTER, State#state.total_event_counter),
+    [gen_server:cast(?STORAGE_PID, {increment_counter, Counter, Value}) || {Counter, Value} <- State#state.counters],
 
     erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
 
-    {noreply, State#state{total_event_counter = 0}};
+    {noreply, State#state{counters = []}};
 
 handle_info(_Msg, State)            -> {noreply, State}.
 terminate(_Reason, _State)          -> ok.

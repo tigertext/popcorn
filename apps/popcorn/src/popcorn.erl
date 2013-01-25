@@ -13,7 +13,7 @@
 start() 			-> [application:start(App) || App <-
 										[ranch, cowboy, mustache,
 										 protobuffs, inets, mochiweb,
-										 webmachine, folsom, mnesia,
+										 webmachine, folsom, rps,
                      flake, popcorn
 										 ]].
 

@@ -15,8 +15,10 @@
          format_log_message/1,
          opt/2,
          head_includes/0,
+         optional_env/2,
          hexstring/1,
-         read/1]).
+         read/1,
+         rps_enabled/0]).
 
 node_event_counter(Node_Name) ->
     Prefix = <<"node_events__">>,
@@ -41,27 +43,29 @@ last_24_hours() ->
       end, lists:seq(0, 23)).
 
 severity_to_number(<<"all">>) -> -1;
-severity_to_number(<<"debug">>) -> 7;
-severity_to_number(<<"info">>) -> 6;
-severity_to_number(<<"notice">>) -> 5;
-severity_to_number(<<"warn">>) -> 4;
-severity_to_number(<<"error">>) -> 3;
-severity_to_number(<<"critical">>) -> 2;
-severity_to_number(<<"alert">>) -> 1;
-severity_to_number(<<"emergency">>) -> 0;
+severity_to_number(<<"debug">>) -> 128;
+severity_to_number(<<"info">>) -> 64;
+severity_to_number(<<"notice">>) -> 32;
+severity_to_number(<<"warn">>) -> 16;
+severity_to_number(<<"error">>) -> 8;
+severity_to_number(<<"critical">>) -> 4;
+severity_to_number(<<"alert">>) -> 2;
+severity_to_number(<<"emergency">>) -> 1;
+severity_to_number(<<"none">>) -> 0;
 severity_to_number(_) -> undefined.
 
-number_to_severity(7) -> <<"debug">>;
-number_to_severity(6) -> <<"info">>;
-number_to_severity(5) -> <<"notice">>;
-number_to_severity(4) -> <<"warn">>;
-number_to_severity(3) -> <<"error">>;
-number_to_severity(2) -> <<"critical">>;
-number_to_severity(1) -> <<"alert">>;
-number_to_severity(0) -> <<"emergency">>;
+number_to_severity(128) -> <<"debug">>;
+number_to_severity(64) -> <<"info">>;
+number_to_severity(32) -> <<"notice">>;
+number_to_severity(16) -> <<"warn">>;
+number_to_severity(8) -> <<"error">>;
+number_to_severity(4) -> <<"critical">>;
+number_to_severity(2) -> <<"alert">>;
+number_to_severity(1) -> <<"emergency">>;
+number_to_severity(0) -> <<"none">>;
 number_to_severity(_) -> <<"?">>.
 
-all_severity_numbers() -> lists:seq(0, 7).
+all_severity_numbers() -> [0, 1, 2, 4, 8, 16, 32, 64, 128].
 
 random_id() ->
     Length = 64,
@@ -71,6 +75,12 @@ random_id() ->
                   [lists:nth(random:uniform(length(AllowedChars)), AllowedChars)] ++ Acc
                 end, [], lists:seq(1, Length)),
     list_to_binary(New_Key).
+
+optional_env(Key, Default) ->
+    case application:get_env(popcorn, Key) of
+        undefined -> Default;
+        {ok, Val} -> Val
+    end.
 
 opt(<<>>, Default)      -> Default;
 opt(undefined, Default) -> Default;
@@ -142,3 +152,10 @@ read(Filename) ->
 
 hexstring(<<X:128/big-unsigned-integer>>) ->
     lists:flatten(io_lib:format("~32.16.0b", [X])).
+
+rps_enabled() ->
+    {ok, Rps_Options} = case application:get_env(popcorn, rps_tracking) of
+                            undefined ->  {ok, [{enabled, false}]};
+                            Rps_Config -> Rps_Config
+                        end,
+    proplists:get_value(enabled, Rps_Options).

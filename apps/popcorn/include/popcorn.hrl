@@ -1,6 +1,19 @@
 
 -define(MUSTACHE(Filename),          code:priv_dir(popcorn) ++ "/templates/" ++ Filename).
 
+-define(STORAGE_PID,                 pg2:get_closest_pid('storage')).
+-define(COUNTER_VALUE(Counter),      gen_server:call(?STORAGE_PID, {counter_value, Counter})).
+
+%% the following 2 functions incremenet and decrement counters immediately, not using a timer
+-define(DECREMENT_COUNTER(Counter),  gen_server:cast(?STORAGE_PID, {increment_counter, Counter, -1})).
+-define(INCREMENT_COUNTER(Counter),  gen_server:cast(?STORAGE_PID, {increment_counter, Counter, 1})).
+
+%% the following 2 functions incremenet and decrement counters using a timer, are are nore efficient, but only eventually serialized
+-define(DECREMENT_COUNTER_LATER(Counter),     system_counters:decrement(Counter, 1)).
+-define(INCREMENT_COUNTER_LATER(Counter),     system_counters:increment(Counter, 1)).
+
+-define(RPS_INCREMENT(Metric),   gen_server:cast(rps_manager, {incr, Metric})).
+
 -define(TOTAL_EVENT_COUNTER,         binary_to_atom(<<"total_events">>, latin1)).
 -define(TOTAL_ALERT_COUNTER,         binary_to_atom(<<"total_alerts">>, latin1)).
 -define(NODE_EVENT_COUNTER(Node),    popcorn_util:node_event_counter(Node)).
