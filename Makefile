@@ -3,7 +3,7 @@ CODE_DIR=apps/popcorn
 CT_LOG_DIR=apps/popcorn/ctest/*/logs
 NODE?=popcorn
 CONFIG?=rel/files/sys.config
-SERVER := erl -pa apps/popcorn/ebin -pa deps/*/ebin -smp enable -s lager -setcookie POPCORN -config ${CONFIG} ${ERL_ARGS}
+SERVER := erl -pa apps/popcorn/ebin -pa deps/*/ebin -smp enable -setcookie POPCORN -config ${CONFIG} ${ERL_ARGS}
 
 all:
 	${REBAR} compile

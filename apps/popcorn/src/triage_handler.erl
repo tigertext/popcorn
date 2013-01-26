@@ -117,7 +117,7 @@ handle_cast({triage_event, #popcorn_node{} = Node, Node_Pid,
               #log_message{log_product=Product, log_version=Version,
                            log_module=Module, log_line=Line, severity=Severity} = Log_Entry,
               Is_New_Node}, State)
-        when Severity < 4, is_binary(Product), is_binary(Version), is_binary(Module), is_binary(Line) ->
+        when Severity =< 16, Severity =/= 0, is_binary(Product), is_binary(Version), is_binary(Module), is_binary(Line) ->
     true = ets:insert(triage_error_data, #alert{location=key(Product,Version,Module,Line), log=Log_Entry}),
     case Is_New_Node of
         true ->
