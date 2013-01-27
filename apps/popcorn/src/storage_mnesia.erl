@@ -50,11 +50,12 @@ pre_init() ->
 
     io:format("Ensuring required mnesia tables exist..."),
     io:format("\n\t[popcorn_history: ~p]",
-       [mnesia:create_table(known_nodes,  [{disc_copies, [node()]},
+        [mnesia:create_table(known_nodes,  [{disc_copies, [node()]},
                                            {record_name, popcorn_node},
                                            {attributes,  record_info(fields, popcorn_node)}])]),
+
     io:format("\n\t[popcorn_history: ~p]",
-       [mnesia:create_table(popcorn_history, [{disc_copies, [node()]},
+        [mnesia:create_table(popcorn_history, [{disc_copies, [node()]},
                                               {record_name, log_message},
                                               {type,        ordered_set},
                                               {index,       [#log_message.severity,
@@ -64,8 +65,26 @@ pre_init() ->
                                                              #log_message.log_line,
                                                              #log_message.timestamp]},
                                               {attributes,  record_info(fields, log_message)}])]),
+
+    io:format("\n\t[popcorn_scm: ~p]",
+        [mnesia:create_table(popcorn_release_scm, [{disc_copies, [node()]},
+                                           {record_name, release_scm},
+                                           {type,        ordered_set},
+                                           {index,       [#release_scm.role,
+                                                          #release_scm.version]},
+                                           {attributes,  record_info(fields, release_scm)}])]),
+
+    io:format("\n\t[popcorn_scm_mapping: ~p]",
+        [mnesia:create_table(popcorn_release_scm_mapping, [{disc_copies, [node()]},
+                                           {record_name, release_scm_mapping},
+                                           {type,        ordered_set},
+                                           {index,       [#release_scm_mapping.role,
+                                                          #release_scm_mapping.version]},
+                                           {attributes,  record_info(fields, release_scm_mapping)}])]),
+
     io:format("\n\t[popcorn_counters: ~p]",
-       [mnesia:create_table(popcorn_counters, [{disc_copies, [node()]}])]),
+    [mnesia:create_table(popcorn_counters, [{disc_copies, [node()]}])]),
+
     io:format("\n... done!\n").
 
 init([]) ->
@@ -109,6 +128,20 @@ handle_call({is_known_node, Node_Name}, _From, State) ->
      mnesia:dirty_read(known_nodes, Node_Name) =/= [],
      State};
 
+%% gen_server:call(pg2:get_closest_pid('storage'), {get_release_module_link, <<"XMPP">>, <<"253">>, <<"tt_organization.erl">>}).
+%% @doc returns the URL as a binary if the mapping exists, or undefined
+handle_call({get_release_module_link, Role, Version, Module}, _From, State) ->
+    ?RPS_INCREMENT(storage_total),
+    F = fun() ->
+        Link = #release_scm_mapping{key=iolist_to_binary([Role, $:, Version, $:, Module]), url='$1', _='_'},
+        mnesia:select(popcorn_release_scm_mapping, [{Link, [], ['$1']}])
+    end,
+    {atomic, Db_Reply} = mnesia:transaction(F),
+    {reply, case Db_Reply of 
+                [] -> undefined;
+                [URL] -> URL
+            end, State};
+
 handle_call({search_messages, {P, V, M, L, Page_Size, Starting_Timestamp}}, _From, State) ->
     Messages =
       case mnesia:transaction(
@@ -142,6 +175,19 @@ handle_cast({new_log_message, Log_Message}, State) ->
     ?RPS_INCREMENT(storage_log_write),
     ?RPS_INCREMENT(storage_total),
     mnesia:dirty_write(popcorn_history, Log_Message),
+    {noreply, State};
+
+handle_cast({new_release_scm, Record}, State) ->
+    ?RPS_INCREMENT(storage_log_write),
+    ?RPS_INCREMENT(storage_total),
+    mnesia:dirty_write(popcorn_release_scm, Record),
+    {noreply, State};
+
+%% gen_server:cast(pg2:get_closest_pid('storage'), {new_release_scm_mapping, {release_scm_mapping, <<"XMPP:253">>, <<"XMPP">>, <<"253">>, <<"tt_organization.erl">>, <<"github.com/foo/bar.erl">>}}).
+handle_cast({new_release_scm_mapping, Record}, State) ->
+    ?RPS_INCREMENT(storage_log_write),
+    ?RPS_INCREMENT(storage_total),
+    mnesia:dirty_write(popcorn_release_scm_mapping, Record),
     {noreply, State};
 
 handle_cast({delete_counter, Counter}, State) ->

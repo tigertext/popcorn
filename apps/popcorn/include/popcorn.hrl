@@ -64,3 +64,18 @@
                       log_function    :: binary(),
                       log_line        :: integer(),
                       log_pid         :: binary()}).
+
+-record(release_scm, {
+        key :: binary(),
+        role :: binary(),
+        version :: binary(),
+        checksum :: binary()
+        }).
+
+-record(release_scm_mapping, {
+        key :: binary(),
+        role :: binary(),
+        version :: binary(),
+        module_name :: binary(),
+        url :: binary()
+        }).
