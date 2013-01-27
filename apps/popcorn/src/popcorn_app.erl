@@ -82,16 +82,18 @@ init([]) ->
     io:format("Starting http listener..."),
     {ok, Http_Listen_Port} = application:get_env(popcorn, http_listen_port),
     Http_Dispatch = [{'_', [
-                            {[<<"favicon.ico">>],       http_static_handler, []},
-                            {[<<"js">>, '...'],         http_static_handler, []},
-                            {[<<"css">>, '...'],        http_static_handler, []},
-                            {[<<"images">>, '...'],     http_static_handler, []},
-                            {[<<"bootstrap">>, '...'],  http_static_handler, []},
-                            {[<<"log">>, '...'],        http_log_handler, []},
+                            {[<<"favicon.ico">>],        http_static_handler, []},
+                            {[<<"js">>, '...'],          http_static_handler, []},
+                            {[<<"css">>, '...'],         http_static_handler, []},
+                            {[<<"images">>, '...'],      http_static_handler, []},
+                            {[<<"bootstrap">>, '...'],   http_static_handler, []},
+                            {[<<"log">>, '...'],         http_log_handler, []},
                             {[<<"dashboard">>, <<"stream">>, '...'],
-                                                        http_stream_handler, []},
-                            {[<<"node">>, '_'],         http_node_handler, []},
-                            {'_',                       http_catchall_handler, []}
+                                                         http_stream_handler, []},
+                            {[<<"node">>, '_'],          http_node_handler, []},
+                            {[<<"api">>, '_'],           http_api_handler, []},
+                            {[<<"popupmenu">>, '_', '_'], http_popupmenu, []},
+                            {'_',                        http_catchall_handler, []}
                            ]}],
 
     cowboy:start_http(http_handler, 100, [{port, Http_Listen_Port}], [{dispatch, Http_Dispatch}]),
