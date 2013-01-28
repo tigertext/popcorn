@@ -51,6 +51,14 @@
                 <li>
                   <a href="/#nodes"><i class="icon-th-large icon-white"></i> Nodes</a>
                 </li>
+                <li class="selected">
+                  <a href="#" class="nav-filter">Severity</a>
+                </li>
+                <li>
+                  {{#known_severities}}
+                  <a href="#" class="nav-filter"><label class="checkbox"><input type="checkbox" class="filter-severity" data-val="{{severity_num}}">{{label}}</label></a>
+                  {{/known_severities}}
+                </li>
               </ul>
             </nav>
           </aside>
