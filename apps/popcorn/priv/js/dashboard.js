@@ -27,8 +27,7 @@ function updateAlertRow(table, counter) {
   } else {
     var newRow =
     "<tr id='" + rowName +"'>" +
-    "<td><a href='/alert/" + rowName + "' class='btn btn-mini btn-details'>...</a></td>" +
-    "<td><a href='#' class='btn btn-mini btn-clear'>Clear</a></td>" +
+    "<td><a id='" + rowName + "' class='btn btn-mini btn-alert-options'>...</a></td>"+
     "<td>[" + maybe(counter.severity, "alert") + "] " + maybe(counter.name) + " line " + maybe(counter.line) + "<br/><span class='message'>" + maybe(counter.message) + "</span></td>" +
     "<td><span class='recent'>" + maybe(counter.recent, 0) + "</span> recent / <span class='seen'>" + maybe(counter.count, 1) + "</span> seen</td>" +
     "<td align='right'>" + maybe(counter.product) + " " + maybe(counter.version) + "</td></tr>";

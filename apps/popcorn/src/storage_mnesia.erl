@@ -145,15 +145,15 @@ handle_call({is_known_node, Node_Name}, _From, State) ->
      State};
 
 %% @doc returns all alerts for a given {role, version, module, line} tuple
-handle_call({get_alert, {Severity, Role, Version, Module, Line}}, _From, State) ->
+handle_call({get_alert, Key}, _From, State) ->
     ?RPS_INCREMENT(storage_total),
-    Key = alert_key(Severity, Role, Version, Module, Line),
     F = fun() ->
-        Pattern = #alert{location=Key, log='$1', timestamp='$2'},
-        mnesia:select(popcorn_alert, [{Pattern, [], ['$1']}])
-    end,
-    {atomic, Db_Reply} = mnesia:transaction(F),
-    {reply, Db_Reply, State};
+          mnesia:select(popcorn_alert, ets:fun2ms(fun(Alert = #alert{location=K}) when K == Key -> Alert end))
+        end,
+    case mnesia:transaction(F) of
+        {atomic, [Alert]} -> {reply, Alert, State};
+        {atomic, []} -> {reply, undefined, State}
+    end;
 
 handle_call({get_alerts}, _From, State) ->
     Transaction = fun() ->
@@ -171,8 +171,8 @@ handle_call({get_alerts}, _From, State) ->
 handle_call({get_alert_keys, Type}, _From, State) ->
     ?RPS_INCREMENT(storage_total),
     F = fun() ->
-        mnesia:select(popcorn_alert_keyset, [{#alert_key{type=Type, key='$1'}, [], ['$1']}])
-    end,
+          mnesia:select(popcorn_alert_keyset, ets:fun2ms(fun(#alert_key{type=T, key=Key}) when T == Type -> Key end))
+        end,
     {atomic, Db_Reply} = mnesia:transaction(F),
     {reply, Db_Reply, State};
 
@@ -230,9 +230,8 @@ handle_cast({new_release_scm, Record}, State) ->
     mnesia:dirty_write(popcorn_release_scm, Record),
     {noreply, State};
 
-handle_cast({new_alert, {Severity, Role, Version, Module, Line}, #alert{} = Record}, State) ->
+handle_cast({new_alert, Key, #alert{} = Record}, State) ->
     ?RPS_INCREMENT(storage_total),
-    Key = alert_key(Severity, Role, Version, Module, Line),
     mnesia:dirty_write(popcorn_alert, Record#alert{location=Key}),
     {noreply, State};
 
@@ -342,6 +341,3 @@ is_filtered_out(Log_Message, Filters) ->
                       end,
 
     Severity_Restricted orelse Time_Restricted.
-
-alert_key(Severity, Role, Version, Module, Line) ->
-    iolist_to_binary([Severity, $:, Role, $:, Version, $:, Module, $:, Line]).

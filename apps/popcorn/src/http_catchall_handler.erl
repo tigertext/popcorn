@@ -96,7 +96,7 @@ handle(Req, State) ->
                             end),
                     Location    = base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global])),
                     Context     = dict:from_list([{location, binary_to_list(Alert)}, {log_messages, Log_Messages}
-                                                    | triage_handler:location_as_strings(Alert)]),
+                                                    | triage_handler:alert_properties(Alert)]),
                     TFun        = pcache:get(rendered_templates, view_alert),
                     Output      = mustache:render(view_alert, TFun, Context),
                     {ok, Reply} = cowboy_req:reply(200, [], Output, Req),

@@ -13,7 +13,7 @@
 
 -export([counter_data/1, all_alerts/1, recent_alerts/1,
          alert_count_today/0, alert_count/0, clear_alert/1,
-         safe_notify/4, log_messages/3, location_as_strings/1]).
+         safe_notify/4, log_messages/3, alert_properties/1]).
 
 -include_lib("lager/include/lager.hrl").
 -include("include/popcorn.hrl").
@@ -28,6 +28,9 @@ start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 safe_notify(Popcorn_Node, Node_Pid, Log_Message, Is_New_Node) ->
     gen_server:cast(?MODULE, {triage_event, Popcorn_Node, Node_Pid, Log_Message, Is_New_Node}).
+
+alert_properties(Alert) ->
+    location_as_strings(base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global]))).
 
 location_as_strings(Counter) ->
     lists:zipwith(
@@ -61,7 +64,7 @@ init(_) ->
     {ok, #state{timer = Timer}}.
 
 handle_call({data, Counter}, _From, State) ->
-    V = case gen_server:call(pg2:get_closest_pid('storage'), {get_alert_record, Counter}) of
+    V = case gen_server:call(pg2:get_closest_pid('storage'), {get_alert, Counter}) of
             #alert{} = Alert -> Alert;
             _ -> #alert{}
         end,
@@ -103,7 +106,7 @@ handle_cast({triage_event, #popcorn_node{} = Node, Node_Pid,
                            log_module=Module, log_line=Line, severity=Severity} = Log_Entry,
               Is_New_Node}, #state{incident=Incident} = State)
         when Severity =< 16, Severity =/= 0, is_binary(Product), is_binary(Version), is_binary(Module), is_binary(Line) ->
-    gen_server:cast(pg2:get_closest_pid('storage'), {new_alert, {Severity,Product,Version,Module,Line}, #alert{log=Log_Entry, incident=Incident}}),
+    gen_server:cast(pg2:get_closest_pid('storage'), {new_alert, key(Severity,Product,Version,Module,Line), #alert{log=Log_Entry, incident=Incident}}),
     case Is_New_Node of
         true ->
             outbound_notifier:notify(new_node, as_proplist(Node)),
