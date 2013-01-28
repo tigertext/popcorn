@@ -27,6 +27,7 @@
 -behavior(gen_server).
 
 -include("include/popcorn.hrl").
+-include_lib("stdlib/include/qlc.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
 
 -export([start_link/0,
@@ -64,6 +65,40 @@ pre_init() ->
                                                              #log_message.log_line,
                                                              #log_message.timestamp]},
                                               {attributes,  record_info(fields, log_message)}])]),
+
+    io:format("\n\t[alert_key: ~p]",
+        [mnesia:create_table(popcorn_alert_keyset, [{disc_copies, [node()]},
+                                           {record_name, alert_key},
+                                           {type,        bag},
+                                           {attributes,  record_info(fields, alert_key)}])]),
+    io:format("\n\t[alert_counter: ~p]",
+        [mnesia:create_table(popcorn_alert_keyset, [{disc_copies, [node()]},
+                                           {record_name, alert_counter},
+                                           {type,        set},
+                                           {attributes,  record_info(fields, alert_counter)}])]),
+    io:format("\n\t[alert: ~p]",
+        [mnesia:create_table(popcorn_alert, [{disc_copies, [node()]},
+                                           {record_name, alert},
+                                           {type,        ordered_set},
+                                           {index,       [#alert.timestamp]},
+                                           {attributes,  record_info(fields, alert)}])]),
+
+    io:format("\n\t[popcorn_scm: ~p]",
+        [mnesia:create_table(popcorn_release_scm, [{disc_copies, [node()]},
+                                           {record_name, release_scm},
+                                           {type,        ordered_set},
+                                           {index,       [#release_scm.role,
+                                                          #release_scm.version]},
+                                           {attributes,  record_info(fields, release_scm)}])]),
+
+    io:format("\n\t[popcorn_scm_mapping: ~p]",
+        [mnesia:create_table(popcorn_release_scm_mapping, [{disc_copies, [node()]},
+                                           {record_name, release_scm_mapping},
+                                           {type,        ordered_set},
+                                           {index,       [#release_scm_mapping.role,
+                                                          #release_scm_mapping.version]},
+                                           {attributes,  record_info(fields, release_scm_mapping)}])]),
+
     io:format("\n\t[popcorn_counters: ~p]",
        [mnesia:create_table(popcorn_counters, [{disc_copies, [node()]}])]),
     io:format("\n... done!\n").
@@ -109,7 +144,52 @@ handle_call({is_known_node, Node_Name}, _From, State) ->
      mnesia:dirty_read(known_nodes, Node_Name) =/= [],
      State};
 
-handle_call({search_messages, {P, V, M, L, Page_Size, Starting_Timestamp}}, _From, State) ->
+%% @doc returns all alerts for a given {role, version, module, line} tuple
+handle_call({get_alert, Key}, _From, State) ->
+    ?RPS_INCREMENT(storage_total),
+    F = fun() ->
+          mnesia:select(popcorn_alert, ets:fun2ms(fun(Alert = #alert{location=K}) when K == Key -> Alert end))
+        end,
+    case mnesia:transaction(F) of
+        {atomic, [Alert]} -> {reply, Alert, State};
+        {atomic, []} -> {reply, undefined, State}
+    end;
+
+handle_call({get_alerts}, _From, State) ->
+    Transaction = fun() ->
+        Query = qlc:q([#alert{} = Alert || Alert <- mnesia:table(popcorn_alert)]),
+        Order =
+            fun(A, B) ->
+                B#alert.incident > A#alert.incident
+            end,
+        qlc:eval(qlc:sort(Query, [{order, Order}]))
+    end,
+    {atomic, Alerts} = mnesia:transaction(Transaction),
+    {reply, Alerts, State};
+
+%% @doc returns all alerts for a given {severity, role, version, module, line} tuple
+handle_call({get_alert_keys, Type}, _From, State) ->
+    ?RPS_INCREMENT(storage_total),
+    F = fun() ->
+          mnesia:select(popcorn_alert_keyset, ets:fun2ms(fun(#alert_key{type=T, key=Key}) when T == Type -> Key end))
+        end,
+    {atomic, Db_Reply} = mnesia:transaction(F),
+    {reply, Db_Reply, State};
+
+%% @doc returns the URL as a binary if the mapping exists, or undefined
+handle_call({get_release_module_link, Role, Version, Module}, _From, State) ->
+    ?RPS_INCREMENT(storage_total),
+    F = fun() ->
+        Link = #release_scm_mapping{key=iolist_to_binary([Role, $:, Version, $:, Module]), url='$1', _='_'},
+        mnesia:select(popcorn_release_scm_mapping, [{Link, [], ['$1']}])
+    end,
+    {atomic, Db_Reply} = mnesia:transaction(F),
+    {reply, case Db_Reply of 
+                [] -> undefined;
+                [URL] -> URL
+            end, State};
+
+handle_call({search_messages, {S, P, V, M, L, Page_Size, Starting_Timestamp}}, _From, State) ->
     Messages =
       case mnesia:transaction(
                 fun() ->
@@ -118,8 +198,8 @@ handle_call({search_messages, {P, V, M, L, Page_Size, Starting_Timestamp}}, _Fro
                     mnesia:select(
                         popcorn_history,
                         ets:fun2ms(
-                            fun(#log_message{timestamp = TS, log_product = LP, log_version = LV, log_module = LM, log_line = LL} = Log_Message)
-                                when LP == P, LV == V, LM == M, LL == L, (Starting_Timestamp == undefined orelse TS > Starting_Timestamp) -> Log_Message end),
+                            fun(#log_message{timestamp = TS, log_product = LP, log_version = LV, severity = LS, log_module = LM, log_line = LL} = Log_Message)
+                                when LP == P, LV == V, LS == S, LM == M, LL == L, (Starting_Timestamp == undefined orelse TS > Starting_Timestamp) -> Log_Message end),
                         Page_Size,
                         read)
                 end) of
@@ -149,6 +229,28 @@ handle_cast({new_log_message, Log_Message}, State) ->
     ?RPS_INCREMENT(storage_log_write),
     ?RPS_INCREMENT(storage_total),
     mnesia:dirty_write(popcorn_history, Log_Message),
+    {noreply, State};
+
+handle_cast({new_release_scm, Record}, State) ->
+    ?RPS_INCREMENT(storage_log_write),
+    ?RPS_INCREMENT(storage_total),
+    mnesia:dirty_write(popcorn_release_scm, Record),
+    {noreply, State};
+
+handle_cast({new_alert, Key, #alert{} = Record}, State) ->
+    ?RPS_INCREMENT(storage_total),
+    mnesia:dirty_write(popcorn_alert, Record#alert{location=Key}),
+    {noreply, State};
+
+handle_cast({new_alert_key, Type, Key}, State) ->
+    ?RPS_INCREMENT(storage_total),
+    mnesia:dirty_write(popcorn_alert_keyset, #alert_key{type=Type, key=Key}),
+    {noreply, State};
+
+handle_cast({new_release_scm_mapping, Record}, State) ->
+    ?RPS_INCREMENT(storage_log_write),
+    ?RPS_INCREMENT(storage_total),
+    mnesia:dirty_write(popcorn_release_scm_mapping, Record),
     {noreply, State};
 
 handle_cast({delete_counter, Counter}, State) ->
@@ -246,5 +348,3 @@ is_filtered_out(Log_Message, Filters) ->
                       end,
 
     Severity_Restricted orelse Time_Restricted.
-
-

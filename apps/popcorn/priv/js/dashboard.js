@@ -18,15 +18,6 @@ function setNodePercents() {
   }
 };
 
-function setClearOnClick(selector) {
-  $(selector).click(function() {
-    var counter = $(this).parent().parent().attr("id");
-    $.post(
-      "/clear_alert",
-      {"alert" : $(this).parent().parent().attr("id")})
-  });
-};
-
 function updateAlertRow(table, counter) {
   var rowName = counter.location;
   if($('#' + rowName).length > 0) {
@@ -36,13 +27,12 @@ function updateAlertRow(table, counter) {
   } else {
     var newRow =
     "<tr id='" + rowName +"'>" +
-    "<td><a href='/alert/" + rowName + "' class='btn btn-mini btn-details'>...</a></td>" +
-    "<td><a href='#' class='btn btn-mini btn-clear'>Clear</a></td>" +
-    "<td>" + maybe(counter.name) + " line " + maybe(counter.line) + "<br/><span class='message'>" + maybe(counter.message) + "</span></td>" +
+    "<td><a id='" + rowName + "' class='btn btn-mini btn-alert-options'>...</a></td>"+
+    "<td>[" + maybe(counter.severity, "alert") + "] " + maybe(counter.name) + " line " + maybe(counter.line) + "<br/><span class='message'>" + maybe(counter.message) + "</span></td>" +
     "<td><span class='recent'>" + maybe(counter.recent, 0) + "</span> recent / <span class='seen'>" + maybe(counter.count, 1) + "</span> seen</td>" +
     "<td align='right'>" + maybe(counter.product) + " " + maybe(counter.version) + "</td></tr>";
     $(table + ' tbody').prepend(newRow);
-    setClearOnClick('#' + rowName + ' .btn-clear');
+    register_to_context_click($('a.btn-alert-options'));
   };
   $('#' + rowName + ' td').addClass('highlight');
   setTimeout("$('#" + rowName + " td').removeClass('highlight')", 1000);

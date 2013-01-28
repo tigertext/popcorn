@@ -18,7 +18,7 @@
 -define(TOTAL_ALERT_COUNTER,         binary_to_atom(<<"total_alerts">>, latin1)).
 -define(NODE_EVENT_COUNTER(Node),    popcorn_util:node_event_counter(Node)).
 
--define(PERCENT(Value),              round(Value * 100 * math:pow(10, 2)) / math:pow(10, 2)).
+-define(PERCENT(Value),              try round(Value * 100 * math:pow(10, 2)) / math:pow(10, 2) catch _:badarith -> 0 end).
 -define(NOW,                         folsom_utils:now_epoch_micro()).
 -define(POPCORN_DEBUG_MSG(Msg),      io:format("~s\n", [Msg]), lager:debug(Msg)).
 -define(POPCORN_INFO_MSG(Msg),       io:format("~s\n", [Msg]), lager:info(Msg)).
@@ -52,7 +52,7 @@
                        version   :: binary()}).
 
 -record(log_message, {message_id      :: binary(),
-                      severity        :: integer(),
+                      severity        :: 0 | 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128,
                       message         :: binary(),
                       timestamp       :: number(),
                       log_nodename    :: binary(),
@@ -64,3 +64,35 @@
                       log_function    :: binary(),
                       log_line        :: integer(),
                       log_pid         :: binary()}).
+
+-record(release_scm, {
+        key :: binary(),
+        role :: binary(),
+        version :: binary(),
+        checksum :: binary()
+        }).
+
+-record(release_scm_mapping, {
+        key :: binary(),
+        role :: binary(),
+        version :: binary(),
+        module_name :: binary(),
+        url :: binary()
+        }).
+
+-record(alert, {
+        location,
+        log,
+        timestamp = erlang:now(),
+        incident
+}).
+
+-record(alert_key, {
+        type,
+        key
+}).
+
+-record(alert_counter, {
+        key,
+        value
+}).
