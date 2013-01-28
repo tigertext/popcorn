@@ -126,7 +126,14 @@ handle_call({search_messages, {P, V, M, L, Page_Size, Starting_Timestamp}}, _Fro
             {atomic, {Ms, _}} -> Ms;
             {atomic, '$end_of_table'} -> []
         end,
-    {reply, Messages, State};
+
+    %% sort the messages by date, newest first
+    Sorted =
+      lists:sort(fun(Message1, Message2) ->
+          Message1#log_message.timestamp >= Message2#log_message.timestamp
+        end, Messages),
+
+    {reply, Sorted, State};
 
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
 
