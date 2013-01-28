@@ -13,7 +13,7 @@
 
 -export([counter_data/1, all_alerts/1, recent_alerts/1,
          alert_count_today/0, alert_count/0, clear_alert/1,
-         safe_notify/4, log_messages/6, decode_location/1]).
+         safe_notify/4, log_messages/3, alert_properties/1]).
 
 -include_lib("lager/include/lager.hrl").
 -include("include/popcorn.hrl").
@@ -29,16 +29,18 @@ start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 safe_notify(Popcorn_Node, Node_Pid, Log_Message, Is_New_Node) ->
     gen_server:cast(?MODULE, {triage_event, Popcorn_Node, Node_Pid, Log_Message, Is_New_Node}).
 
-decode_location(Alert) ->
-    Counter = base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global])),
-    do_decode_location(Counter).
+alert_properties(Alert) ->
+    location_as_strings(base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global]))).
 
-do_decode_location(Counter) ->
-    Parts = re:split(Counter, <<":">>, [{return, list}]),
-    lists:zip([product, version, name, line], Parts).
+location_as_strings(Counter) ->
+    lists:zipwith(
+        fun(K, V) -> {K, binary_to_list(V)} end,
+        [severity, product, version, name, line], split_location(Counter)).
 
-log_messages(Product, Version, Name, Line, Starting_Timestamp, Page_Size) ->
-    gen_server:call(?MODULE, {messages, Product, Version, Name, Line, Starting_Timestamp, Page_Size}).
+split_location(Counter) -> re:split(Counter, <<":">>, [{return, binary}]).
+
+log_messages(Alert, Starting_Timestamp, Page_Size) ->
+    gen_server:call(?MODULE, {messages, base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global])), Starting_Timestamp, Page_Size}).
 
 counter_data(Counter) -> gen_server:call(?MODULE, {data, Counter}).
 
@@ -62,7 +64,7 @@ init(_) ->
     {ok, #state{timer = Timer}}.
 
 handle_call({data, Counter}, _From, State) ->
-    V = case gen_server:call(pg2:get_closest_pid('storage'), {get_alert_record, Counter}) of
+    V = case gen_server:call(pg2:get_closest_pid('storage'), {get_alert, Counter}) of
             #alert{} = Alert -> Alert;
             _ -> #alert{}
         end,
@@ -92,12 +94,9 @@ handle_call({clear, Counter}, _From, State) ->
          {alert_count,  Total_Alert_Count}],
     dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
     {reply, ok, reset_timer(State)};
-handle_call({messages, Product, Version, Module, Line, Starting_Timestamp, Page_Size}, _From, State) ->
-    P = list_to_binary(Product),
-    V = list_to_binary(Version),
-    M = list_to_binary(Module),
-    L = list_to_binary(Line),
-    Messages = gen_server:call(?STORAGE_PID, {search_messages, {P, V, M, L, Page_Size, Starting_Timestamp}}),
+handle_call({messages, Alert, Starting_Timestamp, Page_Size}, _From, State) ->
+    [S, P, V, M, L] = split_location(Alert),
+    Messages = gen_server:call(?STORAGE_PID, {search_messages, {popcorn_util:severity_to_number(S), P, V, M, L, Page_Size, Starting_Timestamp}}),
     {reply, Messages, State};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
@@ -107,14 +106,14 @@ handle_cast({triage_event, #popcorn_node{} = Node, Node_Pid,
                            log_module=Module, log_line=Line, severity=Severity} = Log_Entry,
               Is_New_Node}, #state{incident=Incident} = State)
         when Severity =< 16, Severity =/= 0, is_binary(Product), is_binary(Version), is_binary(Module), is_binary(Line) ->
-    gen_server:cast(pg2:get_closest_pid('storage'), {new_alert, {Product,Version,Module,Line}, #alert{log=Log_Entry, incident=Incident}}),
+    gen_server:cast(pg2:get_closest_pid('storage'), {new_alert, key(Severity,Product,Version,Module,Line), #alert{log=Log_Entry, incident=Incident}}),
     case Is_New_Node of
         true ->
             outbound_notifier:notify(new_node, as_proplist(Node)),
             dashboard_stream_fsm:broadcast({new_node, Node});
         false -> ok
     end,
-    update_counter(Node,Node_Pid,Product,Version,Module,Line),
+    update_counter(Node,Node_Pid,Severity,Product,Version,Module,Line),
     {noreply, reset_timer(State)};
 handle_cast({triage_event, #popcorn_node{} = Node, _Node_Pid, _Log_Message, true}, State) ->
     outbound_notifier:notify(new_node, as_proplist(Node)),
@@ -160,13 +159,13 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-update_counter(Node, _Node_Pid, Product, Version, Module, Line) ->
-    Count_Key           = key(Product,Version,Module,Line),
+update_counter(Node, _Node_Pid, Severity, Product, Version, Module, Line) ->
+    Count_Key           = key(Severity,Product,Version,Module,Line),
     Recent_Counter_Key  = recent_key(Count_Key),
     Day_Key             = day_key(),
 
     %% TODO perhaps these next 2 lines should be optimized, store in state if we have added to the ets table?
-    gen_server:cast(pg2:get_closest_pid('storage'), {new_alert_key, alert, {Product, Version, Module, Line}}),
+    gen_server:cast(pg2:get_closest_pid('storage'), {new_alert_key, alert, {Severity, Product, Version, Module, Line}}),
     gen_server:cast(pg2:get_closest_pid('storage'), {new_alert_key, day, Day_Key}),
     %% storage_mnesia
 
@@ -180,7 +179,7 @@ update_counter(Node, _Node_Pid, Product, Version, Module, Line) ->
 
     case ?COUNTER_VALUE(Recent_Counter_Key) of
         1 ->
-            outbound_notifier:notify(new_alert, do_decode_location(Count_Key)),
+            outbound_notifier:notify(new_alert, location_as_strings(Count_Key)),
             ?INCREMENT_COUNTER(?TOTAL_ALERT_COUNTER);
         _ -> ok
     end,
@@ -198,11 +197,12 @@ update_counter(Node, _Node_Pid, Product, Version, Module, Line) ->
             {alert_count_today, Day_Count},
             {alert_count,       Alert_Count}],
 
-    outbound_notifier:notify(new_event, [{location, Count_Key} | do_decode_location(Count_Key)]),
+    outbound_notifier:notify(new_event, [{location, Count_Key} | location_as_strings(Count_Key)]),
     dashboard_stream_fsm:broadcast({update_counters, NewCounters}).
 
-key(Product,Version,Module,Line) ->
-    binary_to_list(<<Product/binary, ":", Version/binary, ":", Module/binary, ":", Line/binary>>).
+key(Severity,Product,Version,Module,Line) ->
+    SeverityName = list_to_binary(popcorn_util:number_to_severity(Severity)),
+    binary_to_list(<<SeverityName/binary, ":", Product/binary, ":", Version/binary, ":", Module/binary, ":", Line/binary>>).
 
 recent_key(Counter) -> "recent:" ++ Counter.
 
@@ -220,16 +220,8 @@ data(Alert) ->
         #alert{} ->
           []
       end,
-    All_Properties =
-        case string:tokens(binary_to_list(Alert#alert.location), ":") of
-            [Product,Version,Module,Line|_] ->
-                [{product,  Product},
-                 {version,  Version},
-                 {name,     Module},
-                 {line,     Line}
-                 | Basic_Properties];
-            _ -> Basic_Properties
-        end,
+
+    All_Properties = location_as_strings(Alert#alert.location) ++ Basic_Properties,
 
     Location_Count        = ?COUNTER_VALUE(Alert#alert.location),
     Recent_Location_Count = ?COUNTER_VALUE(recent_key(Alert#alert.location)),
@@ -265,7 +257,3 @@ reset_timer(#state{incident=Incident} = State) ->
 as_proplist(Node) when is_record(Node, popcorn_node) ->
     [popcorn_node | Props] = tuple_to_list(Node),
     lists:zip(record_info(fields, popcorn_node), Props).
-
-epoch() ->
-    {Megasecs, Secs, Microsecs} = erlang:now(),
-    SecondsSinceEpoch = (Megasecs * 1000000) + Secs + (Microsecs / 1000000).

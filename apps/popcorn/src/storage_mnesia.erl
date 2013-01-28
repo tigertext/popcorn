@@ -51,12 +51,11 @@ pre_init() ->
 
     io:format("Ensuring required mnesia tables exist..."),
     io:format("\n\t[popcorn_history: ~p]",
-        [mnesia:create_table(known_nodes,  [{disc_copies, [node()]},
+       [mnesia:create_table(known_nodes,  [{disc_copies, [node()]},
                                            {record_name, popcorn_node},
                                            {attributes,  record_info(fields, popcorn_node)}])]),
-
     io:format("\n\t[popcorn_history: ~p]",
-        [mnesia:create_table(popcorn_history, [{disc_copies, [node()]},
+       [mnesia:create_table(popcorn_history, [{disc_copies, [node()]},
                                               {record_name, log_message},
                                               {type,        ordered_set},
                                               {index,       [#log_message.severity,
@@ -101,8 +100,7 @@ pre_init() ->
                                            {attributes,  record_info(fields, release_scm_mapping)}])]),
 
     io:format("\n\t[popcorn_counters: ~p]",
-    [mnesia:create_table(popcorn_counters, [{disc_copies, [node()]}])]),
-
+       [mnesia:create_table(popcorn_counters, [{disc_copies, [node()]}])]),
     io:format("\n... done!\n").
 
 init([]) ->
@@ -147,15 +145,15 @@ handle_call({is_known_node, Node_Name}, _From, State) ->
      State};
 
 %% @doc returns all alerts for a given {role, version, module, line} tuple
-handle_call({get_alert, {Role, Version, Module, Line}}, _From, State) ->
+handle_call({get_alert, Key}, _From, State) ->
     ?RPS_INCREMENT(storage_total),
-    Key = alert_key(Role, Version, Module, Line),
     F = fun() ->
-        Pattern = #alert{location=Key, log='$1', timestamp='$2'},
-        mnesia:select(popcorn_alert, [{Pattern, [], ['$1']}])
-    end,
-    {atomic, Db_Reply} = mnesia:transaction(F),
-    {reply, Db_Reply, State};
+          mnesia:select(popcorn_alert, ets:fun2ms(fun(Alert = #alert{location=K}) when K == Key -> Alert end))
+        end,
+    case mnesia:transaction(F) of
+        {atomic, [Alert]} -> {reply, Alert, State};
+        {atomic, []} -> {reply, undefined, State}
+    end;
 
 handle_call({get_alerts}, _From, State) ->
     Transaction = fun() ->
@@ -169,12 +167,12 @@ handle_call({get_alerts}, _From, State) ->
     {atomic, Alerts} = mnesia:transaction(Transaction),
     {reply, Alerts, State};
 
-%% @doc returns all alerts for a given {role, version, module, line} tuple
+%% @doc returns all alerts for a given {severity, role, version, module, line} tuple
 handle_call({get_alert_keys, Type}, _From, State) ->
     ?RPS_INCREMENT(storage_total),
     F = fun() ->
-        mnesia:select(popcorn_alert_keyset, [{#alert_key{type=Type, key='$1'}, [], ['$1']}])
-    end,
+          mnesia:select(popcorn_alert_keyset, ets:fun2ms(fun(#alert_key{type=T, key=Key}) when T == Type -> Key end))
+        end,
     {atomic, Db_Reply} = mnesia:transaction(F),
     {reply, Db_Reply, State};
 
@@ -191,7 +189,7 @@ handle_call({get_release_module_link, Role, Version, Module}, _From, State) ->
                 [URL] -> URL
             end, State};
 
-handle_call({search_messages, {P, V, M, L, Page_Size, Starting_Timestamp}}, _From, State) ->
+handle_call({search_messages, {S, P, V, M, L, Page_Size, Starting_Timestamp}}, _From, State) ->
     Messages =
       case mnesia:transaction(
                 fun() ->
@@ -200,8 +198,8 @@ handle_call({search_messages, {P, V, M, L, Page_Size, Starting_Timestamp}}, _Fro
                     mnesia:select(
                         popcorn_history,
                         ets:fun2ms(
-                            fun(#log_message{timestamp = TS, log_product = LP, log_version = LV, log_module = LM, log_line = LL} = Log_Message)
-                                when LP == P, LV == V, LM == M, LL == L, (Starting_Timestamp == undefined orelse TS > Starting_Timestamp) -> Log_Message end),
+                            fun(#log_message{timestamp = TS, log_product = LP, log_version = LV, severity = LS, log_module = LM, log_line = LL} = Log_Message)
+                                when LP == P, LV == V, LS == S, LM == M, LL == L, (Starting_Timestamp == undefined orelse TS > Starting_Timestamp) -> Log_Message end),
                         Page_Size,
                         read)
                 end) of
@@ -232,9 +230,8 @@ handle_cast({new_release_scm, Record}, State) ->
     mnesia:dirty_write(popcorn_release_scm, Record),
     {noreply, State};
 
-handle_cast({new_alert, {Role, Version, Module, Line}, #alert{} = Record}, State) ->
+handle_cast({new_alert, Key, #alert{} = Record}, State) ->
     ?RPS_INCREMENT(storage_total),
-    Key = iolist_to_binary([Role, $:, Version, $:, Module, $:, Line]),
     mnesia:dirty_write(popcorn_alert, Record#alert{location=Key}),
     {noreply, State};
 
@@ -344,6 +341,3 @@ is_filtered_out(Log_Message, Filters) ->
                       end,
 
     Severity_Restricted orelse Time_Restricted.
-
-alert_key(Role, Version, Module, Line) ->
-    iolist_to_binary([Role, $:, Version, $:, Module, $:, Line]).

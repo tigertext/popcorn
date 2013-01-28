@@ -97,7 +97,7 @@ handle_path(<<"GET">>, [<<"log">>], Req, State) ->
                                             _  -> Nodes
                                         end,
                  Applied_Severity_Filters = case Severities of
-                                                [] -> lists:map(fun(SN) -> binary_to_list(popcorn_util:number_to_severity(SN)) end, popcorn_util:all_severity_numbers());
+                                                [] -> [SN || {SN, _} <- popcorn_util:all_severities()];
                                                 _  -> Severities
                                             end,
 
@@ -106,7 +106,7 @@ handle_path(<<"GET">>, [<<"log">>], Req, State) ->
                  Default_Filters = lists:filter(fun({_, []}) -> false; (_) -> true end,
                                        [{'node_names', Applied_Node_Filters},
                                         {'roles',      Applied_Role_Filters},
-                                        {'severities', lists:map(fun(Severity_Name) -> popcorn_util:severity_to_number(list_to_binary(Severity_Name)) end, Applied_Severity_Filters)}]),
+                                        {'severities', lists:map(fun(Severity_Name) -> popcorn_util:severity_to_number(Severity_Name) end, Applied_Severity_Filters)}]),
 
                  %% spawn the stream fsm
                  {ok, Stream_Pid} = supervisor:start_child(log_stream_sup, []),
