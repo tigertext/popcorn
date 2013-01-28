@@ -110,7 +110,7 @@
                       {{#alerts}}
                         <tr id="{{location}}">
                           <td><a href="/alert/{{location}}" id="{{location}}" class='btn btn-mini btn-alert-options'>...</a></td>
-                          <td class="message">{{name}} line {{line}}<br/>{{message}}</td>
+                          <td class="message">[{{severity}}] {{name}} line {{line}}<br/>{{message}}</td>
                           <td><span class="recent">{{recent}}</span> recent / <span class="seen">{{count}}</span> seen</td>
                           <td align="right">{{product}} {{version}}</td>
                         </tr>

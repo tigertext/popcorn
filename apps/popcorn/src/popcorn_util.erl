@@ -10,7 +10,7 @@
          last_24_hours/0,
          severity_to_number/1,
          number_to_severity/1,
-         all_severity_numbers/0,
+         all_severities/0,
          random_id/0,
          format_log_message/1,
          opt/2,
@@ -42,30 +42,22 @@ last_24_hours() ->
         integer_to_list(erlang:trunc(folsom_utils:now_epoch() / 3600) - Hours_Ago)
       end, lists:seq(0, 23)).
 
-severity_to_number(<<"all">>) -> -1;
-severity_to_number(<<"debug">>) -> 128;
-severity_to_number(<<"info">>) -> 64;
-severity_to_number(<<"notice">>) -> 32;
-severity_to_number(<<"warn">>) -> 16;
-severity_to_number(<<"error">>) -> 8;
-severity_to_number(<<"critical">>) -> 4;
-severity_to_number(<<"alert">>) -> 2;
-severity_to_number(<<"emergency">>) -> 1;
-severity_to_number(<<"none">>) -> 0;
-severity_to_number(_) -> undefined.
+severity_to_number(Severity) when is_binary(Severity) -> severity_to_number(binary_to_atom(Severity, utf8));
+severity_to_number(Severity) when is_list(Severity) -> severity_to_number(list_to_atom(Severity));
+severity_to_number(Severity) ->
+    try lager_util:level_to_num(Severity)
+    catch
+        _:_ -> -1
+    end.
 
-number_to_severity(128) -> <<"debug">>;
-number_to_severity(64) -> <<"info">>;
-number_to_severity(32) -> <<"notice">>;
-number_to_severity(16) -> <<"warn">>;
-number_to_severity(8) -> <<"error">>;
-number_to_severity(4) -> <<"critical">>;
-number_to_severity(2) -> <<"alert">>;
-number_to_severity(1) -> <<"emergency">>;
-number_to_severity(0) -> <<"none">>;
-number_to_severity(_) -> <<"?">>.
+number_to_severity(N) ->
+    try lager_util:num_to_level(N) of
+        Level -> atom_to_list(Level)
+    catch
+        _:_ -> "?"
+    end.
 
-all_severity_numbers() -> [0, 1, 2, 4, 8, 16, 32, 64, 128].
+all_severities() -> [{atom_to_list(L), lager_util:level_to_num(L)} || L <- lager_util:levels()].
 
 random_id() ->
     Length = 64,
@@ -103,7 +95,7 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
   Formatted_Time     = lists:flatten(io_lib:format("~2.10.0B:~2.10.0B:~2.10.0B", [Hour, Minute, Second])),
 
   Find_More_Html     = "<strong>Filter current list to show only messages with matching:</strong><br /><br />" ++
-                       "<label class='checkbox popover-label'><input type='checkbox'>Severity: " ++ binary_to_list(popcorn_util:number_to_severity(Severity)) ++ "</label>" ++
+                       "<label class='checkbox popover-label'><input type='checkbox'>Severity: " ++ number_to_severity(Severity) ++ "</label>" ++
                        "<label class='checkbox popover-label'><input type='checkbox'>Module: " ++ binary_to_list(opt(Module, <<"Not set">>)) ++ "</label>" ++
                        "<label class='checkbox popover-label'><input type='checkbox'>Function: " ++ binary_to_list(opt(Function, <<"Not set">>)) ++ "</label>" ++
                        "<label class='checkbox popover-label'><input type='checkbox'>Line: " ++ binary_to_list(opt(Line, <<"?">>)) ++ " in " ++ binary_to_list(opt(Module, <<"not set">>)) ++ "</label>" ++
@@ -126,7 +118,7 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
    {'log_function',     binary_to_list(opt(Function, <<"Unknown">>))},
    {'log_line',         binary_to_list(opt(Line, <<"??">>))},
    {'log_pid',          binary_to_list(opt(Pid, <<"?">>))},
-   {'message_severity', binary_to_list(popcorn_util:number_to_severity(Severity))},
+   {'message_severity', number_to_severity(Severity)},
    {'message',          binary_to_list(Linked_Message)}].
 
 css_file() ->
