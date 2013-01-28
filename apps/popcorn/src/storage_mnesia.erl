@@ -145,9 +145,9 @@ handle_call({is_known_node, Node_Name}, _From, State) ->
      State};
 
 %% @doc returns all alerts for a given {role, version, module, line} tuple
-handle_call({get_alert, {Role, Version, Module, Line}}, _From, State) ->
+handle_call({get_alert, {Severity, Role, Version, Module, Line}}, _From, State) ->
     ?RPS_INCREMENT(storage_total),
-    Key = alert_key(Role, Version, Module, Line),
+    Key = alert_key(Severity, Role, Version, Module, Line),
     F = fun() ->
         Pattern = #alert{location=Key, log='$1', timestamp='$2'},
         mnesia:select(popcorn_alert, [{Pattern, [], ['$1']}])
@@ -167,7 +167,7 @@ handle_call({get_alerts}, _From, State) ->
     {atomic, Alerts} = mnesia:transaction(Transaction),
     {reply, Alerts, State};
 
-%% @doc returns all alerts for a given {role, version, module, line} tuple
+%% @doc returns all alerts for a given {severity, role, version, module, line} tuple
 handle_call({get_alert_keys, Type}, _From, State) ->
     ?RPS_INCREMENT(storage_total),
     F = fun() ->
@@ -189,7 +189,7 @@ handle_call({get_release_module_link, Role, Version, Module}, _From, State) ->
                 [URL] -> URL
             end, State};
 
-handle_call({search_messages, {P, V, S, M, L, Page_Size, Starting_Timestamp}}, _From, State) ->
+handle_call({search_messages, {S, P, V, M, L, Page_Size, Starting_Timestamp}}, _From, State) ->
     Messages =
       case mnesia:transaction(
                 fun() ->
@@ -230,9 +230,9 @@ handle_cast({new_release_scm, Record}, State) ->
     mnesia:dirty_write(popcorn_release_scm, Record),
     {noreply, State};
 
-handle_cast({new_alert, {Role, Version, Module, Line}, #alert{} = Record}, State) ->
+handle_cast({new_alert, {Severity, Role, Version, Module, Line}, #alert{} = Record}, State) ->
     ?RPS_INCREMENT(storage_total),
-    Key = iolist_to_binary([Role, $:, Version, $:, Module, $:, Line]),
+    Key = alert_key(Severity, Role, Version, Module, Line),
     mnesia:dirty_write(popcorn_alert, Record#alert{location=Key}),
     {noreply, State};
 
@@ -343,5 +343,5 @@ is_filtered_out(Log_Message, Filters) ->
 
     Severity_Restricted orelse Time_Restricted.
 
-alert_key(Role, Version, Module, Line) ->
-    iolist_to_binary([Role, $:, Version, $:, Module, $:, Line]).
+alert_key(Severity, Role, Version, Module, Line) ->
+    iolist_to_binary([Severity, $:, Role, $:, Version, $:, Module, $:, Line]).

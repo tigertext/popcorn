@@ -18,7 +18,7 @@
 -define(TOTAL_ALERT_COUNTER,         binary_to_atom(<<"total_alerts">>, latin1)).
 -define(NODE_EVENT_COUNTER(Node),    popcorn_util:node_event_counter(Node)).
 
--define(PERCENT(Value),              round(Value * 100 * math:pow(10, 2)) / math:pow(10, 2)).
+-define(PERCENT(Value),              try round(Value * 100 * math:pow(10, 2)) / math:pow(10, 2) catch _:badarith -> 0 end).
 -define(NOW,                         folsom_utils:now_epoch_micro()).
 -define(POPCORN_DEBUG_MSG(Msg),      io:format("~s\n", [Msg]), lager:debug(Msg)).
 -define(POPCORN_INFO_MSG(Msg),       io:format("~s\n", [Msg]), lager:info(Msg)).
@@ -52,7 +52,7 @@
                        version   :: binary()}).
 
 -record(log_message, {message_id      :: binary(),
-                      severity        :: 0..9,
+                      severity        :: 0 | 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128,
                       message         :: binary(),
                       timestamp       :: number(),
                       log_nodename    :: binary(),
