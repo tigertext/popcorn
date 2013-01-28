@@ -11,8 +11,6 @@
 
 -define(UPDATE_INTERVAL, 10000).
 
--record(alert, {location, log, timestamp = erlang:now()}).
-
 -export([counter_data/1, all_alerts/1, recent_alerts/1,
          alert_count_today/0, alert_count/0, clear_alert/1,
          safe_notify/4, log_messages/6, decode_location/1]).
@@ -21,7 +19,10 @@
 -include("include/popcorn.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
 
--record(state, {timer :: reference()}).
+-record(state, {
+        incident = 1 :: integer(),
+        timer :: reference()
+}).
 
 start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
@@ -33,7 +34,7 @@ decode_location(Alert) ->
     do_decode_location(Counter).
 
 do_decode_location(Counter) ->
-    Parts = re:split(Counter, <<":-:">>, [{return, list}]),
+    Parts = re:split(Counter, <<":">>, [{return, list}]),
     lists:zip([product, version, name, line], Parts).
 
 log_messages(Product, Version, Name, Line, Starting_Timestamp, Page_Size) ->
@@ -57,22 +58,12 @@ clear_alert(Alert) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 init(_) ->
-    try ets:new(triage_error_keys, [named_table, set, public, {keypos, 2}]) of
-        triage_error_keys -> ok
-    catch
-        _:badarg -> ok
-    end,
-    try ets:new(triage_error_data, [named_table, set, public, {keypos, #alert.location}]) of
-        triage_error_data -> ok
-    catch
-        _:badarg -> ok
-    end,
     Timer = erlang:send_after(?UPDATE_INTERVAL, self(), update_counters),
     {ok, #state{timer = Timer}}.
 
 handle_call({data, Counter}, _From, State) ->
-    V = case ets:lookup(triage_error_data, Counter) of
-            [#alert{} = Alert] -> Alert;
+    V = case gen_server:call(pg2:get_closest_pid('storage'), {get_alert_record, Counter}) of
+            #alert{} = Alert -> Alert;
             _ -> #alert{}
         end,
     {reply, data(V), State};
@@ -84,13 +75,11 @@ handle_call(alerts_for_today, _From, State) ->
     Day_Alerts = ?COUNTER_VALUE(Day_Key),
     {reply, Day_Alerts, State};
 handle_call({alerts, Count}, _From, State) ->
-    Alerts =
-        [   case ets:lookup(triage_error_data, Counter) of
-                [#alert{} = Alert] -> Alert;
-                _ -> #alert{}
-            end || {key, Counter} <- ets:tab2list(triage_error_keys), string:str(Counter, ":") =/= 0 ],
-    Sorted = lists:keysort(#alert.timestamp, Alerts),
-    FinalList = reverse_limit_and_filter(Sorted, Count),
+    %% storage_mnesia
+    %% popcorn_udp
+    Alerts = gen_server:call(pg2:get_closest_pid('storage'), {get_alerts}),
+    {Small_List,_} = lists:split(erlang:min(Count, length(Alerts)), Alerts),
+    FinalList = [data(Alert) || Alert <- Small_List],
     {reply, FinalList, State};
 handle_call({clear, Counter}, _From, State) ->
     Key = recent_key(Counter),
@@ -116,9 +105,9 @@ handle_call(_Request, _From, State) ->
 handle_cast({triage_event, #popcorn_node{} = Node, Node_Pid,
               #log_message{log_product=Product, log_version=Version,
                            log_module=Module, log_line=Line, severity=Severity} = Log_Entry,
-              Is_New_Node}, State)
+              Is_New_Node}, #state{incident=Incident} = State)
         when Severity =< 16, Severity =/= 0, is_binary(Product), is_binary(Version), is_binary(Module), is_binary(Line) ->
-    true = ets:insert(triage_error_data, #alert{location=key(Product,Version,Module,Line), log=Log_Entry}),
+    gen_server:cast(pg2:get_closest_pid('storage'), {new_alert, {Product,Version,Module,Line}, #alert{log=Log_Entry, incident=Incident}}),
     case Is_New_Node of
         true ->
             outbound_notifier:notify(new_node, as_proplist(Node)),
@@ -150,7 +139,7 @@ handle_info(update_counters, State) ->
     Day_Key = day_key(),
 
     %% TODO, perhaps this should be optimized
-    true = ets:insert(triage_error_keys, {key, Day_Key}),
+    gen_server:cast(pg2:get_closest_pid('storage'), {new_alert_key, day, Day_Key}),
 
     Day_Count   = ?COUNTER_VALUE(Day_Key),
     Event_Count = ?COUNTER_VALUE(?TOTAL_EVENT_COUNTER),
@@ -177,8 +166,9 @@ update_counter(Node, _Node_Pid, Product, Version, Module, Line) ->
     Day_Key             = day_key(),
 
     %% TODO perhaps these next 2 lines should be optimized, store in state if we have added to the ets table?
-    true = ets:insert(triage_error_keys, {key, Count_Key}),
-    true = ets:insert(triage_error_keys, {key, Day_Key}),
+    gen_server:cast(pg2:get_closest_pid('storage'), {new_alert_key, alert, {Product, Version, Module, Line}}),
+    gen_server:cast(pg2:get_closest_pid('storage'), {new_alert_key, day, Day_Key}),
+    %% storage_mnesia
 
     case ?COUNTER_VALUE(Count_Key) of
         0 -> ?INCREMENT_COUNTER(Day_Key);
@@ -212,7 +202,7 @@ update_counter(Node, _Node_Pid, Product, Version, Module, Line) ->
     dashboard_stream_fsm:broadcast({update_counters, NewCounters}).
 
 key(Product,Version,Module,Line) ->
-    binary_to_list(<<Product/binary, ":-:", Version/binary, ":-:", Module/binary, ":-:", Line/binary>>).
+    binary_to_list(<<Product/binary, ":", Version/binary, ":", Module/binary, ":", Line/binary>>).
 
 recent_key(Counter) -> "recent:" ++ Counter.
 
@@ -231,7 +221,7 @@ data(Alert) ->
           []
       end,
     All_Properties =
-        case string:tokens(Alert#alert.location, ":-:") of
+        case string:tokens(binary_to_list(Alert#alert.location), ":") of
             [Product,Version,Module,Line|_] ->
                 [{product,  Product},
                  {version,  Version},
@@ -267,11 +257,15 @@ reverse_limit_and_filter([Alert | Alerts], Count, Acc) ->
             _ -> [data(Alert) | Acc]
         end).
 
-reset_timer(State) ->
+reset_timer(#state{incident=Incident} = State) ->
     erlang:cancel_timer(State#state.timer),
     Timer = erlang:send_after(?UPDATE_INTERVAL, self(), update_counters),
-    State#state{timer = Timer}.
+    State#state{timer = Timer, incident=Incident+1}.
 
 as_proplist(Node) when is_record(Node, popcorn_node) ->
     [popcorn_node | Props] = tuple_to_list(Node),
     lists:zip(record_info(fields, popcorn_node), Props).
+
+epoch() ->
+    {Megasecs, Secs, Microsecs} = erlang:now(),
+    SecondsSinceEpoch = (Megasecs * 1000000) + Secs + (Microsecs / 1000000).

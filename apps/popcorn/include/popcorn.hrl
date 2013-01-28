@@ -79,3 +79,20 @@
         module_name :: binary(),
         url :: binary()
         }).
+
+-record(alert, {
+        location,
+        log,
+        timestamp = erlang:now(),
+        incident
+}).
+
+-record(alert_key, {
+        type,
+        key
+}).
+
+-record(alert_counter, {
+        key,
+        value
+}).

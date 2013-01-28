@@ -27,6 +27,7 @@
 -behavior(gen_server).
 
 -include("include/popcorn.hrl").
+-include_lib("stdlib/include/qlc.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
 
 -export([start_link/0,
@@ -65,6 +66,23 @@ pre_init() ->
                                                              #log_message.log_line,
                                                              #log_message.timestamp]},
                                               {attributes,  record_info(fields, log_message)}])]),
+
+    io:format("\n\t[alert_key: ~p]",
+        [mnesia:create_table(popcorn_alert_keyset, [{disc_copies, [node()]},
+                                           {record_name, alert_key},
+                                           {type,        bag},
+                                           {attributes,  record_info(fields, alert_key)}])]),
+    io:format("\n\t[alert_counter: ~p]",
+        [mnesia:create_table(popcorn_alert_keyset, [{disc_copies, [node()]},
+                                           {record_name, alert_counter},
+                                           {type,        set},
+                                           {attributes,  record_info(fields, alert_counter)}])]),
+    io:format("\n\t[alert: ~p]",
+        [mnesia:create_table(popcorn_alert, [{disc_copies, [node()]},
+                                           {record_name, alert},
+                                           {type,        ordered_set},
+                                           {index,       [#alert.timestamp]},
+                                           {attributes,  record_info(fields, alert)}])]),
 
     io:format("\n\t[popcorn_scm: ~p]",
         [mnesia:create_table(popcorn_release_scm, [{disc_copies, [node()]},
@@ -128,7 +146,38 @@ handle_call({is_known_node, Node_Name}, _From, State) ->
      mnesia:dirty_read(known_nodes, Node_Name) =/= [],
      State};
 
-%% gen_server:call(pg2:get_closest_pid('storage'), {get_release_module_link, <<"XMPP">>, <<"253">>, <<"tt_organization.erl">>}).
+%% @doc returns all alerts for a given {role, version, module, line} tuple
+handle_call({get_alert, {Role, Version, Module, Line}}, _From, State) ->
+    ?RPS_INCREMENT(storage_total),
+    Key = alert_key(Role, Version, Module, Line),
+    F = fun() ->
+        Pattern = #alert{location=Key, log='$1', timestamp='$2'},
+        mnesia:select(popcorn_alert, [{Pattern, [], ['$1']}])
+    end,
+    {atomic, Db_Reply} = mnesia:transaction(F),
+    {reply, Db_Reply, State};
+
+handle_call({get_alerts}, _From, State) ->
+    Transaction = fun() ->
+        Query = qlc:q([#alert{} = Alert || Alert <- mnesia:table(popcorn_alert)]),
+        Order =
+            fun(A, B) ->
+                B#alert.incident > A#alert.incident
+            end,
+        qlc:eval(qlc:sort(Query, [{order, Order}]))
+    end,
+    {atomic, Alerts} = mnesia:transaction(Transaction),
+    {reply, Alerts, State};
+
+%% @doc returns all alerts for a given {role, version, module, line} tuple
+handle_call({get_alert_keys, Type}, _From, State) ->
+    ?RPS_INCREMENT(storage_total),
+    F = fun() ->
+        mnesia:select(popcorn_alert_keyset, [{#alert_key{type=Type, key='$1'}, [], ['$1']}])
+    end,
+    {atomic, Db_Reply} = mnesia:transaction(F),
+    {reply, Db_Reply, State};
+
 %% @doc returns the URL as a binary if the mapping exists, or undefined
 handle_call({get_release_module_link, Role, Version, Module}, _From, State) ->
     ?RPS_INCREMENT(storage_total),
@@ -183,7 +232,17 @@ handle_cast({new_release_scm, Record}, State) ->
     mnesia:dirty_write(popcorn_release_scm, Record),
     {noreply, State};
 
-%% gen_server:cast(pg2:get_closest_pid('storage'), {new_release_scm_mapping, {release_scm_mapping, <<"XMPP:253">>, <<"XMPP">>, <<"253">>, <<"tt_organization.erl">>, <<"github.com/foo/bar.erl">>}}).
+handle_cast({new_alert, {Role, Version, Module, Line}, #alert{} = Record}, State) ->
+    ?RPS_INCREMENT(storage_total),
+    Key = iolist_to_binary([Role, $:, Version, $:, Module, $:, Line]),
+    mnesia:dirty_write(popcorn_alert, Record#alert{location=Key}),
+    {noreply, State};
+
+handle_cast({new_alert_key, Type, Key}, State) ->
+    ?RPS_INCREMENT(storage_total),
+    mnesia:dirty_write(popcorn_alert_keyset, #alert_key{type=Type, key=Key}),
+    {noreply, State};
+
 handle_cast({new_release_scm_mapping, Record}, State) ->
     ?RPS_INCREMENT(storage_log_write),
     ?RPS_INCREMENT(storage_total),
@@ -286,4 +345,5 @@ is_filtered_out(Log_Message, Filters) ->
 
     Severity_Restricted orelse Time_Restricted.
 
-
+alert_key(Role, Version, Module, Line) ->
+    iolist_to_binary([Role, $:, Version, $:, Module, $:, Line]).
