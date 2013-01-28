@@ -103,7 +103,7 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
   Formatted_Time     = lists:flatten(io_lib:format("~2.10.0B:~2.10.0B:~2.10.0B", [Hour, Minute, Second])),
 
   Find_More_Html     = "<strong>Filter current list to show only messages with matching:</strong><br /><br />" ++
-                       "<label class='checkbox popover-label'><input type='checkbox'>Severity: " ++ binary_to_list(popcorn_util:number_to_severity(Severity)) ++ "</label>" ++
+                       "<label class='checkbox popover-label'><input type='checkbox'>Severity: " ++ binary_to_list(number_to_severity(Severity)) ++ "</label>" ++
                        "<label class='checkbox popover-label'><input type='checkbox'>Module: " ++ binary_to_list(opt(Module, <<"Not set">>)) ++ "</label>" ++
                        "<label class='checkbox popover-label'><input type='checkbox'>Function: " ++ binary_to_list(opt(Function, <<"Not set">>)) ++ "</label>" ++
                        "<label class='checkbox popover-label'><input type='checkbox'>Line: " ++ binary_to_list(opt(Line, <<"?">>)) ++ " in " ++ binary_to_list(opt(Module, <<"not set">>)) ++ "</label>" ++
@@ -126,7 +126,7 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
    {'log_function',     binary_to_list(opt(Function, <<"Unknown">>))},
    {'log_line',         binary_to_list(opt(Line, <<"??">>))},
    {'log_pid',          binary_to_list(opt(Pid, <<"?">>))},
-   {'message_severity', binary_to_list(popcorn_util:number_to_severity(Severity))},
+   {'message_severity', binary_to_list(number_to_severity(Severity))},
    {'message',          binary_to_list(Linked_Message)}].
 
 css_file() ->

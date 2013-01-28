@@ -32,8 +32,9 @@ safe_notify(Popcorn_Node, Node_Pid, Log_Message, Is_New_Node) ->
     gen_server:cast(?MODULE, {triage_event, Popcorn_Node, Node_Pid, Log_Message, Is_New_Node}).
 
 location_as_strings(Counter) ->
-    Parts = re:split(Counter, <<":-:">>, [{return, list}]),
-    lists:zip([product, version, severity, name, line], Parts).
+    [P, V, S, M, L] = split_location(Counter),
+    lists:zip([product, version, severity, name, line],
+              [binary_to_list(P), binary_to_list(V), atom_to_list(lager_util:num_to_level(S)), binary_to_list(M), binary_to_list(L)]).
 
 split_location(Counter) ->
     [P, V, <<S>>, M, L] = re:split(Counter, <<":">>, [{return, binary}]),
@@ -224,7 +225,7 @@ data(Alert) ->
             [Product,Version,Severity,Module,Line|_] ->
                 [{product,  Product},
                  {version,  Version},
-                 {severity, list_to_integer(Severity)},
+                 {severity, atom_to_list(lager_util:num_to_level(list_to_integer(Severity)))},
                  {name,     Module},
                  {line,     Line}
                  | Basic_Properties];
