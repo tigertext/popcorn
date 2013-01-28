@@ -21,9 +21,18 @@ header_button(Context) ->
 username() -> "admin".
 
 -spec known_severities(dict()) -> list().
-known_severities(_) ->
+known_severities(Ctx) ->
+	Checked =
+		case mustache:get(severities, Ctx) of
+			all -> [N || {_, N} <- popcorn_util:all_severities()];
+			Ss -> Ss
+		end,
     lists:map(fun({Severity_Name, Severity_Number}) ->
-        Params = [{'label',        Severity_Name},
-                  {'severity_num', integer_to_list(Severity_Number)}],
+        Params = [{'label',        	Severity_Name},
+                  {'severity_num', 	integer_to_list(Severity_Number)},
+                  {'checked',		case lists:member(Severity_Number, Checked) of
+                  						true -> "checked";
+                  						false -> ""
+                  					end}],
         dict:from_list(Params)
       end, lists:reverse(popcorn_util:all_severities())).

@@ -56,7 +56,7 @@
                 </li>
                 <li>
                   {{#known_severities}}
-                  <a href="#" class="nav-filter"><label class="checkbox"><input type="checkbox" class="filter-severity" data-val="{{severity_num}}">{{label}}</label></a>
+                  <a href="#" class="nav-filter"><label class="checkbox"><input type="checkbox" class="filter-severity" {{checked}} data-val="{{severity_num}}">{{label}}</label></a>
                   {{/known_severities}}
                 </li>
               </ul>
@@ -113,7 +113,25 @@
             },
             false);
 
-          setClearOnClick('.btn-clear');
+          $('.filter-severity').click(function(e) {
+              var severitiesOn = [];
+              $.each($('.filter-severity'), function(k, v) {
+                if ($(v).prop('checked')) {
+                  severitiesOn.push(parseInt($(this).attr('data-val'), 10));
+                }
+              });
+
+              var otherQS = "";
+              if(window.location.search) {
+                var search = window.location.search.replace("?", "").split('&');
+                for (var i = 0; i < search.length; i++) {
+                  var parts = search[i].split("=");
+                  otherQS += parts[0] != "severities" ? "&" + search[i] : "";
+                };
+              }
+
+              window.location.href = window.location.href.split('?')[0] + "?severities=" + severitiesOn.join(",") + otherQS;
+            });
         });
     </script>
 
