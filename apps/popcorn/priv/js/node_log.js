@@ -19,7 +19,7 @@ $(document).ready(function() {
     var severitiesOn = [];
     $.each($('.filter-severity'), function(k, v) {
       if ($(v).prop('checked')) {
-        severitiesOn.push(parseInt($(this).attr('data-val')));
+        severitiesOn.push(parseInt($(this).attr('data-val'), 10));
       }
     });
 

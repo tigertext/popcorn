@@ -105,7 +105,12 @@ handle(Req, State) ->
 
         {{<<"GET">>, _}, {<<"/alerts">>, _}} ->
             {All, _} = cowboy_req:qs_val(<<"all">>, Req),
-            ?POPCORN_DEBUG_MSG("http request for alerts (~p)", [All]),
+            Severities =
+                case cowboy_req:qs_val(<<"severities">>, Req) of
+                    {undefined, _} -> all;
+                    {AsBinary, _} -> [list_to_integer(binary_to_list(S)) || S <- binary:split(AsBinary, <<",">>, [global,trim])]
+                end,
+            ?POPCORN_DEBUG_MSG("http request for alerts (~p, ~p)", [All, Severities]),
             case session_handler:is_session_authed_and_valid(Req) of
                 false -> Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
                          {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
@@ -123,8 +128,9 @@ handle(Req, State) ->
                         %% assign to the fsm
                         gen_fsm:send_event(Stream_Pid, {connect, Stream}),
 
-                        Context = dict:from_list([{stream_id, binary_to_list(Stream_Id)},
-                                                  {all,       All}]),
+                        Context = dict:from_list([{stream_id,   binary_to_list(Stream_Id)},
+                                                  {all,         All},
+                                                  {severities,  Severities}]),
 
                         TFun        = pcache:get(rendered_templates, view_alerts),
                         Output      = mustache:render(view_alerts, TFun, Context),

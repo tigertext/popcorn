@@ -155,9 +155,13 @@ handle_call({get_alert, Key}, _From, State) ->
         {atomic, []} -> {reply, undefined, State}
     end;
 
-handle_call({get_alerts}, _From, State) ->
+handle_call({get_alerts, Severities}, _From, State) ->
     Transaction = fun() ->
-        Query = qlc:q([#alert{} = Alert || Alert <- mnesia:table(popcorn_alert)]),
+        Query =
+          case Severities of
+            all -> qlc:q([Alert || Alert = #alert{} <- mnesia:table(popcorn_alert)]);
+            Severities -> qlc:q([Alert || Alert = #alert{log = #log_message{severity = Severity}} <- mnesia:table(popcorn_alert), lists:member(Severity, Severities)])
+          end,
         Order =
             fun(A, B) ->
                 B#alert.incident > A#alert.incident
