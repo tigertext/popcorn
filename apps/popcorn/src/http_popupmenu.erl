@@ -37,11 +37,12 @@ terminate(_Req, _State) -> ok.
 handle_path(<<"GET">>, [<<"popupmenu">>, <<"alert">>, Alert_Id], Req, State) ->
     Url_Service = module_source_context_option(Alert_Id),
     Body = iolist_to_binary([<<"<html><body>">>,
-                <<"<ul><li><a href=\"javascript:$.post('/clear_alert', {'alert': '">>, Alert_Id, <<"'});\">Clear Alert</a></li>">>,
-                <<"<li><a href=\"/alert/">>, Alert_Id, <<"\">View Details</a></li>">>,
-                Url_Service,
-                <<"</ul>">>,
-                <<"</body></html>">>]),
+                             <<"<ul>">>,
+                             <<"<li><a href=\"/alert/">>, Alert_Id, <<"\">View Details</a></li>">>,
+                             Url_Service,
+                             <<"<li><a href=\"javascript:$.post('/clear_alert', {'alert': '">>, Alert_Id, <<"'});\">Clear Alert</a></li>">>,
+                             <<"</ul>">>,
+                             <<"</body></html>">>]),
     {ok, Reply} = cowboy_req:reply(200, [{<<"Content-type">>, <<"text/plain">>}], Body, Req),
     {ok, Reply, State};
 
