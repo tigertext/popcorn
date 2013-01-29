@@ -215,8 +215,8 @@ data(#alert{location = undefined}) -> [];
 data(Alert) ->
     Basic_Properties =
       case Alert of
-        #alert{log = #log_message{message = Message}} ->
-          [ {'message', list(Message)}];
+        #alert{log = #log_message{message = Message, severity = SeverityNumber}} ->
+          [{'severity_num', SeverityNumber}, {'message', list(Message)}];
         #alert{} ->
           []
       end,

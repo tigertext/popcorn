@@ -24,9 +24,10 @@ username() -> "admin".
 known_severities(Ctx) ->
 	Checked =
 		case mustache:get(severities, Ctx) of
-			all -> [N || {_, N} <- popcorn_util:all_severities()];
+			"all" -> [N || {_, N} <- popcorn_util:all_severities()];
 			Ss -> Ss
 		end,
+	erlang:display(Checked),
     lists:map(fun({Severity_Name, Severity_Number}) ->
         Params = [{'label',        	Severity_Name},
                   {'severity_num', 	integer_to_list(Severity_Number)},
