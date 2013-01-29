@@ -8,7 +8,13 @@
 -spec head_includes() -> list().
 head_includes() -> popcorn_util:head_includes().
 
-alerts(Context) -> [dict:from_list(Alert) || Alert <- triage_handler:all_alerts("true" == mustache:get(all, Context))].
+alerts(Context) ->
+	Alerts =
+		case mustache:get(severities, Context) of
+			"all" -> triage_handler:all_alerts("true" == mustache:get(all, Context));
+			Ss -> triage_handler:alerts("true" == mustache:get(all, Context), Ss)
+		end,
+	[dict:from_list(Alert) || Alert <- Alerts].
 
 header_button(Context) ->
 	[dict:from_list(
@@ -21,9 +27,9 @@ header_button(Context) ->
 username() -> "admin".
 
 -spec known_severities(dict()) -> list().
-known_severities(Ctx) ->
+known_severities(Context) ->
 	Checked =
-		case mustache:get(severities, Ctx) of
+		case mustache:get(severities, Context) of
 			"all" -> [N || {_, N} <- popcorn_util:all_severities()];
 			Ss -> Ss
 		end,

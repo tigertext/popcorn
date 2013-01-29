@@ -11,7 +11,7 @@
 
 -define(UPDATE_INTERVAL, 10000).
 
--export([counter_data/1, all_alerts/1, recent_alerts/1,
+-export([counter_data/1, all_alerts/1, alerts/2, recent_alerts/1,
          alert_count_today/0, alert_count/0, clear_alert/1,
          safe_notify/4, log_messages/3, alert_properties/1]).
 
@@ -48,10 +48,13 @@ alert_count() -> gen_server:call(?MODULE, total_alerts).
 
 alert_count_today() -> gen_server:call(?MODULE, alerts_for_today).
 
-all_alerts(true = _Include_Cleared) -> gen_server:call(?MODULE, {alerts, all});
-all_alerts(_) -> gen_server:call(?MODULE, {alerts, recent}).
+all_alerts(true = _Include_Cleared) -> gen_server:call(?MODULE, {alerts, all, all});
+all_alerts(_) -> gen_server:call(?MODULE, {alerts, recent, all}).
 
-recent_alerts(Count) -> gen_server:call(?MODULE, {alerts, Count}).
+alerts(true = _Include_Cleared, Severities) -> gen_server:call(?MODULE, {alerts, all, Severities});
+alerts(_, Severities) -> gen_server:call(?MODULE, {alerts, recent, Severities}).
+
+recent_alerts(Count) -> gen_server:call(?MODULE, {alerts, Count, all}).
 
 clear_alert(Alert) ->
     Counter = base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global])),
@@ -76,10 +79,10 @@ handle_call(alerts_for_today, _From, State) ->
     Day_Key = day_key(),
     Day_Alerts = ?COUNTER_VALUE(Day_Key),
     {reply, Day_Alerts, State};
-handle_call({alerts, Count}, _From, State) ->
+handle_call({alerts, Count, Severities}, _From, State) ->
     %% storage_mnesia
     %% popcorn_udp
-    Alerts = gen_server:call(pg2:get_closest_pid('storage'), {get_alerts}),
+    Alerts = gen_server:call(pg2:get_closest_pid('storage'), {get_alerts, Severities}),
     {Small_List,_} = lists:split(erlang:min(Count, length(Alerts)), Alerts),
     FinalList = [data(Alert) || Alert <- Small_List],
     {reply, FinalList, State};
