@@ -35,13 +35,29 @@ handle(Req, State) ->
 terminate(_Req, _State) -> ok.
 
 handle_path(<<"GET">>, [<<"popupmenu">>, <<"alert">>, Alert_Id], Req, State) ->
+    Url_Service = module_source_context_option(Alert_Id),
     Body = iolist_to_binary([<<"<html><body>">>,
-                <<"<ul><li><a href=\"javascript:$.post('/clear_alert', {'alert': '">>, Alert_Id, <<"'});\">Clear Alert</a></li>">>,
-                <<"<li><a href=\"/alert/">>, Alert_Id, <<"\">View Details</a></li></ul>">>,
-                <<"</body></html>">>]),
+                             <<"<ul>">>,
+                             <<"<li><a href=\"/alert/">>, Alert_Id, <<"\">View Details</a></li>">>,
+                             Url_Service,
+                             <<"<li><a href=\"javascript:$.post('/clear_alert', {'alert': '">>, Alert_Id, <<"'});\">Clear Alert</a></li>">>,
+                             <<"</ul>">>,
+                             <<"</body></html>">>]),
     {ok, Reply} = cowboy_req:reply(200, [{<<"Content-type">>, <<"text/plain">>}], Body, Req),
     {ok, Reply, State};
 
 handle_path(_, _, Req, State) ->
     {ok, Reply} = cowboy_req:reply(401, [], [], Req),
     {ok, Reply, State}.
+
+module_source_context_option(Alert_Id) ->
+    Location = triage_handler:alert_properties(Alert_Id),
+    Role    = proplists:get_value(product, Location),
+    Version = proplists:get_value(version, Location),
+    Module  = proplists:get_value(name, Location),
+    Line    = proplists:get_value(line, Location),
+    Url = gen_server:call(pg2:get_closest_pid('storage'), {get_release_module_link, Role, Version, Module}),
+    case Url of
+        undefined -> <<"">>;
+        _ -> iolist_to_binary([<<"<li><a href=\"">>, Url, <<"#L">>, Line, <<"\" target=\"_code\">Source Code</a></li>">>])
+    end.

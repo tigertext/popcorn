@@ -23,7 +23,7 @@ function updateAlertRow(table, counter) {
   if($('#' + rowName).length > 0) {
     $('#' + rowName + ' .seen').text(counter.count);
     $('#' + rowName + ' .recent').text(counter.recent);
-    $('#' + rowName + ' .message').text(counter.message);
+    $('#' + rowName + ' span.message').text(counter.message);
   } else {
     var newRow =
     "<tr id='" + rowName +"'>" +
