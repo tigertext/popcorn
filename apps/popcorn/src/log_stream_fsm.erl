@@ -137,6 +137,31 @@ init([]) ->
     gen_fsm:send_event_after(0, init_log_lines),
 
     {next_state, 'STREAMING', State#state{stream = Stream2}};
+
+'STREAMING'({update_nodes, New_Nodes}, #state{stream = Stream} = State) ->
+    #stream{applied_filters = Applied_Filters, stream_id = Stream_Id, client_pid = Client_Pid} = Stream,
+    Nodes_Filter = string:tokens(binary_to_list(New_Nodes), ","),
+    New_Filters  = case proplists:get_value('node_names', Applied_Filters) of
+                           undefined -> Applied_Filters ++ [{'node_names', Nodes_Filter}];
+                           _         -> proplists:delete('node_names', Applied_Filters) ++ [{'node_names', Nodes_Filter}]
+                       end,
+    update_filters(New_Filters, Stream_Id),
+    Client_Pid ! clear_log,
+    gen_fsm:send_event_after(0, init_log_lines),
+    {next_state, 'STREAMING', State#state{stream = Stream#stream{applied_filters = New_Filters}}};
+
+'STREAMING'({update_roles, New_Roles}, #state{stream = Stream} = State) ->
+    #stream{applied_filters = Applied_Filters, stream_id = Stream_Id, client_pid = Client_Pid} = Stream,
+    Roles_Filter = string:tokens(binary_to_list(New_Roles), ","),
+    New_Filters  = case proplists:get_value(roles, Applied_Filters) of
+                           undefined -> Applied_Filters ++ [{roles, Roles_Filter}];
+                           _         -> proplists:delete(roles, Applied_Filters) ++ [{roles, Roles_Filter}]
+                       end,
+    update_filters(New_Filters, Stream_Id),
+    Client_Pid ! clear_log,
+    gen_fsm:send_event_after(0, init_log_lines),
+    {next_state, 'STREAMING', State#state{stream = Stream#stream{applied_filters = New_Filters}}};
+
 'STREAMING'(Other, State) ->
     {next_state, 'STREAMING', State}.
 
@@ -189,11 +214,22 @@ update_filters(Applied_Filters, Stream_Id) ->
     Stream2 = Stream#stream{applied_filters = Applied_Filters},
     ets:insert(current_log_streams, Stream2).
 
-is_filtered_out(Log_Message, Max_Timestamp, Filters) ->
-    Severity_Restricted = not lists:member(Log_Message#log_message.severity, proplists:get_value('severities', Filters, [])),
-    Time_Restricted = case Max_Timestamp of
-                          undefined -> false;
-                          _         -> Log_Message#log_message.timestamp > Max_Timestamp
-                      end,
+is_filtered_out(#log_message{log_nodename = Node_Name, severity = Severity, timestamp = Timestamp, log_product = Role} = Log_Message, Max_Timestamp, Filters) ->
+    is_severity_restricted(Severity, proplists:get_value('severities', Filters, [])) orelse
+        is_restricted(Role, proplists:get_value('roles', Filters, [])) orelse
+        is_restricted(Node_Name, proplists:get_value('node_names', Filters, [])) orelse
+        is_time_restricted(Max_Timestamp, Timestamp).
 
-    Severity_Restricted orelse Time_Restricted.
+is_time_restricted(Max_Timestamp, Timestamp) ->
+    case Max_Timestamp of
+        undefined -> false;
+        _         -> Timestamp > Max_Timestamp
+    end.
+
+is_severity_restricted(Severity, Allowed_Severities) -> 
+    not lists:member(Severity, Allowed_Severities).
+
+is_restricted(_, []) -> false;
+is_restricted(undefined, Allowed_Nodes) -> true;
+is_restricted(Value, List) ->
+    not lists:member(binary_to_list(Value), List).

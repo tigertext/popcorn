@@ -43,36 +43,13 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 
-handle_info({udp, Socket, _Host, _Port, Bin}, State) ->
+handle_info({udp, Socket, Host, _Port, Bin}, State) ->
     ?RPS_INCREMENT(udp_received),
-    {Popcorn_Node, Log_Message} = decode_protobuffs_message(Bin),
-
-    rps:incr(udp),
-
-    %% create the node fsm, if necessary
-    %% TODO build a cache around this, it's definitely probably a little likely to be a drag on performance
-    Is_New_Node =
-        case gen_server:call(?STORAGE_PID, {is_known_node, Popcorn_Node#popcorn_node.node_name}) of
-            false -> {ok, Pid} = supervisor:start_child(node_sup, []),
-                     ok = gen_fsm:sync_send_event(Pid, {set_popcorn_node, Popcorn_Node}),
-                     ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid}),
-                     true;
-            _     -> false
-        end,
-
-    %% let the fsm create the log
-    Node_Pid =
-        case ets:lookup(current_nodes, Popcorn_Node#popcorn_node.node_name) of
-            []                 ->
-                ?POPCORN_WARN_MSG("unable to find fsm for node ~p", [Popcorn_Node#popcorn_node.node_name]),
-                undefined;
-            [{_, Running_Pid}] ->
-                gen_fsm:send_event(Running_Pid, {log_message, Popcorn_Node, Log_Message}),
-                Running_Pid
-        end,
-
-    triage_handler:safe_notify(Popcorn_Node, Node_Pid, Log_Message, Is_New_Node),
-
+    try decode_protobuffs_message(Bin) of
+        {Popcorn_Node, Log_Message} -> ingest_packet(Popcorn_Node, Log_Message)
+    catch
+        error:Reason -> error_logger:error_msg("Error ingesting packet from ~p reason:~p", [Host, Reason])
+    end,
     inet:setopts(Socket, [{active, once}]),
     {noreply, State};
 
@@ -189,3 +166,31 @@ location_check(<<>>, _, Message) ->
     Alt_Module = list_to_binary(popcorn_util:hexstring(erlang:md5(Message5))),
     {Alt_Module, <<"1">>};
 location_check(Module, Line, _) -> {Module, Line}.
+
+ingest_packet(Popcorn_Node, Log_Message) ->
+    rps:incr(udp),
+
+    %% create the node fsm, if necessary
+    %% TODO build a cache around this, it's definitely probably a little likely to be a drag on performance
+    Is_New_Node =
+        case gen_server:call(?STORAGE_PID, {is_known_node, Popcorn_Node#popcorn_node.node_name}) of
+            false -> {ok, Pid} = supervisor:start_child(node_sup, []),
+                     ok = gen_fsm:sync_send_event(Pid, {set_popcorn_node, Popcorn_Node}),
+                     ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid}),
+                     true;
+            _     -> false
+        end,
+
+    %% let the fsm create the log
+    Node_Pid =
+        case ets:lookup(current_nodes, Popcorn_Node#popcorn_node.node_name) of
+            []                 ->
+                ?POPCORN_WARN_MSG("unable to find fsm for node ~p", [Popcorn_Node#popcorn_node.node_name]),
+                undefined;
+            [{_, Running_Pid}] ->
+                gen_fsm:send_event(Running_Pid, {log_message, Popcorn_Node, Log_Message}),
+                Running_Pid
+        end,
+
+    triage_handler:safe_notify(Popcorn_Node, Node_Pid, Log_Message, Is_New_Node),
+    ok.

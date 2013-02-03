@@ -64,6 +64,16 @@ handle_path(<<"POST">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
         New_Severities -> gen_fsm:send_event(Stream_Pid, {update_severities, New_Severities})
     end,
 
+    case proplists:get_value(<<"nodes">>, Vals) of
+        undefined -> ok;
+        New_Nodes -> gen_fsm:send_event(Stream_Pid, {update_nodes, New_Nodes})
+    end,
+
+    case proplists:get_value(<<"roles">>, Vals) of
+        undefined -> ok;
+        New_Roles -> gen_fsm:send_event(Stream_Pid, {update_roles, New_Roles})
+    end,
+
     case proplists:get_value(<<"time_filter_type">>, Vals) of
         undefined        -> ok;
         <<"stream">>     -> gen_fsm:send_event(Stream_Pid, set_time_stream);
@@ -100,13 +110,14 @@ handle_path(<<"GET">>, [<<"log">>], Req, State) ->
                                                 [] -> [SN || {SN, _} <- popcorn_util:all_severities()];
                                                 _  -> Severities
                                             end,
+                 Applied_Role_Filters = case Roles of
+                                            [] -> lists:map(fun({N, _}) -> binary_to_list(N) end, ets:tab2list(current_roles));
+                                            _  -> Roles
+                                        end,
 
-                 Applied_Role_Filters = Roles,
-
-                 Default_Filters = lists:filter(fun({_, []}) -> false; (_) -> true end,
-                                       [{'node_names', Applied_Node_Filters},
-                                        {'roles',      Applied_Role_Filters},
-                                        {'severities', lists:map(fun(Severity_Name) -> popcorn_util:severity_to_number(Severity_Name) end, Applied_Severity_Filters)}]),
+                 Default_Filters = [{'node_names', Applied_Node_Filters},
+                                        {'roles',  Applied_Role_Filters},
+                                        {'severities', lists:map(fun(Severity_Name) -> popcorn_util:severity_to_number(Severity_Name) end, Applied_Severity_Filters)}],
 
                  %% spawn the stream fsm
                  {ok, Stream_Pid} = supervisor:start_child(log_stream_sup, []),
