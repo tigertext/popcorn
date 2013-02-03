@@ -5,6 +5,9 @@ $(document).ready(function() {
   updateHistoryState = function() {
     var cleanUrl = History.getState().cleanUrl;
     var params = [];
+    if (appliedFilters['roles'].length > 0) {
+      params.push('nodes=' + encodeURIComponent(appliedFilters['node_names']));
+    }
     if (appliedFilters['node_names'].length > 0) {
       params.push('nodes=' + encodeURIComponent(appliedFilters['node_names']));
     }
@@ -14,6 +17,46 @@ $(document).ready(function() {
 
     History.pushState({}, '', '?' + params.join('&'));
   };
+
+  $('.filter-role').click(function(e) {
+    var rolesOn = [];
+    $.each($('.filter-role'), function(k, v) {
+      if ($(v).prop('checked')) {
+        rolesOn.push($(this).attr('data-val'));
+      }
+    });
+
+    appliedFilters['roles'] = rolesOn;
+    updateHistoryState();
+
+    $.ajax({type:'POST',
+            url:'/log/stream/' + streamId,
+            data:'roles=' + rolesOn.join("%2C"),
+            success:function() { },
+            error:function(request, textstatus, error) {
+              alert('Unable to update role filter response='+request.responseText+" status="+textstatus+" error="+error+' roles='+rolesOn);
+            }});
+  });
+
+  $('.filter-node').click(function(e) {
+    var nodesOn = [];
+    $.each($('.filter-node'), function(k, v) {
+      if ($(v).prop('checked')) {
+        nodesOn.push($(this).attr('data-val'));
+      }
+    });
+
+    appliedFilters['nodes'] = nodesOn;
+    updateHistoryState();
+
+    $.ajax({type:'POST',
+            url:'/log/stream/' + streamId,
+            data:'nodes=' + nodesOn.join("%2C"),
+            success:function() { },
+            error:function(request, textstatus, error) {
+              alert('Unable to update node filter'+request.responseText+" "+textstatus+" "+error);
+            }});
+  });
 
   $('.filter-severity').click(function(e) {
     var severitiesOn = [];
@@ -26,11 +69,12 @@ $(document).ready(function() {
     appliedFilters['severities'] = severitiesOn;
     updateHistoryState();
 
-    $.ajax({type:'POST',url:'/log/stream/' + streamId,
-            data:'severities=' + severitiesOn,
+    $.ajax({type:'POST',
+            url:'/log/stream/' + streamId,
+            data:'severities=' + severitiesOn.join("%2C"),
             success:function() { },
-            error:function() {
-              alert('Unable to update filter');
+            error:function(request, textstatus, error) {
+              alert('Unable to update severity filter'+request.responseText+" "+textstatus+" "+error);
             }});
   });
 
@@ -163,7 +207,12 @@ $(document).ready(function() {
   for (appliedFilter in appliedFilters) {
     var values = appliedFilters[appliedFilter];
 
-    if (appliedFilter === 'node_names') {
+    if (appliedFilter === 'roles') {
+      for (var i = 0; i < values.length; i++) {
+        var value = values[i];
+        $('.filter-role[data-val=\''+value+'\']').prop('checked', true);
+      }
+    } else if (appliedFilter === 'node_names') {
       for (var i = 0; i < values.length; i++) {
         var value = values[i];
         $('.filter-node[data-val=\''+value+'\']').prop('checked', true);
