@@ -194,22 +194,19 @@ handle_call({get_release_module_link, Role, Version, Module}, _From, State) ->
             end, State};
 
 handle_call({search_messages, {S, P, V, M, L, Page_Size, Starting_Timestamp}}, _From, State) ->
-    Messages =
-      case mnesia:transaction(
-                fun() ->
-                    ?RPS_INCREMENT(storage_log_read),
-                    ?RPS_INCREMENT(storage_total),
-                    mnesia:select(
-                        popcorn_history,
-                        ets:fun2ms(
-                            fun(#log_message{timestamp = TS, log_product = LP, log_version = LV, severity = LS, log_module = LM, log_line = LL} = Log_Message)
-                                when LP == P, LV == V, LS == S, LM == M, LL == L, (Starting_Timestamp == undefined orelse TS > Starting_Timestamp) -> Log_Message end),
-                        Page_Size,
-                        read)
-                end) of
-            {atomic, {Ms, _}} -> Ms;
-            {atomic, '$end_of_table'} -> []
-        end,
+    %% TODO: make better use of the cursor object to avoid repeated queries
+    Transaction = fun() ->
+        Query = qlc:q([Log_Message || Log_Message = #log_message{timestamp = TS, log_product = LP, log_version = LV, 
+                                                     severity = LS, log_module = LM, log_line = LL}
+                                <- mnesia:table(popcorn_history), LP == P, LV == V, LS == S, LM == M, LL == L, (Starting_Timestamp == undefined orelse TS < Starting_Timestamp)]),
+        Order =
+            fun(A, B) ->
+                B#log_message.timestamp < A#log_message.timestamp
+            end,
+        Cursor = qlc:cursor(qlc:sort(Query, [{order, Order}])),
+        qlc:next_answers(Cursor, Page_Size)
+    end,
+    {atomic, Messages} = mnesia:transaction(Transaction),
     {reply, Messages, State};
 
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
