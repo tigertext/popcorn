@@ -9,7 +9,7 @@
          known_nodes/1,
          known_severities/1,
          applied_filters/1,
-         username/0,
+         username/1,
          streaming_url/1]).
 
 -spec head_includes() -> list().
@@ -48,8 +48,8 @@ applied_filters(Context) ->
                       end, Default_Filters)},
     lists:flatten(mochijson:encode(Json)).
 
--spec username() -> string().
-username() -> "admin".
+-spec username(dict()) -> string().
+username(Context) -> view_generic:username(Context).
 
 -spec streaming_url(dict()) -> string().
 streaming_url(Context) ->

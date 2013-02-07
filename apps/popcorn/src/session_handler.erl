@@ -5,10 +5,12 @@
 
 -export([try_start_authed_session/3,
          is_session_authed_and_valid/1,
+         current_username/1,
          return_404/2]).
 
 -spec try_start_authed_session(string(), string(), string()) -> {error, string()} | {ok, any()}.
 -spec is_session_authed_and_valid(any()) -> true | false.
+-spec current_username(any()) -> string().
 -spec return_404(any(), any()) -> any().
 
 try_start_authed_session(IP_Address, Username, Password) ->
@@ -32,8 +34,21 @@ is_session_authed_and_valid(Req) ->
                              end
             end
     catch
-        A:B -> ?POPCORN_WARN_MSG("Exception in session_handler:is_session_authed_and_valid: ~p:~p", [A, B]),
+        A:B -> ?POPCORN_WARN_MSG("#exception in #session_handler #is_session_authed_and_valid ~p:~p", [A, B]),
                false
+    end.
+
+current_username(Req) ->
+    try cowboy_req:cookie(<<"popcorn-session-key">>, Req) of
+        {Session_Key, _} ->
+            case Session_Key of
+                undefined -> "";
+                _         -> [{_, Pid}] = ets:lookup(current_connected_users, Session_Key),
+                             gen_fsm:sync_send_event(Pid, get_username)
+            end
+    catch
+        A:B -> ?POPCORN_WARN_MSG("#exception in #session_handler #current_username ~p:~p", [A, B]),
+               ""
     end.
 
 return_404(Req, State) ->

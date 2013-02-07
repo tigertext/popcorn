@@ -54,7 +54,6 @@ init([]) ->
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
 
 handle_cast(expire_logs_complete, State) ->
-    ?POPCORN_DEBUG_MSG("#history_optimizer is rescheduling for the next interval"),
     erlang:send_after(?SEVERITY_RETENTION_TIMER, self(), severity_retention_expire),
     {noreply, State};
 
@@ -76,7 +75,6 @@ handle_info(severity_retention_expire, State) ->
         gen_server:call(?STORAGE_PID, {has_entries_for_severity, Severity_Num})
       end, Params),
 
-    ?POPCORN_DEBUG_MSG("#history_optimizer starting with #params ~p", [Params_With_Entries]),
     gen_server:cast(?STORAGE_PID, {expire_logs_matching, Params_With_Entries}),
 
     {noreply, State};

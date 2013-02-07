@@ -3,7 +3,11 @@
 
 -include("include/popcorn.hrl").
 
--export([head_includes/0, alerts/1, username/0, known_severities/1, header_button/1]).
+-export([head_includes/0,
+         alerts/1,
+         username/1,
+         known_severities/1,
+         header_button/1]).
 
 -spec head_includes() -> list().
 head_includes() -> popcorn_util:head_includes().
@@ -23,8 +27,8 @@ header_button(Context) ->
 			_ -> [{href, "/alerts?all"}, {label, "All"}]
 		end)].
 
--spec username() -> string().
-username() -> "admin".
+-spec username(dict()) -> string().
+username(Context) -> view_generic:username(Context).
 
 -spec known_severities(dict()) -> list().
 known_severities(Context) ->

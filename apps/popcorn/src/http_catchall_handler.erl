@@ -95,8 +95,10 @@ handle(Req, State) ->
                                 _         -> 10
                             end),
                     Location    = base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global])),
-                    Context     = dict:from_list([{location, binary_to_list(Alert)}, {log_messages, Log_Messages}
-                                                    | triage_handler:alert_properties(Alert)]),
+                    Context     = dict:from_list([{username, binary_to_list(session_handler:current_username(Req))},
+                                                  {location, binary_to_list(Alert)},
+                                                  {log_messages, Log_Messages}
+                                                  | triage_handler:alert_properties(Alert)]),
                     TFun        = pcache:get(rendered_templates, view_alert),
                     Output      = mustache:render(view_alert, TFun, Context),
                     {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
@@ -128,7 +130,8 @@ handle(Req, State) ->
                         %% assign to the fsm
                         gen_fsm:send_event(Stream_Pid, {connect, Stream}),
 
-                        Context = dict:from_list([{stream_id,   binary_to_list(Stream_Id)},
+                        Context = dict:from_list([{username,    binary_to_list(session_handler:current_username(Req))},
+                                                  {stream_id,   binary_to_list(Stream_Id)},
                                                   {all,         All},
                                                   {severities,  Severities}]),
 
@@ -157,7 +160,8 @@ handle(Req, State) ->
                         %% assign to the fsm
                         gen_fsm:send_event(Stream_Pid, {connect, Stream}),
 
-                        Context = dict:from_list([{stream_id, binary_to_list(Stream_Id)}]),
+                        Context = dict:from_list([{username,  binary_to_list(session_handler:current_username(Req))},
+                                                  {stream_id, binary_to_list(Stream_Id)}]),
 
                         TFun        = pcache:get(rendered_templates, view_dashboard),
                         Output      = mustache:render(view_dashboard, TFun, Context),
