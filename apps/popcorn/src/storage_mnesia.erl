@@ -194,7 +194,6 @@ handle_call({get_release_module_link, Role, Version, Module}, _From, State) ->
             end, State};
 
 handle_call({search_messages, {S, P, V, M, L, Page_Size, Starting_Timestamp}}, _From, State) ->
-<<<<<<< HEAD
     %% TODO: make better use of the cursor object to avoid repeated queries
     Transaction = fun() ->
         Query = qlc:q([Log_Message || Log_Message = #log_message{timestamp = TS, log_product = LP, log_version = LV, 
@@ -209,31 +208,6 @@ handle_call({search_messages, {S, P, V, M, L, Page_Size, Starting_Timestamp}}, _
     end,
     {atomic, Messages} = mnesia:transaction(Transaction),
     {reply, Messages, State};
-=======
-    Messages =
-      case mnesia:transaction(
-                fun() ->
-                    ?RPS_INCREMENT(storage_log_read),
-                    ?RPS_INCREMENT(storage_total),
-                    mnesia:select(
-                        popcorn_history,
-                        ets:fun2ms(
-                            fun(#log_message{timestamp = TS, log_product = LP, log_version = LV, severity = LS, log_module = LM, log_line = LL} = Log_Message)
-                                when LP == P, LV == V, LS == S, LM == M, LL == L, (Starting_Timestamp == undefined orelse TS > Starting_Timestamp) -> Log_Message end),
-                        Page_Size,
-                        read)
-                end) of
-            {atomic, {Ms, _}} -> Ms;
-            {atomic, '$end_of_table'} -> []
-        end,
-
-    %% sort the messages by date, newest first
-    Sorted =
-      lists:sort(fun(Message1, Message2) ->
-          Message1#log_message.timestamp >= Message2#log_message.timestamp
-        end, Messages),
-
-    {reply, Sorted, State};
 
 handle_call({has_entries_for_severity, Severity_Num}, _From, State) ->
     F = fun() ->
@@ -244,7 +218,6 @@ handle_call({has_entries_for_severity, Severity_Num}, _From, State) ->
         end,
     {atomic, Has_Keys} = mnesia:transaction(F),
     {reply, length(Has_Keys) > 0, State};
->>>>>>> 60a192b5fb0cc48bb1fbd14d5c346f2d2cbe7ad8
 
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
 
