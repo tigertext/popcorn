@@ -91,7 +91,7 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
                                                   Timestamp div 1000000 rem 1000000,
                                                   Timestamp rem 1000000}),
   {{Year, Month, Day}, {Hour, Minute, Second}} = UTC_Timestamp,
-  Formatted_DateTime = lists:flatten(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0B ~2.10.0B:~2.10.0B:~2.10.0B", [Year, Month, Day, Hour, Minute, Second])),
+  Formatted_DateTime = lists:flatten(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0BZ", [Year, Month, Day, Hour, Minute, Second])),
   Formatted_Time     = lists:flatten(io_lib:format("~2.10.0B:~2.10.0B:~2.10.0B", [Hour, Minute, Second])),
 
   Find_More_Html     = "<strong>Filter current list to show only messages with matching:</strong><br /><br />" ++

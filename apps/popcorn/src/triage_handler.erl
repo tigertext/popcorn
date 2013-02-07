@@ -218,8 +218,13 @@ data(#alert{location = undefined}) -> [];
 data(Alert) ->
     Basic_Properties =
       case Alert of
-        #alert{log = #log_message{message = Message, severity = SeverityNumber}} ->
-          [{'severity_num', SeverityNumber}, {'message', list(Message)}];
+        #alert{log = #log_message{message = Message, severity = SeverityNumber, timestamp = Timestamp}} ->
+            UTC_Timestamp = calendar:now_to_universal_time({Timestamp div 1000000000000, 
+                                                            Timestamp div 1000000 rem 1000000,
+                                                            Timestamp rem 1000000}),
+              {{Year, Month, Day}, {Hour, Minute, Second}} = UTC_Timestamp,
+              Formatted_DateTime = lists:flatten(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0BZ", [Year, Month, Day, Hour, Minute, Second])),
+          [{'severity_num', SeverityNumber}, {'message', list(Message)}, {'datetime', Formatted_DateTime}];
         #alert{} ->
           []
       end,

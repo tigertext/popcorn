@@ -260,7 +260,9 @@ $(document).ready(function() {
                 });
     cell.append(more);
     row.append(cell);
-    row.append($('<td />').html(log_message.time));
+    var timecell = $('<span/>')
+        .attr('data-livestamp', log_message.datetime);
+    row.append($('<td />').append(timecell));
     row.append($('<td />').html(log_message.message_severity));
     row.append($('<td />').addClass('log-message').html(log_message.message));
 

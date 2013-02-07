@@ -110,7 +110,7 @@
                       {{#alerts}}
                         <tr id="{{location}}">
                           <td><a href="/alert/{{location}}" id="{{location}}" class='btn btn-mini btn-alert-options'>...</a></td>
-                          <td class="message">[{{severity}}] {{name}} line {{line}}<br/>{{message}}</td>
+                          <td class="message">[{{severity}} <span data-livestamp="{{datetime}}" class="datetime"></span>] {{name}} line {{line}}<br/>{{message}}</td>
                           <td><span class="recent">{{recent}}</span> recent / <span class="seen">{{count}}</span> seen</td>
                           <td align="right">{{product}} {{version}}</td>
                         </tr>
@@ -172,6 +172,8 @@
     <script src="/js/dashboard.js" type="text/javascript"></script>
     <script src="/bootstrap/js/bootstrap-tooltip.js" type="text/javascript"></script>
     <script src="/bootstrap/js/bootstrap-popover.js" type="text/javascript"></script>
+    <script src="/js/moment.min.js" type="text/javascript"></script>
+    <script src="/js/livestamp.min.js" type="text/javascript"></script>
     <script type="text/javascript">
        $('.close-popover').live('click', function() {
            $('.show-more').popover('hide');

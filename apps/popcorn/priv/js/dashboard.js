@@ -23,12 +23,13 @@ function updateAlertRow(table, counter) {
   if($('#' + rowName).length > 0) {
     $('#' + rowName + ' .seen').text(counter.count);
     $('#' + rowName + ' .recent').text(counter.recent);
+    $('#' + rowName + ' .datetime').attr('data-livestamp', counter.datetime);
     $('#' + rowName + ' span.message').text(counter.message);
   } else {
     var newRow =
     "<tr id='" + rowName +"'>" +
     "<td><a id='" + rowName + "' class='btn btn-mini btn-alert-options'>...</a></td>"+
-    "<td>[" + maybe(counter.severity, "alert") + "] " + maybe(counter.name) + " line " + maybe(counter.line) + "<br/><span class='message'>" + maybe(counter.message) + "</span></td>" +
+    "<td>[" + maybe(counter.severity, "alert") + " <span data-livestamp=\"" + maybe(counter.datetime) + "\" class='datetime'></span>] " + maybe(counter.name) + " line " + maybe(counter.line) + "<br/><span class='message'>" + maybe(counter.message) + "</span></td>" +
     "<td><span class='recent'>" + maybe(counter.recent, 0) + "</span> recent / <span class='seen'>" + maybe(counter.count, 1) + "</span> seen</td>" +
     "<td align='right'>" + maybe(counter.product) + " " + maybe(counter.version) + "</td></tr>";
     $(table + ' tbody').prepend(newRow);
