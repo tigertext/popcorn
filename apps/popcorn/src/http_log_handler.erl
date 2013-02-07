@@ -133,8 +133,9 @@ handle_path(<<"GET">>, [<<"log">>], Req, State) ->
                  %% assign to the fsm
                  gen_fsm:send_event(Stream_Pid, {connect, Log_Stream}),
 
-                 Context = dict:from_list([{stream_id,       binary_to_list(Log_Stream#stream.stream_id)},
-                                          {default_filters, dict:from_list(Default_Filters)}]),
+                 Context = dict:from_list([{username,        binary_to_list(session_handler:current_username(Req))},
+                                           {stream_id,       binary_to_list(Log_Stream#stream.stream_id)},
+                                           {default_filters, dict:from_list(Default_Filters)}]),
 
                  TFun        = pcache:get(rendered_templates, view_log),
                  Output      = mustache:render(view_log, TFun, Context),

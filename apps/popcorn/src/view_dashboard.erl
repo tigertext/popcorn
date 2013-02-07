@@ -13,7 +13,7 @@
          alert_count/0,
          alert_lines/0,
          known_nodes/0,
-         username/0]).
+         username/1]).
 
 -spec alert_lines() -> pos_integer().
 alert_lines() ->
@@ -65,5 +65,6 @@ known_nodes() ->
         dict:from_list(Node_Properties)
       end, ets:tab2list(current_nodes)).
 
--spec username() -> string().
-username() -> "admin".
+-spec username(dict()) -> string().
+username(Context) -> view_generic:username(Context).
+

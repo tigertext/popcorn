@@ -57,6 +57,8 @@ init([]) ->
 
 'AUTHENTICATED'(get_session_key, _From, State) ->
     {reply, State#state.session_key, 'AUTHENTICATED', State};
+'AUTHENTICATED'(get_username, _From, State) ->
+    {reply, State#state.username, 'AUTHENTICATED', State};
 'AUTHENTICATED'(Other, _From, State) ->
     ?POPCORN_WARN_MSG("unhandled synchronous message in authenticated state: ~p", [Other]),
     {reply, error, 'AUTHENTICATED', State}.
