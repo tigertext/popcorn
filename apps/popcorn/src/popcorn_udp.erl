@@ -29,12 +29,15 @@ start_link() ->
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
--record(state, {socket}).
+-record(state, {socket      :: pid(),
+                known_nodes :: list()}).
 
 init(_) ->
     {ok, Udp_Listen_Port} = application:get_env(popcorn, udp_listen_port),
     {ok, Socket} = gen_udp:open(Udp_Listen_Port, [binary, {active, once}, {recbuf, 524288}]),
-    {ok, #state{socket = Socket}}.
+
+    {ok, #state{socket      = Socket,
+                known_nodes = []}}.
 
 handle_call(_Request, _From, State) ->
     {noreply, ok, State}.
@@ -46,12 +49,19 @@ handle_cast(_Msg, State) ->
 handle_info({udp, Socket, Host, _Port, Bin}, State) ->
     ?RPS_INCREMENT(udp_received),
     try decode_protobuffs_message(Bin) of
-        {Popcorn_Node, Log_Message} -> ingest_packet(Popcorn_Node, Log_Message)
+        {Popcorn_Node, Log_Message} ->
+            Node_Added = ingest_packet(State#state.known_nodes, Popcorn_Node, Log_Message),
+            inet:setopts(Socket, [{active, once}]),
+            case Node_Added of
+                false ->
+                    {noreply, State};
+                true ->
+                    {noreply, State#state{known_nodes = lists:append(State#state.known_nodes, [Popcorn_Node#popcorn_node.node_name])}}
+            end
     catch
-        error:Reason -> error_logger:error_msg("Error ingesting packet from ~p reason:~p", [Host, Reason])
-    end,
-    inet:setopts(Socket, [{active, once}]),
-    {noreply, State};
+        error:Reason -> error_logger:error_msg("Error ingesting packet from ~p reason:~p", [Host, Reason]),
+        {noreply, State}
+    end;
 
 handle_info(timeout, State) ->
     {noreply, State};
@@ -167,19 +177,25 @@ location_check(<<>>, _, Message) ->
     {Alt_Module, <<"1">>};
 location_check(Module, Line, _) -> {Module, Line}.
 
-ingest_packet(Popcorn_Node, Log_Message) ->
+-spec ingest_packet(list(), #popcorn_node{}, #log_message{}) -> boolean().  %% return value is whether is a new node
+ingest_packet(Known_Nodes, Popcorn_Node, Log_Message) ->
     rps:incr(udp),
 
     %% create the node fsm, if necessary
-    %% TODO build a cache around this, it's definitely probably a little likely to be a drag on performance
-    Is_New_Node =
-        case gen_server:call(?STORAGE_PID, {is_known_node, Popcorn_Node#popcorn_node.node_name}) of
-            false -> {ok, Pid} = supervisor:start_child(node_sup, []),
-                     ok = gen_fsm:sync_send_event(Pid, {set_popcorn_node, Popcorn_Node}),
-                     ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid}),
-                     true;
-            _     -> false
-        end,
+    Node_Added =
+      case lists:member(Popcorn_Node#popcorn_node.node_name, Known_Nodes) of
+          false ->
+              %% suspect this is a new node, but check the database just to be safe
+              case gen_server:call(?STORAGE_PID, {is_known_node, Popcorn_Node#popcorn_node.node_name}) of
+                  false -> {ok, Pid} = supervisor:start_child(node_sup, []),
+                           ok = gen_fsm:sync_send_event(Pid, {set_popcorn_node, Popcorn_Node}),
+                           ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid}),
+                           true;
+                  _     -> false
+              end,
+              true;  %% return true so that this node is added to the known_nodes state variable
+          true  -> false
+      end,
 
     %% let the fsm create the log
     Node_Pid =
@@ -192,5 +208,5 @@ ingest_packet(Popcorn_Node, Log_Message) ->
                 Running_Pid
         end,
 
-    triage_handler:safe_notify(Popcorn_Node, Node_Pid, Log_Message, Is_New_Node),
-    ok.
+    triage_handler:safe_notify(Popcorn_Node, Node_Pid, Log_Message, Node_Added),
+    Node_Added.
