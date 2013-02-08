@@ -70,7 +70,8 @@ init([]) ->
                          [{name, storage_index_read},     {module, Rps_Module}, {time, 1000}, {send, raw}],
                          [{name, storage_counter_write},  {module, Rps_Module}, {time, 1000}, {send, raw}],
                          [{name, storage_counter_read},   {module, Rps_Module}, {time, 1000}, {send, raw}],
-                         [{name, udp_received},           {module, Rps_Module}, {time, 5000}, {send, raw}]
+                         [{name, udp_received},           {module, Rps_Module}, {time, 5000}, {send, raw}],
+                         [{name, storage_scm_write},      {module, Rps_Module}, {time, 1000}, {send, raw}]
                         ],
 
     Rps_Children      = [{rps_sup, {rps_sup, start_link, [Rps_Sup_Params]}, permanent, 5000, worker, []}] ++
