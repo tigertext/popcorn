@@ -138,6 +138,7 @@ handle_call(start_phase, _From, State) ->
     {reply, ok, State};
 
 handle_call({counter_value, Counter}, _From, State) ->
+    ?RPS_INCREMENT(storage_counter_read),
     Counter_Value =
       case mnesia:dirty_read(popcorn_counters, Counter) of
           [{popcorn_counters, _, V}] -> V;
