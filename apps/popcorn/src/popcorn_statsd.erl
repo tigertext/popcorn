@@ -42,6 +42,7 @@
 -record(state, { 
 	port = ?STATSD_DEFAULT_PORT,
 	host = ?STATSD_DEFAULT_HOST,
+    source,
 	socket
 }).
 
@@ -73,46 +74,48 @@ decrement(Key)             -> count(Key, -1).
 %% Public: increments a counter by an arbitrary integer value
 %%
 %% returns: ok or {error, Reason}
-count(Key, Value)             -> gen_server:cast(?MODULE, {send, build_message({message, Key, Value, c})}).
-count(Key, Value, Samplerate) -> gen_server:cast(?MODULE, {send, build_message({message, Key, Value, c, Samplerate})}).
+count(Key, Value)             -> gen_server:cast(?MODULE, {send, {message, Key, Value, c}}).
+count(Key, Value, Samplerate) -> gen_server:cast(?MODULE, {send, {message, Key, Value, c, Samplerate}}).
 
-gauge(Key, Value) -> gen_server:cast(?MODULE, {send, build_message({message, Key, Value, g})}).
+gauge(Key, Value) -> gen_server:cast(?MODULE, {send, {message, Key, Value, g}}).
 
 %% Public: sends a timing in ms
 %%
 %% returns: ok or {error, Reason}
-timing(Key, Value) when is_float(Value) -> gen_server:cast(?MODULE, {send, build_message({message, Key, integer_to_list(round(Value)), ms})});
-timing(Key, Value)                      -> gen_server:cast(?MODULE, {send, build_message({message, Key, integer_to_list(Value), ms})}).
-timing(Key, Value, Samplerate)          -> gen_server:cast(?MODULE, {send, build_message({message, Key, integer_to_list(Value), ms, Samplerate})}).
+timing(Key, Value) when is_float(Value) -> gen_server:cast(?MODULE, {send, {message, Key, integer_to_list(round(Value)), ms}});
+timing(Key, Value)                      -> gen_server:cast(?MODULE, {send, {message, Key, integer_to_list(Value), ms}}).
+timing(Key, Value, Samplerate)          -> gen_server:cast(?MODULE, {send, {message, Key, integer_to_list(Value), ms, Samplerate}}).
 
 %% Public: increments a counter by 1 (see note above)
 %%
 %% returns: ok or {error, Reason}
-increment_counter(Key) -> gen_server:cast(?MODULE, {send, build_message({message, Key, 1, c})}),
+increment_counter(Key) -> gen_server:cast(?MODULE, {send, {message, Key, 1, c}}),
 													gen_server:cast(?MODULE, {increment_counter, Key}).
 %% Internal: builds the message string to be sent
 %% 
 %% returns: a String	
-build_message({message, Key, Value, Type})             -> lists:concat([Key, ":", io_lib:format("~w", [Value]), "|", Type]);
-build_message({message, Key, Value, Type, Samplerate}) -> lists:concat([build_message({message, Key, Value, Type}) | ["@", io_lib:format("~.2f", [1.0 / Samplerate])]]).
+build_message(Source, {message, Key, Value, Type})             -> lists:concat([Key, ":", io_lib:format("~w", [Value]), "-", Source, "|", Type]);
+build_message(Source, {message, Key, Value, Type, Samplerate}) -> lists:concat([build_message(Source, {message, Key, Value, Type}) | ["@", io_lib:format("~.2f", [1.0 / Samplerate])]]).
 		
 init(Params) ->
     process_flag(trap_exit, true),
 
+    Source = proplists:get_value(statsd_source, Params, net_adm:localhost()),
     Host = proplists:get_value(statsd_host, Params),
     Port = proplists:get_value(statsd_port, Params),
 
     State = #state{port = Port,
-                   host = Host},
+                   host = Host,
+                   source = Source},
     {ok, Socket} = gen_udp:open(0, [list]),
     {ok, State#state{socket = Socket}}.
 
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
 
-handle_cast({send, Message}, State) ->
-    gen_udp:send(State#state.socket, State#state.host, State#state.port, Message),
+handle_cast({send, Message}, #state{socket = Socket, host = Host, port = Port, source = Source} = State) ->
+    gen_udp:send(Socket, Host, Port, build_message(Source, Message)),
     {noreply, State};
-handle_cast({increment_counter, Key}, State) ->
+handle_cast({increment_counter, _Key}, State) ->
 		%% we need to send this to humbledb
 		%humbledb:increment_counter(Key),
 		{noreply, State};
