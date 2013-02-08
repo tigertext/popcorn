@@ -107,7 +107,7 @@ init([]) ->
     process_flag(trap_exit, true),
 
     pg2:join('storage', self()),
-    {ok, undefined}.
+    {ok, undefined}.   %% we don't have state here, because this is only one worker process
 
 handle_call(start_phase, _From, State) ->
     io:format("Reloading previously known nodes...\n"),
@@ -126,6 +126,14 @@ handle_call(start_phase, _From, State) ->
       io:format("\n\t[TOTAL_ALERT_COUNTER: ~p]",
         [mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_ALERT_COUNTER, 0)]),
     io:format("\n done!\n"),
+
+    Severity_Counters =
+      lists:map(fun({_, Severity}) ->
+          F = fun() -> mnesia:select(popcorn_history, ets:fun2ms(fun(#log_message{severity = LS}) when LS == Severity -> true end)) end,
+          {atomic, Matches} = mnesia:transaction(F),
+          {Severity, length(Matches)}
+        end, popcorn_util:all_severities()),
+    system_counters:set_severity_counters(Severity_Counters),
 
     {reply, ok, State};
 
@@ -209,21 +217,21 @@ handle_call({search_messages, {S, P, V, M, L, Page_Size, Starting_Timestamp}}, _
     {atomic, Messages} = mnesia:transaction(Transaction),
     {reply, Messages, State};
 
-handle_call({has_entries_for_severity, Severity_Num}, _From, State) ->
-    F = fun() ->
-          mnesia:select(
-            popcorn_history,
-            ets:fun2ms(
-              fun(#log_message{severity = LS}) when LS == Severity_Num -> true end))
-        end,
-    {atomic, Has_Keys} = mnesia:transaction(F),
-    {reply, length(Has_Keys) > 0, State};
-
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
 
 handle_cast({expire_logs_matching, Params}, State) ->
-    delete_recent_log_line(Params, undefined),
+    Deleted_Counts = delete_recent_log_line(Params, undefined, []),
     history_optimizer:expire_logs_complete(),
+
+    Updated_Severity_Counters =
+      lists:map(fun({Severity, Count}) ->
+          case proplists:get_value(Severity, Deleted_Counts) of
+              undefined  -> {Severity, Count};
+              Last_Value -> {Severity, Last_Value - Count}
+          end
+        end, system_counters:get_severity_counters()),
+
+    system_counters:set_severity_counters(Updated_Severity_Counters),
     {noreply, State};
 
 handle_cast({send_recent_matching_log_lines, Pid, Count, Filters}, State) ->
@@ -234,10 +242,12 @@ handle_cast({new_log_message, Log_Message}, State) ->
     ?RPS_INCREMENT(storage_log_write),
     ?RPS_INCREMENT(storage_total),
     mnesia:dirty_write(popcorn_history, Log_Message),
+
+    system_counters:increment_severity_counter(Log_Message#log_message.severity),
     {noreply, State};
 
 handle_cast({new_release_scm, Record}, State) ->
-    ?RPS_INCREMENT(storage_log_write),
+    ?RPS_INCREMENT(storage_scm_write),
     ?RPS_INCREMENT(storage_total),
     mnesia:dirty_write(popcorn_release_scm, Record),
     {noreply, State};
@@ -253,7 +263,7 @@ handle_cast({new_alert_key, Type, Key}, State) ->
     {noreply, State};
 
 handle_cast({new_release_scm_mapping, Record}, State) ->
-    ?RPS_INCREMENT(storage_log_write),
+    ?RPS_INCREMENT(storage_scm_write),
     ?RPS_INCREMENT(storage_total),
     mnesia:dirty_write(popcorn_release_scm_mapping, Record),
     {noreply, State};
@@ -279,6 +289,7 @@ handle_info(_Msg, State)            -> {noreply, State}.
 terminate(_Reason, _State)          -> ok.
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
+%% private, internal functions
 send_recent_log_line(_, 0, _, _) -> ok;
 send_recent_log_line(_, _, '$end_of_table', _) -> ok;
 send_recent_log_line(Pid, Count, Last_Key_Checked, Filters) ->
@@ -303,9 +314,9 @@ send_recent_log_line(Pid, Count, Last_Key_Checked, Filters) ->
                            end
     end.
 
-delete_recent_log_line(_, '$end_of_table') -> ok;
-delete_recent_log_line([], _) -> ok;
-delete_recent_log_line(Params, Last_Key_Checked) ->
+delete_recent_log_line(_, '$end_of_table', Deleted_By_Severity) -> Deleted_By_Severity;
+delete_recent_log_line([], _, Deleted_By_Severity) -> Deleted_By_Severity;
+delete_recent_log_line(Params, Last_Key_Checked, Deleted_By_Severity) ->
     %%?POPCORN_DEBUG_MSG("#checking key for #retention_deletion ~p with #params ~p", [Last_Key_Checked, Params]),
     %% get the key to check, if this is the first iteration, then start that the oldest record
     Key = case Last_Key_Checked of
@@ -318,7 +329,7 @@ delete_recent_log_line(Params, Last_Key_Checked) ->
           end,
 
     case Key of
-        '$end_of_table' -> ok;
+        '$end_of_table' -> Deleted_By_Severity;
         _               -> ?RPS_INCREMENT(storage_total),
                            ?RPS_INCREMENT(storage_log_read),
                            Log_Message = lists:nth(1, mnesia:dirty_read(popcorn_history, Key)),
@@ -328,7 +339,7 @@ delete_recent_log_line(Params, Last_Key_Checked) ->
                            case Severity_Params of
                                none ->
                                   %% not checking this severity, continue to the next key
-                                  delete_recent_log_line(Params, Key);
+                                  delete_recent_log_line(Params, Key, Deleted_By_Severity);
                                {_, Oldest_TS} when Oldest_TS > Log_Message#log_message.timestamp ->
                                   %% we need to delete this message, since it's older than the min timestamp
                                   ?RPS_INCREMENT(storage_total),
@@ -341,11 +352,14 @@ delete_recent_log_line(Params, Last_Key_Checked) ->
                                          ok
                                   end,
                                   system_counters:decrement(total_event_counter, 1),
-                                  delete_recent_log_line(Params, Key);
+                                  Last_Deleted_Count = proplists:get_value(Log_Message#log_message.severity, Deleted_By_Severity, 0),
+                                  Now_Deleted = proplists:delete(Log_Message#log_message.severity, Deleted_By_Severity) ++
+                                                [{Log_Message#log_message.severity, Last_Deleted_Count + 1}],
+                                  delete_recent_log_line(Params, Key, Now_Deleted);
                               {S, T} ->
                                   %% stop checking for this severity now
                                   New_Params = lists:delete({S, T}, Params),
-                                  delete_recent_log_line(New_Params, Key)
+                                  delete_recent_log_line(New_Params, Key, Deleted_By_Severity)
                            end
     end.
 
