@@ -95,10 +95,28 @@ handle(Req, State) ->
                                 _         -> 10
                             end),
                     Location    = base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global])),
-                    Context     = dict:from_list([{location, binary_to_list(Alert)}, {log_messages, Log_Messages}
-                                                    | triage_handler:alert_properties(Alert)]),
+                    Context     = dict:from_list([{username, binary_to_list(session_handler:current_username(Req))},
+                                                  {location, binary_to_list(Alert)},
+                                                  {log_messages, Log_Messages}
+                                                  | triage_handler:alert_properties(Alert)]),
                     TFun        = pcache:get(rendered_templates, view_alert),
                     Output      = mustache:render(view_alert, TFun, Context),
+                    {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
+                    {ok, Reply, State}
+            end;
+
+        {{<<"GET">>, _}, {<<"/nodes">>, _}} ->
+            ?POPCORN_DEBUG_MSG("#http_request for #nodes"),
+            case session_handler:is_session_authed_and_valid(Req) of
+                false ->
+                    Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
+                    {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
+                    {ok, Reply, State};
+                true  ->
+                    %% this one isn't a stream, but maybe it should be!
+                    Context = dict:from_list([{username, binary_to_list(session_handler:current_username(Req))}]),
+                    TFun    = pcache:get(rendered_templates, view_nodes),
+                    Output  = mustache:render(view_nodes, TFun, Context),
                     {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
                     {ok, Reply, State}
             end;
@@ -110,7 +128,7 @@ handle(Req, State) ->
                     {undefined, _} -> all;
                     {AsBinary, _} -> [list_to_integer(binary_to_list(S)) || S <- binary:split(AsBinary, <<",">>, [global,trim])]
                 end,
-            ?POPCORN_DEBUG_MSG("http request for alerts (~p, ~p)", [All, Severities]),
+            ?POPCORN_DEBUG_MSG("#http_request for alerts (~p, ~p)", [All, Severities]),
             case session_handler:is_session_authed_and_valid(Req) of
                 false -> Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
                          {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
@@ -128,7 +146,8 @@ handle(Req, State) ->
                         %% assign to the fsm
                         gen_fsm:send_event(Stream_Pid, {connect, Stream}),
 
-                        Context = dict:from_list([{stream_id,   binary_to_list(Stream_Id)},
+                        Context = dict:from_list([{username,    binary_to_list(session_handler:current_username(Req))},
+                                                  {stream_id,   binary_to_list(Stream_Id)},
                                                   {all,         All},
                                                   {severities,  Severities}]),
 
@@ -139,7 +158,7 @@ handle(Req, State) ->
             end;
 
         {{<<"GET">>, _}, {<<"/">>, _}} ->
-            ?POPCORN_DEBUG_MSG("http request for dashboard"),
+            ?POPCORN_DEBUG_MSG("#http_request for dashboard"),
             case session_handler:is_session_authed_and_valid(Req) of
                 false -> Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
                          {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
@@ -157,7 +176,8 @@ handle(Req, State) ->
                         %% assign to the fsm
                         gen_fsm:send_event(Stream_Pid, {connect, Stream}),
 
-                        Context = dict:from_list([{stream_id, binary_to_list(Stream_Id)}]),
+                        Context = dict:from_list([{username,  binary_to_list(session_handler:current_username(Req))},
+                                                  {stream_id, binary_to_list(Stream_Id)}]),
 
                         TFun        = pcache:get(rendered_templates, view_dashboard),
                         Output      = mustache:render(view_dashboard, TFun, Context),

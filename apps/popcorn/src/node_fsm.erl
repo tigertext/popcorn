@@ -53,8 +53,7 @@
     'LOGGING'/2,
     'LOGGING'/3]).
 
--record(state, {most_recent_version   :: string(),
-                popcorn_node          :: #popcorn_node{},
+-record(state, {popcorn_node          :: #popcorn_node{},
                 event_counter         :: number()}).
 
 start_link() -> gen_fsm:start_link(?MODULE, [], []).

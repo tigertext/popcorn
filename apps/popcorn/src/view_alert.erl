@@ -3,7 +3,10 @@
 
 -include("include/popcorn.hrl").
 
--export([head_includes/0, username/0, logs/1, next_page/1]).
+-export([head_includes/0,
+         username/1,
+         logs/1,
+         next_page/1]).
 
 -spec head_includes() -> list().
 head_includes() -> popcorn_util:head_includes().
@@ -13,8 +16,8 @@ logs(Context) ->
     [dict:from_list(popcorn_util:format_log_message(Log_Message))
      || Log_Message <- mustache:get(log_messages, Context)].
 
--spec username() -> string().
-username() -> "admin".
+-spec username(dict()) -> string().
+username(Context) -> view_generic:username(Context).
 
 -spec next_page(dict()) -> list().
 next_page(Context) ->
