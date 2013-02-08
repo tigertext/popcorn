@@ -71,7 +71,7 @@ init([]) ->
         gen_server:cast(?STORAGE_PID, {new_log_message, Log_Message}),
 
         %% increment the total event counter
-        ?INCREMENT_COUNTER_LATER(?TOTAL_EVENT_COUNTER),
+        ?INCREMENT_COUNTER(?TOTAL_EVENT_COUNTER),
 
         %% Notify any streams connected
         log_stream_manager:new_log_message(Log_Message)
