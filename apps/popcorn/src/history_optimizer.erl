@@ -28,7 +28,7 @@
 
 -include("include/popcorn.hrl").
 
--define(SEVERITY_RETENTION_TIMER, 1000).
+-define(SEVERITY_RETENTION_TIMER, 60000).
 
 -export([start_link/0,
          expire_logs_complete/0]).
