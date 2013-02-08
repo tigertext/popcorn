@@ -36,7 +36,8 @@
          has_entries_for_severity/1,
          get_severity_counters/0,
          set_severity_counters/1,
-         increment_severity_counter/1]).
+         increment_severity_counter/1,
+         counter_value/1]).
 
 -export([init/1,
          handle_call/3,
@@ -57,6 +58,7 @@ get_severity_counters() -> gen_server:call(?MODULE, get_severity_counters).
 set_severity_counters(Severity_Counters) -> gen_server:cast(?MODULE, {set_severity_counters, Severity_Counters}).
 increment_severity_counter(Severity_Num) -> gen_server:cast(?MODULE, {increment_severity_counter, Severity_Num}).
 decrement_severity_counter(Severity_Num) -> gen_server:cast(?MODULE, {decrement_severity_counter, Severity_Num}).
+counter_value(Counter) -> gen_server:call(?MODULE, {read_through_cache_counter_value, Counter}).
 
 init([]) ->
     process_flag(trap_exit, true),
@@ -78,7 +80,17 @@ handle_call({has_entries_for_severity, Severity_Num}, _From, State) ->
 handle_call(get_severity_counters, _From, State) ->
     {reply, State#state.severity_counters, State};
 
-handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
+handle_call({read_through_cache_counter_value, Counter}, _From, State) ->
+    case proplists:get_value(Counter, State#state.general_counters) of
+        undefined ->
+            Counter_Value = gen_server:call(?STORAGE_PID, {counter_value, Counter}),
+            {reply, Counter_Value, State#state{general_counters = State#state.general_counters ++ [{Counter, Counter_Value}]}};
+        Counter_Value ->
+            {reply, Counter_Value, State}
+    end;
+
+handle_call(Request, _From, State)  ->
+    {stop, {unknown_call, Request}, State}.
 
 handle_cast({set_severity_counters, Severity_Counters}, State) ->
     {noreply, State#state{severity_counters = Severity_Counters}};
