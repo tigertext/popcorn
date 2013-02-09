@@ -58,12 +58,7 @@ pre_init() ->
        [mnesia:create_table(popcorn_history, [{disc_copies, [node()]},
                                               {record_name, log_message},
                                               {type,        ordered_set},
-                                              {index,       [#log_message.severity,
-                                                             #log_message.log_product,
-                                                             #log_message.log_version,
-                                                             #log_message.log_module,
-                                                             #log_message.log_line]},
-                                                             %#log_message.timestamp]},
+                                              {index,       []},
                                               {attributes,  record_info(fields, log_message)}])]),
 
     io:format("\n\t[alert_key: ~p]",
