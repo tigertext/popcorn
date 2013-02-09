@@ -56,7 +56,7 @@ module_source_context_option(Alert_Id) ->
     Version = proplists:get_value(version, Location),
     Module  = proplists:get_value(name, Location),
     Line    = proplists:get_value(line, Location),
-    Url = gen_server:call(pg2:get_closest_pid('storage'), {get_release_module_link, Role, Version, Module}),
+    Url = gen_server:call(?STORAGE_PID, {get_release_module_link, Role, Version, Module}),
     case Url of
         undefined -> <<"">>;
         _ -> iolist_to_binary([<<"<li><a href=\"">>, Url, <<"#L">>, Line, <<"\" target=\"_code\">Source Code</a></li>">>])

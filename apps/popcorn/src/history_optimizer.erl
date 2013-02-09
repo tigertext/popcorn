@@ -28,7 +28,7 @@
 
 -include("include/popcorn.hrl").
 
--define(SEVERITY_RETENTION_TIMER, 10000).   %% One minute
+-define(SEVERITY_RETENTION_TIMER, 60000).
 
 -export([start_link/0,
          expire_logs_complete/0]).
@@ -72,7 +72,7 @@ handle_info(severity_retention_expire, State) ->
     %% this may be an optimization, and it may be slowing it down
     %% TODO profile this and figure out if we should leave it
     Params_With_Entries = lists:filter(fun({Severity_Num, _}) ->
-        gen_server:call(?STORAGE_PID, {has_entries_for_severity, Severity_Num})
+        system_counters:has_entries_for_severity(Severity_Num)
       end, Params),
 
     gen_server:cast(?STORAGE_PID, {expire_logs_matching, Params_With_Entries}),
