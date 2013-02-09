@@ -208,5 +208,5 @@ ingest_packet(Known_Nodes, Popcorn_Node, Log_Message) ->
                 Running_Pid
         end,
 
-%    triage_handler:safe_notify(Popcorn_Node, Node_Pid, Log_Message, Node_Added),
+    triage_handler:safe_notify(Popcorn_Node, Node_Pid, Log_Message, Node_Added),
     Node_Added.

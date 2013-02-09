@@ -99,38 +99,32 @@ handle_call(Request, _From, State)  ->
 handle_cast({set_severity_counters, Severity_Counters}, State) ->
     {noreply, State#state{severity_counters = Severity_Counters}};
 
-handle_cast({increment, Counter, V}, State) -> {noreply, State};
-handle_cast({decrement, Counter, V}, State) -> {noreply, State};
+handle_cast({increment, Counter, V}, State) ->
+    Current_Dirty_Value  = proplists:get_value(Counter, State#state.dirty_counters, 0),
+    Current_Cached_Value = proplists:get_value(Counter, State#state.cached_counters, 0),
 
-%handle_cast({increment, Counter, V}, State) ->
-%    Current_Dirty_Value  = proplists:get_value(Counter, State#state.dirty_counters, 0),
-%    Current_Cached_Value = proplists:get_value(Counter, State#state.cached_counters, 0),
-%
-%    Dirty_Counters  = proplists:delete(Counter, State#state.dirty_counters) ++ [{Counter, Current_Dirty_Value + V}],
-%    Cached_Counters = proplists:delete(Counter, State#state.cached_counters) ++ [{Counter, Current_Cached_Value + V}],
-%
-%    {noreply, State#state{dirty_counters  = Dirty_Counters,
-%                          cached_counters = Cached_Counters}};
-%handle_cast({decrement, Counter, V}, State) ->
-%    Current_Dirty_Value  = proplists:get_value(Counter, State#state.dirty_counters, 0),
-%    Current_Cached_Value = proplists:get_value(Counter, State#state.cached_counters, 0),
-%
-%    Dirty_Counters  = proplists:delete(Counter, State#state.dirty_counters) ++ [{Counter, Current_Dirty_Value - V}],
-%    Cached_Counters = proplists:delete(Counter, State#state.cached_counters) ++ [{Counter, Current_Cached_Value - V}],
-%
-%    {noreply, State#state{dirty_counters  = Dirty_Counters,
-%                          cached_counters = Cached_Counters}};
+    Dirty_Counters  = proplists:delete(Counter, State#state.dirty_counters) ++ [{Counter, Current_Dirty_Value + V}],
+    Cached_Counters = proplists:delete(Counter, State#state.cached_counters) ++ [{Counter, Current_Cached_Value + V}],
 
-handle_cast({increment_severity_counter, Severity_Num}, State) -> {noreply, State};
-handle_cast({decrement_severity_counter, Severity_Num}, State) -> {noreply, State};
+    {noreply, State#state{dirty_counters  = Dirty_Counters,
+                          cached_counters = Cached_Counters}};
+handle_cast({decrement, Counter, V}, State) ->
+    Current_Dirty_Value  = proplists:get_value(Counter, State#state.dirty_counters, 0),
+    Current_Cached_Value = proplists:get_value(Counter, State#state.cached_counters, 0),
 
-%handle_cast({increment_severity_counter, Severity_Num}, State) ->
-%    Count = proplists:get_value(Severity_Num, State#state.severity_counters, 0),
-%    {noreply, State#state{severity_counters = proplists:delete(Severity_Num, State#state.severity_counters) ++ [{Severity_Num, Count + 1}]}};
+    Dirty_Counters  = proplists:delete(Counter, State#state.dirty_counters) ++ [{Counter, Current_Dirty_Value - V}],
+    Cached_Counters = proplists:delete(Counter, State#state.cached_counters) ++ [{Counter, Current_Cached_Value - V}],
 
-%handle_cast({decrement_severity_counter, Severity_Num}, State) ->
-%    Count = proplists:get_value(Severity_Num, State#state.severity_counters, 0),
-%    {noreply, State#state{severity_counters = proplists:delete(Severity_Num, State#state.severity_counters) ++ [{Severity_Num, Count - 1}]}};
+    {noreply, State#state{dirty_counters  = Dirty_Counters,
+                          cached_counters = Cached_Counters}};
+
+handle_cast({increment_severity_counter, Severity_Num}, State) ->
+    Count = proplists:get_value(Severity_Num, State#state.severity_counters, 0),
+    {noreply, State#state{severity_counters = proplists:delete(Severity_Num, State#state.severity_counters) ++ [{Severity_Num, Count + 1}]}};
+
+handle_cast({decrement_severity_counter, Severity_Num}, State) ->
+    Count = proplists:get_value(Severity_Num, State#state.severity_counters, 0),
+    {noreply, State#state{severity_counters = proplists:delete(Severity_Num, State#state.severity_counters) ++ [{Severity_Num, Count - 1}]}};
 
 handle_cast(reset_interval, State) ->
     erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
