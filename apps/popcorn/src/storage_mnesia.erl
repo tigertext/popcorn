@@ -275,9 +275,12 @@ handle_cast({delete_counter, Counter}, State) ->
     {noreply, State};
 
 handle_cast({increment_counter, Counter, Increment_By}, State) ->
-    ?RPS_INCREMENT(storage_counter_write),
-    ?RPS_INCREMENT(storage_total),
-    mnesia:dirty_update_counter(popcorn_counters, Counter, Increment_By),
+    increment_counter(Counter, Increment_By),
+    {noreply, State};
+
+handle_cast({increment_counters, Counters}, State) ->
+    [increment_counter(Counter, Value) || {Counter, Value} <- Counters],
+    system_counters:reset_interval(),
     {noreply, State};
 
 handle_cast({add_node, Popcorn_Node}, State) ->
@@ -291,6 +294,11 @@ terminate(_Reason, _State)          -> ok.
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 %% private, internal functions
+increment_counter(Counter, Increment_By) ->
+    ?RPS_INCREMENT(storage_counter_write),
+    ?RPS_INCREMENT(storage_total),
+    mnesia:dirty_update_counter(popcorn_counters, Counter, Increment_By).
+
 send_recent_log_line(_, 0, _, _) -> ok;
 send_recent_log_line(_, _, '$end_of_table', _) -> ok;
 send_recent_log_line(Pid, Count, Last_Key_Checked, Filters) ->
