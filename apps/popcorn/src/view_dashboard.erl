@@ -30,7 +30,7 @@ node_count() -> ets:info(current_nodes, size).
 
 -spec event_count() -> integer().
 event_count() ->
-    gen_server:call(pg2:get_closest_pid('storage'), {counter_value, ?TOTAL_EVENT_COUNTER}).
+    ?COUNTER_VALUE(?TOTAL_EVENT_COUNTER).
 
 -spec hashtag_count() -> integer().
 hashtag_count() -> 0.

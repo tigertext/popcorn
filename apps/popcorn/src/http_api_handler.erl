@@ -40,10 +40,9 @@ handle_path(<<"POST">>, [<<"api">>, <<"mapping">>], Req, State) ->
     Role = json_util:get_path(JSON, [<<"sender">>, <<"role">>]),
     Version = json_util:get_path(JSON, [<<"sender">>, <<"version">>]),
     {Map} = json_util:get_path(JSON, [<<"mapping">>], []),
-    Storage = pg2:get_closest_pid('storage'),
     [begin
         Record_Key = iolist_to_binary([Role, $:, Version, $:, Module]),
-        gen_server:cast(Storage, {new_release_scm_mapping, #release_scm_mapping{key=Record_Key, role=Role, version=Version, module_name=Module, url=Url}}),
+        gen_server:cast(?STORAGE_PID, {new_release_scm_mapping, #release_scm_mapping{key=Record_Key, role=Role, version=Version, module_name=Module, url=Url}}),
         io:format("K ~p ~p ~p ~p=~p~n", [Record_Key, Role, Version, Module, Url])
      end || {Module, Url} <- Map],
     {ok, Reply} = cowboy_req:reply(200, [], [], Req2),
