@@ -196,17 +196,17 @@ ingest_packet(Known_Nodes, Popcorn_Node, Log_Message) ->
               true;  %% return true so that this node is added to the known_nodes state variable
           true  -> false
       end,
-%
-%    %% let the fsm create the log
-%    Node_Pid =
-%        case ets:lookup(current_nodes, Popcorn_Node#popcorn_node.node_name) of
-%            []                 ->
-%                ?POPCORN_WARN_MSG("unable to find fsm for node ~p", [Popcorn_Node#popcorn_node.node_name]),
-%                undefined;
-%            [{_, Running_Pid}] ->
-%                gen_fsm:send_event(Running_Pid, {log_message, Popcorn_Node, Log_Message}),
-%                Running_Pid
-%        end,
-%
+
+    %% let the fsm create the log
+    Node_Pid =
+        case ets:lookup(current_nodes, Popcorn_Node#popcorn_node.node_name) of
+            []                 ->
+                ?POPCORN_WARN_MSG("unable to find fsm for node ~p", [Popcorn_Node#popcorn_node.node_name]),
+                undefined;
+            [{_, Running_Pid}] ->
+                gen_fsm:send_event(Running_Pid, {log_message, Popcorn_Node, Log_Message}),
+                Running_Pid
+        end,
+
 %    triage_handler:safe_notify(Popcorn_Node, Node_Pid, Log_Message, Node_Added),
     Node_Added.
