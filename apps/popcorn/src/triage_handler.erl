@@ -67,7 +67,7 @@ init(_) ->
     {ok, #state{timer = Timer}}.
 
 handle_call({data, Counter}, _From, State) ->
-    V = case gen_server:call(pg2:get_closest_pid('storage'), {get_alert, Counter}) of
+    V = case gen_server:call(?STORAGE_PID, {get_alert, Counter}) of
             #alert{} = Alert -> Alert;
             _ -> #alert{}
         end,
@@ -82,7 +82,7 @@ handle_call(alerts_for_today, _From, State) ->
 handle_call({alerts, Count, Severities}, _From, State) ->
     %% storage_mnesia
     %% popcorn_udp
-    Alerts = gen_server:call(pg2:get_closest_pid('storage'), {get_alerts, Severities}),
+    Alerts = gen_server:call(?STORAGE_PID, {get_alerts, Severities}),
     {Small_List,_} = lists:split(erlang:min(Count, length(Alerts)), Alerts),
     FinalList = [data(Alert) || Alert <- Small_List],
     {reply, FinalList, State};
@@ -109,7 +109,7 @@ handle_cast({triage_event, #popcorn_node{} = Node, Node_Pid,
                            log_module=Module, log_line=Line, severity=Severity} = Log_Entry,
               Is_New_Node}, #state{incident=Incident} = State)
         when Severity =< 16, Severity =/= 0, is_binary(Product), is_binary(Version), is_binary(Module), is_binary(Line) ->
-    gen_server:cast(pg2:get_closest_pid('storage'), {new_alert, key(Severity,Product,Version,Module,Line), #alert{log=Log_Entry, incident=Incident}}),
+    gen_server:cast(?STORAGE_PID, {new_alert, key(Severity,Product,Version,Module,Line), #alert{log=Log_Entry, incident=Incident}}),
     case Is_New_Node of
         true ->
             outbound_notifier:notify(new_node, as_proplist(Node)),
@@ -141,7 +141,7 @@ handle_info(update_counters, State) ->
     Day_Key = day_key(),
 
     %% TODO, perhaps this should be optimized
-    gen_server:cast(pg2:get_closest_pid('storage'), {new_alert_key, day, Day_Key}),
+    gen_server:cast(?STORAGE_PID, {new_alert_key, day, Day_Key}),
 
     Day_Count   = ?COUNTER_VALUE(Day_Key),
     Event_Count = ?COUNTER_VALUE(?TOTAL_EVENT_COUNTER),
@@ -168,8 +168,8 @@ update_counter(Node, _Node_Pid, Severity, Product, Version, Module, Line) ->
     Day_Key             = day_key(),
 
     %% TODO perhaps these next 2 lines should be optimized, store in state if we have added to the ets table?
-    gen_server:cast(pg2:get_closest_pid('storage'), {new_alert_key, alert, {Severity, Product, Version, Module, Line}}),
-    gen_server:cast(pg2:get_closest_pid('storage'), {new_alert_key, day, Day_Key}),
+    gen_server:cast(?STORAGE_PID, {new_alert_key, alert, {Severity, Product, Version, Module, Line}}),
+    gen_server:cast(?STORAGE_PID, {new_alert_key, day, Day_Key}),
     %% storage_mnesia
 
     case ?COUNTER_VALUE(Count_Key) of
