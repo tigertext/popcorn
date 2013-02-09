@@ -182,20 +182,20 @@ ingest_packet(Known_Nodes, Popcorn_Node, Log_Message) ->
     ?RPS_INCREMENT(udp),
 
     %% create the node fsm, if necessary
-  %  Node_Added =
-  %    case lists:member(Popcorn_Node#popcorn_node.node_name, Known_Nodes) of
-  %        false ->
-  %            %% suspect this is a new node, but check the database just to be safe
-  %            case gen_server:call(?STORAGE_PID, {is_known_node, Popcorn_Node#popcorn_node.node_name}) of
-  %                false -> {ok, Pid} = supervisor:start_child(node_sup, []),
-  %                         ok = gen_fsm:sync_send_event(Pid, {set_popcorn_node, Popcorn_Node}),
-  %                         ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid}),
-  %                         true;
-  %                _     -> false
-  %            end,
-  %            true;  %% return true so that this node is added to the known_nodes state variable
-  %        true  -> false
-  %    end,
+    Node_Added =
+      case lists:member(Popcorn_Node#popcorn_node.node_name, Known_Nodes) of
+          false ->
+              %% suspect this is a new node, but check the database just to be safe
+              case gen_server:call(?STORAGE_PID, {is_known_node, Popcorn_Node#popcorn_node.node_name}) of
+                  false -> {ok, Pid} = supervisor:start_child(node_sup, []),
+                           ok = gen_fsm:sync_send_event(Pid, {set_popcorn_node, Popcorn_Node}),
+                           ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid}),
+                           true;
+                  _     -> false
+              end,
+              true;  %% return true so that this node is added to the known_nodes state variable
+          true  -> false
+      end,
 %
 %    %% let the fsm create the log
 %    Node_Pid =
@@ -209,5 +209,4 @@ ingest_packet(Known_Nodes, Popcorn_Node, Log_Message) ->
 %        end,
 %
 %    triage_handler:safe_notify(Popcorn_Node, Node_Pid, Log_Message, Node_Added),
-%    Node_Added.
-    false.
+    Node_Added.
