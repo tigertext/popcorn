@@ -37,7 +37,8 @@
          get_severity_counters/0,
          set_severity_counters/1,
          increment_severity_counter/1,
-         counter_value/1]).
+         counter_value/1,
+         reset_interval/0]).
 
 -export([init/1,
          handle_call/3,
@@ -60,6 +61,7 @@ set_severity_counters(Severity_Counters) -> gen_server:cast(?MODULE, {set_severi
 increment_severity_counter(Severity_Num) -> gen_server:cast(?MODULE, {increment_severity_counter, Severity_Num}).
 decrement_severity_counter(Severity_Num) -> gen_server:cast(?MODULE, {decrement_severity_counter, Severity_Num}).
 counter_value(Counter) -> gen_server:call(?MODULE, {read_through_cache_counter_value, Counter}).
+reset_interval() -> gen_server:cast(?MODULE, reset_interval).
 
 init([]) ->
     process_flag(trap_exit, true),
@@ -123,13 +125,14 @@ handle_cast({decrement_severity_counter, Severity_Num}, State) ->
     Count = proplists:get_value(Severity_Num, State#state.severity_counters, 0),
     {noreply, State#state{severity_counters = proplists:delete(Severity_Num, State#state.severity_counters) ++ [{Severity_Num, Count - 1}]}};
 
+handle_cast(reset_interval, State) ->
+    erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
+    {noreply, State};
+
 handle_cast(_Msg, State)            -> {noreply, State}.
 
 handle_info(write_counter, State) ->
-    [gen_server:cast(?STORAGE_PID, {increment_counter, Counter, Value}) || {Counter, Value} <- State#state.dirty_counters],
-
-    erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
-
+    gen_server:cast(?STORAGE_PID, {increment_counters, State#state.dirty_counters}),
     {noreply, State#state{dirty_counters = []}};
 
 handle_info(_Msg, State)            -> {noreply, State}.
