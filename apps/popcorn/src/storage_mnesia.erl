@@ -58,12 +58,12 @@ pre_init() ->
        [mnesia:create_table(popcorn_history, [{disc_copies, [node()]},
                                               {record_name, log_message},
                                               {type,        ordered_set},
-                                              {index,       [#log_message.severity,
-                                                             #log_message.log_product,
-                                                             #log_message.log_version,
-                                                             #log_message.log_module,
-                                                             #log_message.log_line,
-                                                             #log_message.timestamp]},
+                                              {index,       []}, %#log_message.severity,
+                                                             %#log_message.log_product,
+                                                             %#log_message.log_version,
+                                                             %#log_message.log_module,
+                                                             %#log_message.log_line,
+                                                             %#log_message.timestamp]},
                                               {attributes,  record_info(fields, log_message)}])]),
 
     io:format("\n\t[alert_key: ~p]",
@@ -242,7 +242,7 @@ handle_cast({send_recent_matching_log_lines, Pid, Count, Filters}, State) ->
 handle_cast({new_log_message, Log_Message}, State) ->
     ?RPS_INCREMENT(storage_log_write),
     ?RPS_INCREMENT(storage_total),
-    %mnesia:dirty_write(popcorn_history, Log_Message),
+    mnesia:dirty_write(popcorn_history, Log_Message),
 
     system_counters:increment_severity_counter(Log_Message#log_message.severity),
     {noreply, State};
