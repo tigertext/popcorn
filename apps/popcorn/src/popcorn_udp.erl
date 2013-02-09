@@ -179,7 +179,7 @@ location_check(Module, Line, _) -> {Module, Line}.
 
 -spec ingest_packet(list(), #popcorn_node{}, #log_message{}) -> boolean().  %% return value is whether is a new node
 ingest_packet(Known_Nodes, Popcorn_Node, Log_Message) ->
-    rps:incr(udp),
+    ?RPS_INCREMENT(udp),
 
     %% create the node fsm, if necessary
     Node_Added =
