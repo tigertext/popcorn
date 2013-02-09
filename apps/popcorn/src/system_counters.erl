@@ -46,8 +46,9 @@
          terminate/2,
          code_change/3]).
 
--record(state, {general_counters    :: list(),
+-record(state, {cached_counters     :: list(),
                 severity_counters   :: list(),
+                dirty_counters      :: list(),
                 rps_enabled         :: boolean()}).
 
 start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
@@ -67,7 +68,8 @@ init([]) ->
 
     erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
 
-    {ok, #state{general_counters  = [],
+    {ok, #state{cached_counters   = [],
+                dirty_counters    = [],
                 severity_counters = []}}.  %% severity counters is set in the deserialize start_phase
 
 handle_call({has_entries_for_severity, Severity_Num}, _From, State) ->
@@ -81,10 +83,10 @@ handle_call(get_severity_counters, _From, State) ->
     {reply, State#state.severity_counters, State};
 
 handle_call({read_through_cache_counter_value, Counter}, _From, State) ->
-    case proplists:get_value(Counter, State#state.general_counters) of
+    case proplists:get_value(Counter, State#state.cached_counters) of
         undefined ->
             Counter_Value = gen_server:call(?STORAGE_PID, {counter_value, Counter}),
-            {reply, Counter_Value, State#state{general_counters = State#state.general_counters ++ [{Counter, Counter_Value}]}};
+            {reply, Counter_Value, State#state{cached_counters = State#state.cached_counters ++ [{Counter, Counter_Value}]}};
         Counter_Value ->
             {reply, Counter_Value, State}
     end;
@@ -95,16 +97,28 @@ handle_call(Request, _From, State)  ->
 handle_cast({set_severity_counters, Severity_Counters}, State) ->
     {noreply, State#state{severity_counters = Severity_Counters}};
 handle_cast({increment, Counter, V}, State) ->
-    Current_Value = proplists:get_value(Counter, State#state.general_counters, 0),
-    Counters = proplists:delete(Counter, State#state.general_counters) ++ [{Counter, Current_Value + V}],
-    {noreply, State#state{general_counters = Counters}};
+    Current_Dirty_Value  = proplists:get_value(Counter, State#state.dirty_counters, 0),
+    Current_Cached_Value = proplists:get_value(Counter, State#state.cached_counters, 0),
+
+    Dirty_Counters  = proplists:delete(Counter, State#state.dirty_counters) ++ [{Counter, Current_Dirty_Value + V}],
+    Cached_Counters = proplists:delete(Counter, State#state.cached_counters) ++ [{Counter, Current_Cached_Value + V}],
+
+    {noreply, State#state{dirty_counters  = Dirty_Counters,
+                          cached_counters = Cached_Counters}};
 handle_cast({decrement, Counter, V}, State) ->
-    Current_Value = proplists:get_value(Counter, State#state.general_counters, 0),
-    Counters = proplists:delete(Counter, State#state.general_counters) ++ [{Counter, Current_Value - V}],
-    {noreply, State#state{general_counters = Counters}};
+    Current_Dirty_Value  = proplists:get_value(Counter, State#state.dirty_counters, 0),
+    Current_Cached_Value = proplists:get_value(Counter, State#state.cached_counters, 0),
+
+    Dirty_Counters  = proplists:delete(Counter, State#state.dirty_counters) ++ [{Counter, Current_Dirty_Value - V}],
+    Cached_Counters = proplists:delete(Counter, State#state.cached_counters) ++ [{Counter, Current_Cached_Value - V}],
+
+    {noreply, State#state{dirty_counters  = Dirty_Counters,
+                          cached_counters = Cached_Counters}};
+
 handle_cast({increment_severity_counter, Severity_Num}, State) ->
     Count = proplists:get_value(Severity_Num, State#state.severity_counters, 0),
     {noreply, State#state{severity_counters = proplists:delete(Severity_Num, State#state.severity_counters) ++ [{Severity_Num, Count + 1}]}};
+
 handle_cast({decrement_severity_counter, Severity_Num}, State) ->
     Count = proplists:get_value(Severity_Num, State#state.severity_counters, 0),
     {noreply, State#state{severity_counters = proplists:delete(Severity_Num, State#state.severity_counters) ++ [{Severity_Num, Count - 1}]}};
@@ -112,11 +126,11 @@ handle_cast({decrement_severity_counter, Severity_Num}, State) ->
 handle_cast(_Msg, State)            -> {noreply, State}.
 
 handle_info(write_counter, State) ->
-    [gen_server:cast(?STORAGE_PID, {increment_counter, Counter, Value}) || {Counter, Value} <- State#state.general_counters],
+    [gen_server:cast(?STORAGE_PID, {increment_counter, Counter, Value}) || {Counter, Value} <- State#state.dirty_counters],
 
     erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
 
-    {noreply, State#state{general_counters = []}};
+    {noreply, State#state{dirty_counters = []}};
 
 handle_info(_Msg, State)            -> {noreply, State}.
 terminate(_Reason, _State)          -> ok.
