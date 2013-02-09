@@ -179,34 +179,35 @@ location_check(Module, Line, _) -> {Module, Line}.
 
 -spec ingest_packet(list(), #popcorn_node{}, #log_message{}) -> boolean().  %% return value is whether is a new node
 ingest_packet(Known_Nodes, Popcorn_Node, Log_Message) ->
-    rps:incr(udp),
+    ?RPS_INCREMENT(udp),
 
     %% create the node fsm, if necessary
-    Node_Added =
-      case lists:member(Popcorn_Node#popcorn_node.node_name, Known_Nodes) of
-          false ->
-              %% suspect this is a new node, but check the database just to be safe
-              case gen_server:call(?STORAGE_PID, {is_known_node, Popcorn_Node#popcorn_node.node_name}) of
-                  false -> {ok, Pid} = supervisor:start_child(node_sup, []),
-                           ok = gen_fsm:sync_send_event(Pid, {set_popcorn_node, Popcorn_Node}),
-                           ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid}),
-                           true;
-                  _     -> false
-              end,
-              true;  %% return true so that this node is added to the known_nodes state variable
-          true  -> false
-      end,
-
-    %% let the fsm create the log
-    Node_Pid =
-        case ets:lookup(current_nodes, Popcorn_Node#popcorn_node.node_name) of
-            []                 ->
-                ?POPCORN_WARN_MSG("unable to find fsm for node ~p", [Popcorn_Node#popcorn_node.node_name]),
-                undefined;
-            [{_, Running_Pid}] ->
-                gen_fsm:send_event(Running_Pid, {log_message, Popcorn_Node, Log_Message}),
-                Running_Pid
-        end,
-
-    triage_handler:safe_notify(Popcorn_Node, Node_Pid, Log_Message, Node_Added),
-    Node_Added.
+  %  Node_Added =
+  %    case lists:member(Popcorn_Node#popcorn_node.node_name, Known_Nodes) of
+  %        false ->
+  %            %% suspect this is a new node, but check the database just to be safe
+  %            case gen_server:call(?STORAGE_PID, {is_known_node, Popcorn_Node#popcorn_node.node_name}) of
+  %                false -> {ok, Pid} = supervisor:start_child(node_sup, []),
+  %                         ok = gen_fsm:sync_send_event(Pid, {set_popcorn_node, Popcorn_Node}),
+  %                         ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid}),
+  %                         true;
+  %                _     -> false
+  %            end,
+  %            true;  %% return true so that this node is added to the known_nodes state variable
+  %        true  -> false
+  %    end,
+%
+%    %% let the fsm create the log
+%    Node_Pid =
+%        case ets:lookup(current_nodes, Popcorn_Node#popcorn_node.node_name) of
+%            []                 ->
+%                ?POPCORN_WARN_MSG("unable to find fsm for node ~p", [Popcorn_Node#popcorn_node.node_name]),
+%                undefined;
+%            [{_, Running_Pid}] ->
+%                gen_fsm:send_event(Running_Pid, {log_message, Popcorn_Node, Log_Message}),
+%                Running_Pid
+%        end,
+%
+%    triage_handler:safe_notify(Popcorn_Node, Node_Pid, Log_Message, Node_Added),
+%    Node_Added.
+    false.
