@@ -94,7 +94,7 @@ increment_counter(Key) -> gen_server:cast(?MODULE, {send, {message, Key, 1, c}})
 %% Internal: builds the message string to be sent
 %% 
 %% returns: a String	
-build_message(Source, {message, Key, Value, Type})             -> lists:concat([Key, ":", io_lib:format("~w", [Value]), optional_source(Source), "|", Type]);
+build_message(Source, {message, Key, Value, Type})             -> lists:concat([Key, optional_source(Source), ":", io_lib:format("~w", [Value]), "|", Type]);
 build_message(Source, {message, Key, Value, Type, Samplerate}) -> lists:concat([build_message(Source, {message, Key, Value, Type}) | ["@", io_lib:format("~.2f", [1.0 / Samplerate])]]).
 
 optional_source(undefined) -> [];
