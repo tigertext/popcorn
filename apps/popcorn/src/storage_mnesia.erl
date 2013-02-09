@@ -242,7 +242,7 @@ handle_cast({send_recent_matching_log_lines, Pid, Count, Filters}, State) ->
 handle_cast({new_log_message, Log_Message}, State) ->
     ?RPS_INCREMENT(storage_log_write),
     ?RPS_INCREMENT(storage_total),
-    mnesia:dirty_write(popcorn_history, Log_Message),
+    %mnesia:dirty_write(popcorn_history, Log_Message),
 
     system_counters:increment_severity_counter(Log_Message#log_message.severity),
     {noreply, State};
