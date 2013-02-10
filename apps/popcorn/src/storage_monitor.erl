@@ -65,12 +65,6 @@ handle_cast(start_workers, 'not_ready') ->
                  rps_sup:start_link([ [{name, storage}, {module, gen_info}, {time, 5000}, {send, stats}] ])
     end,
 
-    {ok, Storage_Options} = application:get_env(popcorn, storage),
-    Worker_Count          = proplists:get_value(worker_count, Storage_Options),
-    [{ok, Pid}            = supervisor:start_child(storage_sup, []) || _ <- lists:seq(1, Worker_Count)],
-
-    ?POPCORN_DEBUG_MSG("Created ~p storage worker(s)", [Worker_Count]),
-
     %% pick one of the started workers and have it from the init phase
     ok = gen_server:call(pg2:get_closest_pid('storage'), start_phase),
 
@@ -79,7 +73,8 @@ handle_cast(start_workers, 'not_ready') ->
 handle_cast(_Msg, State)            -> {noreply, State}.
 
 handle_info(check_worker_health, State) ->
-    Num_Workers = length(pg2:get_local_members('storage')),
+    _Num_Workers = length(pg2:get_local_members('storage')),
+    %% TODO if works change use ets pubsub to let listeners know about the change
     erlang:send_after(?WORKER_HEALTH_INTERVAL, self(), check_worker_health),
     {noreply, State};
 

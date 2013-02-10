@@ -116,7 +116,7 @@ init([]) ->
                   {Rps_Module,          {Rps_Module,          start_link, [Rps_Client_Config]}, permanent, 5000, worker, []},
 
                   {rps_client_sup,       {supervisor, start_link, [{local, rps_client_sup},       ?MODULE, [Rps_Module]]},           permanent, infinity, supervisor, []},
-                  {storage_sup,          {supervisor, start_link, [{local, storage_sup},          ?MODULE, [Storage_Module]]},       permanent, infinity, supervisor, []},
+                  {storage_sup,          {storage_sup, start_link, []},                                                              permanent, infinity, supervisor, []},
                   {connected_user_sup,   {supervisor, start_link, [{local, connected_user_sup},   ?MODULE, [connected_user_fsm]]},   permanent, infinity, supervisor, []},
                   {node_sup,             {supervisor, start_link, [{local, node_sup},             ?MODULE, [node_fsm]]},             permanent, infinity, supervisor, []},
                   {log_stream_sup,       {supervisor, start_link, [{local, log_stream_sup},       ?MODULE, [log_stream_fsm]]},       permanent, infinity, supervisor, []},
