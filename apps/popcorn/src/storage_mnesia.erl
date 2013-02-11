@@ -223,8 +223,6 @@ handle_cast({expire_logs_matching, _}, State) ->
 
     {atomic, To_Delete} = mnesia:transaction(F),
 
-    ?POPCORN_DEBUG_MSG("#expiring ~p records", [length(To_Delete)]),
-
     A = lists:map(fun({_, S}) -> {S, 0} end, popcorn_util:all_severities()),
 
     Deleted_Counts =
