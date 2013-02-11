@@ -58,7 +58,7 @@ pre_init() ->
        [mnesia:create_table(popcorn_history, [{disc_copies, [node()]},
                                               {record_name, log_message},
                                               {type,        ordered_set},
-                                              {index,       []},
+                                              {index,       [#log_message.expire_at]},
                                               {attributes,  record_info(fields, log_message)}])]),
 
     io:format("\n\t[alert_key: ~p]",
@@ -215,9 +215,24 @@ handle_call({search_messages, {S, P, V, M, L, Page_Size, Starting_Timestamp}}, _
 
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
 
-handle_cast({expire_logs_matching, Params}, State) ->
-    Deleted_Counts = delete_recent_log_line(Params, undefined, []),
-    history_optimizer:expire_logs_complete(),
+handle_cast({expire_logs_matching, _}, State) ->
+    Now = ?NOW,  %% this macro can't be in the transform below
+    F = fun() ->
+          mnesia:select(popcorn_history, ets:fun2ms(fun(#log_message{expire_at = EA, message_id = ID, severity = S}) when EA < Now -> {ID, S} end))
+        end,
+
+    {atomic, To_Delete} = mnesia:transaction(F),
+
+    ?POPCORN_DEBUG_MSG("#expiring ~p records", [length(To_Delete)]),
+
+    A = lists:map(fun({_, S}) -> {S, 0} end, popcorn_util:all_severities()),
+
+    Deleted_Counts =
+      lists:foldl(fun({Message_Id, Severity}, Deleted_Counts_Accum) ->
+          mnesia:dirty_delete(popcorn_history, Message_Id),
+          Last_Value = proplists:get_value(Severity, Deleted_Counts_Accum),
+          proplists:delete(Severity, Deleted_Counts_Accum) ++ [{Severity, Last_Value + 1}]
+        end, A, To_Delete),
 
     Updated_Severity_Counters =
       lists:map(fun({Severity, Count}) ->
@@ -228,6 +243,7 @@ handle_cast({expire_logs_matching, Params}, State) ->
         end, system_counters:get_severity_counters()),
 
     system_counters:set_severity_counters(Updated_Severity_Counters),
+    history_optimizer:expire_logs_complete(),
     {noreply, State};
 
 handle_cast({send_recent_matching_log_lines, Pid, Count, Filters}, State) ->
@@ -315,55 +331,6 @@ send_recent_log_line(Pid, Count, Last_Key_Checked, Filters) ->
                                false -> gen_fsm:send_all_state_event(Pid, {new_message, older, Log_Message}),
                                         send_recent_log_line(Pid, Count - 1, Key, Filters);
                                true  -> send_recent_log_line(Pid, Count, Key, Filters)
-                           end
-    end.
-
-delete_recent_log_line(_, '$end_of_table', Deleted_By_Severity) -> Deleted_By_Severity;
-delete_recent_log_line([], _, Deleted_By_Severity) -> Deleted_By_Severity;
-delete_recent_log_line(Params, Last_Key_Checked, Deleted_By_Severity) ->
-    %%?POPCORN_DEBUG_MSG("#checking key for #retention_deletion ~p with #params ~p", [Last_Key_Checked, Params]),
-    %% get the key to check, if this is the first iteration, then start that the oldest record
-    Key = case Last_Key_Checked of
-              undefined -> ?RPS_INCREMENT(storage_total),
-                           ?RPS_INCREMENT(storage_index_read),
-                           mnesia:dirty_first(popcorn_history);
-              _         -> ?RPS_INCREMENT(storage_total),
-                           ?RPS_INCREMENT(storage_index_read),
-                           mnesia:dirty_next(popcorn_history, Last_Key_Checked)
-          end,
-
-    case Key of
-        '$end_of_table' -> Deleted_By_Severity;
-        _               -> ?RPS_INCREMENT(storage_total),
-                           ?RPS_INCREMENT(storage_log_read),
-                           Log_Message = lists:nth(1, mnesia:dirty_read(popcorn_history, Key)),
-
-                           %% are we still looking for messages for this severity?
-                           Severity_Params = proplists:lookup(Log_Message#log_message.severity, Params),
-                           case Severity_Params of
-                               none ->
-                                  %% not checking this severity, continue to the next key
-                                  delete_recent_log_line(Params, Key, Deleted_By_Severity);
-                               {_, Oldest_TS} when Oldest_TS > Log_Message#log_message.timestamp ->
-                                  %% we need to delete this message, since it's older than the min timestamp
-                                  ?RPS_INCREMENT(storage_total),
-                                  mnesia:dirty_delete(popcorn_history, Log_Message#log_message.message_id),
-                                  case ets:lookup(current_nodes, Log_Message#log_message.log_nodename) of
-                                      Node_Pids when length(Node_Pids) =:= 1 ->
-                                          {_, Node_Pid} = lists:nth(1, Node_Pids),
-                                          gen_fsm:send_all_state_event(Node_Pid, decrement_counter);
-                                      _ ->
-                                         ok
-                                  end,
-                                  system_counters:decrement(total_event_counter, 1),
-                                  Last_Deleted_Count = proplists:get_value(Log_Message#log_message.severity, Deleted_By_Severity, 0),
-                                  Now_Deleted = proplists:delete(Log_Message#log_message.severity, Deleted_By_Severity) ++
-                                                [{Log_Message#log_message.severity, Last_Deleted_Count + 1}],
-                                  delete_recent_log_line(Params, Key, Now_Deleted);
-                              {S, T} ->
-                                  %% stop checking for this severity now
-                                  New_Params = lists:delete({S, T}, Params),
-                                  delete_recent_log_line(New_Params, Key, Deleted_By_Severity)
                            end
     end.
 
