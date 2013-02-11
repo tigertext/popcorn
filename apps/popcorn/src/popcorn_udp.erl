@@ -152,7 +152,7 @@ decode_protobuffs_message(Retention_Policy, 1, Rest) ->
 
     Log_Message  = #log_message{message_id   = ?PU:unique_id(),
                                 timestamp    = ?NOW,     %% this should be part of the protobuffs packet?
-                                expire_at    = ?NOW + proplists:get_value(Severity, Retention_Policy),
+                                expire_at    = ?NOW + popcorn_util:retention_time_to_microsec(proplists:get_value(Severity, Retention_Policy)),
                                 severity     = check_undefined(Severity),
                                 message      = check_undefined(Message),
                                 topics       = Topics,
