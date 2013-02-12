@@ -45,13 +45,15 @@ start_worker() -> gen_server:start_link(?MODULE, [worker], []).
 init([]) ->
     stopped = mnesia:stop(),
     case mnesia:create_schema([node()]) of
-      ok -> ?POPCORN_INFO_MSG(" initializing schema...");
-      {error, {_Node, {already_exists,_Node}}} -> ?POPCORN_INFO_MSG(" recovering schema...")
+        ok ->
+            ?POPCORN_INFO_MSG(" initializing schema...");
+        {error, {_Node, {already_exists, _Node}}} ->
+            ?POPCORN_INFO_MSG(" recovering schema...")
     end,
     ok = mnesia:start(),
 
     ?POPCORN_INFO_MSG("Ensuring required mnesia tables exist..."),
-    ?POPCORN_INFO_MSG("\n\t[popcorn_history: ~p]",
+    ?POPCORN_INFO_MSG("\n\t[known_nodes: ~p]",
        [mnesia:create_table(known_nodes,  [{disc_copies, [node()]},
                                            {record_name, popcorn_node},
                                            {attributes,  record_info(fields, popcorn_node)}])]),
@@ -97,25 +99,26 @@ init([]) ->
 
     ?POPCORN_INFO_MSG("\n\t[popcorn_counters: ~p]",
        [mnesia:create_table(popcorn_counters, [{disc_copies, [node()]}])]),
-    ?POPCORN_INFO_MSG("\n... done!\n"),
+    ?POPCORN_INFO_MSG("\n... done!"),
 
-    ?POPCORN_INFO_MSG("Reloading previously known nodes...\n"),
+    ok = mnesia:wait_for_tables([known_nodes, popcorn_counters, popcorn_history], 5000),
+
+    ?POPCORN_INFO_MSG("Reloading previously known nodes..."),
     lists:foreach(fun(Known_Node) ->
-        ?POPCORN_INFO_MSG("Node: ~s\n", [binary_to_list(Known_Node)]),
+        ?POPCORN_INFO_MSG("need to #deserializing node @~s", [binary_to_list(Known_Node)]),
         #popcorn_node{node_name = Node_Name} = Popcorn_Node = lists:nth(1, mnesia:dirty_read(known_nodes, Known_Node)),
         {ok, Pid} = node_sup:add_child(Node_Name),
-        %{ok, Pid} = supervisor:start_child(node_sup, []),
         ok = gen_fsm:sync_send_event(Pid, {deserialize_popcorn_node, Popcorn_Node}),
         ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid})
       end, mnesia:dirty_all_keys(known_nodes)),
-    ?POPCORN_INFO_MSG(" done!\n"),
+    ?POPCORN_INFO_MSG(" done!"),
 
-    ?POPCORN_INFO_MSG("Ensuring counters have a default value...\n"),
+    ?POPCORN_INFO_MSG("Ensuring counters have a default value..."),
       ?POPCORN_INFO_MSG("\n\t[TOTAL_EVENT_COUNTER: ~p]",
         [mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_EVENT_COUNTER, 0)]),
       ?POPCORN_INFO_MSG("\n\t[TOTAL_ALERT_COUNTER: ~p]",
         [mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_ALERT_COUNTER, 0)]),
-    ?POPCORN_INFO_MSG("\n done!\n"),
+    ?POPCORN_INFO_MSG("\n done!"),
 
     Severity_Counters =
       lists:map(fun({_, Severity}) ->
