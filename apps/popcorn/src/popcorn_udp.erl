@@ -135,6 +135,7 @@ decode_protobuffs_message(Retention_Policy, 0, Encoded_Message) ->
     {Popcorn_Node, Log_Message};
 
 decode_protobuffs_message(Retention_Policy, 1, Rest) ->
+    ?POPCORN_DEBUG_MSG("Retention_Policy = ~p", [Retention_Policy]),
     {{2, Node},           Rest1} = protobuffs:decode(Rest, bytes),
     {{3, Node_Role},      Rest2} = protobuffs:decode(Rest1, bytes),
     {{4, Node_Version},   Rest3} = protobuffs:decode(Rest2, bytes),
@@ -152,6 +153,7 @@ decode_protobuffs_message(Retention_Policy, 1, Rest) ->
                            _         -> Severity
                        end,
 
+                      ?POPCORN_DEBUG_MSG("Severity = ~p, Popcorn_Severity = ~p", [Severity, Popcorn_Severity]),
     Popcorn_Node = #popcorn_node{node_name = check_undefined(Node),
                                  role      = check_undefined(Node_Role),
                                  version   = check_undefined(Node_Version)},
