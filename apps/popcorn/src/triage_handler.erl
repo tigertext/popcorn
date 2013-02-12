@@ -19,10 +19,9 @@
 -include("include/popcorn.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
 
--record(state, {
-        incident = 1 :: integer(),
-        timer :: reference()
-}).
+-record(state, {incident = 1   :: integer(),
+                timer          :: reference(),
+                workers = []   :: list()}).
 
 start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
@@ -64,10 +63,11 @@ clear_alert(Alert) ->
 
 init(_) ->
     Timer = erlang:send_after(?UPDATE_INTERVAL, self(), update_counters),
+    pubsub:subscribe(storage, self()),
     {ok, #state{timer = Timer}}.
 
-handle_call({data, Counter}, _From, State) ->
-    V = case gen_server:call(?STORAGE_PID, {get_alert, Counter}) of
+handle_call({data, Counter}, _From, #state{workers = Workers} = State) ->
+    V = case gen_server:call(?CACHED_STORAGE_PID(Workers), {get_alert, Counter}) of
             #alert{} = Alert -> Alert;
             _ -> #alert{}
         end,
@@ -79,17 +79,17 @@ handle_call(alerts_for_today, _From, State) ->
     Day_Key = day_key(),
     Day_Alerts = ?COUNTER_VALUE(Day_Key),
     {reply, Day_Alerts, State};
-handle_call({alerts, Count, Severities}, _From, State) ->
+handle_call({alerts, Count, Severities}, _From, #state{workers = Workers} = State) ->
     %% storage_mnesia
     %% popcorn_udp
-    Alerts = gen_server:call(?STORAGE_PID, {get_alerts, Severities}),
+    Alerts = gen_server:call(?CACHED_STORAGE_PID(Workers), {get_alerts, Severities}),
     {Small_List,_} = lists:split(erlang:min(Count, length(Alerts)), Alerts),
     FinalList = [data(Alert) || Alert <- Small_List],
     {reply, FinalList, State};
-handle_call({clear, Counter}, _From, State) ->
+handle_call({clear, Counter}, _From, #state{workers = Workers} = State) ->
     Key = recent_key(Counter),
 
-    gen_server:cast(?STORAGE_PID, {delete_counter, Key}),
+    gen_server:cast(?CACHED_STORAGE_PID(Workers), {delete_counter, Key}),
     ?DECREMENT_COUNTER(?TOTAL_ALERT_COUNTER),
     Total_Alert_Count = ?COUNTER_VALUE(?TOTAL_ALERT_COUNTER),
     NewCounters =
@@ -97,9 +97,9 @@ handle_call({clear, Counter}, _From, State) ->
          {alert_count,  Total_Alert_Count}],
     dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
     {reply, ok, reset_timer(State)};
-handle_call({messages, Alert, Starting_Timestamp, Page_Size}, _From, State) ->
+handle_call({messages, Alert, Starting_Timestamp, Page_Size}, _From, #state{workers = Workers} = State) ->
     [S, P, V, M, L] = split_location(Alert),
-    Messages = gen_server:call(?STORAGE_PID, {search_messages, {popcorn_util:severity_to_number(S), P, V, M, L, Page_Size, Starting_Timestamp}}),
+    Messages = gen_server:call(?CACHED_STORAGE_PID(Workers), {search_messages, {popcorn_util:severity_to_number(S), P, V, M, L, Page_Size, Starting_Timestamp}}),
     {reply, Messages, State};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
@@ -107,16 +107,17 @@ handle_call(_Request, _From, State) ->
 handle_cast({triage_event, #popcorn_node{} = Node, Node_Pid,
               #log_message{log_product=Product, log_version=Version,
                            log_module=Module, log_line=Line, severity=Severity} = Log_Entry,
-              Is_New_Node}, #state{incident=Incident} = State)
+              Is_New_Node}, #state{incident=Incident, workers = Workers} = State)
         when Severity =< 16, Severity =/= 0, is_binary(Product), is_binary(Version), is_binary(Module), is_binary(Line) ->
-    gen_server:cast(?STORAGE_PID, {new_alert, key(Severity,Product,Version,Module,Line), #alert{log=Log_Entry, incident=Incident}}),
+    Storage_Pid = ?CACHED_STORAGE_PID(Workers),
+    gen_server:cast(Storage_Pid, {new_alert, key(Severity,Product,Version,Module,Line), #alert{log=Log_Entry, incident=Incident}}),
     case Is_New_Node of
         true ->
             outbound_notifier:notify(new_node, as_proplist(Node)),
             dashboard_stream_fsm:broadcast({new_node, Node});
         false -> ok
     end,
-    update_counter(Node,Node_Pid,Severity,Product,Version,Module,Line),
+    update_counter(Node,Node_Pid,Severity,Product,Version,Module,Line,Storage_Pid),
     {noreply, reset_timer(State)};
 handle_cast({triage_event, #popcorn_node{} = Node, _Node_Pid, _Log_Message, true}, State) ->
     outbound_notifier:notify(new_node, as_proplist(Node)),
@@ -128,7 +129,11 @@ handle_cast(Event, State) ->
     io:format("Unexpected event: ~p~n", [Event]),
     {noreply, State}.
 
-handle_info(update_counters, State) ->
+handle_info({broadcast, {new_storage_workers, Workers}}, State) ->
+    ?POPCORN_INFO_MSG("~p accepted new list of workers ~p", [?MODULE, Workers]),
+    {noreply, State#state{workers = Workers}};
+
+handle_info(update_counters, #state{workers = Workers} = State) ->
     lists:foreach(
         fun({_, undefined}) -> ok;
            ({Node_Name, _Node_Pid}) ->
@@ -141,7 +146,7 @@ handle_info(update_counters, State) ->
     Day_Key = day_key(),
 
     %% TODO, perhaps this should be optimized
-    gen_server:cast(?STORAGE_PID, {new_alert_key, day, Day_Key}),
+    gen_server:cast(?CACHED_STORAGE_PID(Workers), {new_alert_key, day, Day_Key}),
 
     Day_Count   = ?COUNTER_VALUE(Day_Key),
     Event_Count = ?COUNTER_VALUE(?TOTAL_EVENT_COUNTER),
@@ -162,14 +167,14 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-update_counter(Node, _Node_Pid, Severity, Product, Version, Module, Line) ->
+update_counter(Node, _Node_Pid, Severity, Product, Version, Module, Line, Storage_Pid) ->
     Count_Key           = key(Severity,Product,Version,Module,Line),
     Recent_Counter_Key  = recent_key(Count_Key),
     Day_Key             = day_key(),
 
     %% TODO perhaps these next 2 lines should be optimized, store in state if we have added to the ets table?
-    gen_server:cast(?STORAGE_PID, {new_alert_key, alert, {Severity, Product, Version, Module, Line}}),
-    gen_server:cast(?STORAGE_PID, {new_alert_key, day, Day_Key}),
+    gen_server:cast(Storage_Pid, {new_alert_key, alert, {Severity, Product, Version, Module, Line}}),
+    gen_server:cast(Storage_Pid, {new_alert_key, day, Day_Key}),
     %% storage_mnesia
 
     case ?COUNTER_VALUE(Count_Key) of

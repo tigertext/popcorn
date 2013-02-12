@@ -21,12 +21,26 @@ start(_StartType, _StartArgs) -> supervisor:start_link({local, ?MODULE}, ?MODULE
 stop(_State) -> ok.
 
 start_phase(deserialize_storage, _Start_Type, _Phase_Args) ->
-    ?POPCORN_DEBUG_MSG("#deserialize_storage starting"),
-    storage_monitor:start_workers(),
-    ?POPCORN_DEBUG_MSG("#deserialize_storage finished"),
     ok.
 
 init([]) ->
+    ?POPCORN_INFO_MSG("Creating pg2 storage group"),
+    pg2:create('storage'),
+   
+    case popcorn_util:optional_env(track_rps, false) of
+        false -> ok;
+        true  -> gen_info:start_link(),
+                 rps_sup:start_link([ [{name, storage}, {module, gen_info}, {time, 5000}, {send, stats}] ])
+    end,
+
+    ?POPCORN_DEBUG_MSG("#deserialize_storage starting"),
+    %% pick one of the started workers and bootstrap
+    ?POPCORN_INFO_MSG("Starting storage..."),
+    {ok, Storage_Options} = application:get_env(popcorn, storage),
+    Storage_Module = list_to_atom("storage_" ++ proplists:get_value(engine, Storage_Options)),
+    Storage_Module:start_link(),
+    ?POPCORN_INFO_MSG(" done!\n"),
+    ?POPCORN_DEBUG_MSG("#deserialize_storage finished"),
     io:format("CWD: ~p\n", [filename:absname("")]),
 
     io:format("Creating ets tables..."),
@@ -40,12 +54,6 @@ init([]) ->
     Cache_Ttl = get_cache_ttl(application:get_env(popcorn, template_cache_ttl)),
     pcache_server:start_link(rendered_templates, mustache, compile, 16, Cache_Ttl), 
     io:format("Template cache expire policy is ~p milliseconds~n", [Cache_Ttl]),
-
-    io:format("Starting storage..."),
-    {ok, Storage_Options} = application:get_env(popcorn, storage),
-    Storage_Module        = list_to_atom("storage_" ++ proplists:get_value(engine, Storage_Options)),
-    Storage_Module:pre_init(),
-    io:format(" done!\n"),
 
     io:format("Reading rps configuration..."),
     {ok, Rps_Options} = case application:get_env(popcorn, rps_tracking) of
@@ -101,6 +109,8 @@ init([]) ->
     io:format(" done!\n"),
 
     Children = [
+                  {pubsub,            {pubsub,            start_link, []}, permanent, 5000, worker, [pubsub]},
+                  {node_sup,          {node_sup,          start_link, []}, permanent, 5000, worker, [node_sup]},
                   {popcorn_server,    {popcorn_server,    start_link, []}, permanent, 5000, worker, [popcorn_server]},
                   {popcorn_udp,       {popcorn_udp,       start_link, []}, permanent, 5000, worker, [popcorn_udp]},
                   {triage_handler,    {triage_handler,    start_link, []}, permanent, 5000, worker, [triage_handler]},
@@ -118,7 +128,6 @@ init([]) ->
                   {rps_client_sup,       {supervisor, start_link, [{local, rps_client_sup},       ?MODULE, [Rps_Module]]},           permanent, infinity, supervisor, []},
                   {storage_sup,          {storage_sup, start_link, []},                                                              permanent, infinity, supervisor, []},
                   {connected_user_sup,   {supervisor, start_link, [{local, connected_user_sup},   ?MODULE, [connected_user_fsm]]},   permanent, infinity, supervisor, []},
-                  {node_sup,             {supervisor, start_link, [{local, node_sup},             ?MODULE, [node_fsm]]},             permanent, infinity, supervisor, []},
                   {log_stream_sup,       {supervisor, start_link, [{local, log_stream_sup},       ?MODULE, [log_stream_fsm]]},       permanent, infinity, supervisor, []},
                   {dashboard_stream_sup, {supervisor, start_link, [{local, dashboard_stream_sup}, ?MODULE, [dashboard_stream_fsm]]}, permanent, infinity, supervisor, []}
                ],

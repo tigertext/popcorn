@@ -18,12 +18,14 @@
 %%%-------------------------------------------------------------------
 %%% File:      storage_monitor.erl
 %%% @author    Marc Campbell <marc.e.campbell@gmail.com>
+%%% @author    Martin Hald <mhald@mac.com>
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------
 
 -module(storage_monitor).
 -author('marc.e.campbell@gmail.com').
+-author('mhald@mac.com').
 -behavior(gen_server).
 
 -include("include/popcorn.hrl").
@@ -31,7 +33,9 @@
 -define(WORKER_HEALTH_INTERVAL, 10000).
 
 -export([start_link/0,
-         start_workers/0]).
+         start_workers/0,
+         monitor_storage/1,
+         get_storage_pid/1]).
 
 -export([init/1,
          handle_call/3,
@@ -40,6 +44,8 @@
          terminate/2,
          code_change/3]).
 
+%% TODO: use ETS to store workers with inherit rights to recover from self() death
+-record(state, {workers = []}).
 
 start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 start_workers() -> gen_server:cast(?MODULE, start_workers).
@@ -48,38 +54,51 @@ init([]) ->
     process_flag(trap_exit, true),
 
     ?POPCORN_DEBUG_MSG("#storage_monitor starting"),
-    pg2:create('storage'),
+    Workers = pg2:get_local_members(storage),
+    lager:info("Monitoring ~p", [Workers]),
+    [spawn(?MODULE, monitor_storage, [Proc]) || Proc <- Workers],
 
     erlang:send_after(?WORKER_HEALTH_INTERVAL, self(), check_worker_health),
 
-    {ok, 'not_ready'}.
+    {ok, #state{workers = Workers}}.
 
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
-
-handle_cast(start_workers, 'not_ready') ->
-    ?POPCORN_DEBUG_MSG("Starting storage workers..."),
-
-    case popcorn_util:optional_env(track_rps, false) of
-        false -> ok;
-        true  -> gen_info:start_link(),
-                 rps_sup:start_link([ [{name, storage}, {module, gen_info}, {time, 5000}, {send, stats}] ])
-    end,
-
-    %% pick one of the started workers and have it from the init phase
-    ok = gen_server:call(pg2:get_closest_pid('storage'), start_phase),
-
-    {noreply, 'ready'};
-
 handle_cast(_Msg, State)            -> {noreply, State}.
 
-handle_info(check_worker_health, State) ->
-    _Num_Workers = length(pg2:get_local_members('storage')),
-    %% TODO if works change use ets pubsub to let listeners know about the change
+handle_info(check_worker_health, #state{workers = Workers} = State) ->
+    Current_Workers = pg2:get_local_members(storage),
+    Workers =/= Current_Workers andalso 
+        begin
+            publish_worker_change(Current_Workers),
+            monitor_new_pids(Workers, Current_Workers)
+        end,
     erlang:send_after(?WORKER_HEALTH_INTERVAL, self(), check_worker_health),
-    {noreply, State};
+    {noreply, State#state{workers = Current_Workers}};
 
 handle_info(_Msg, State)            -> {noreply, State}.
+
 terminate(_Reason, _State)          -> ok.
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
+publish_worker_change(Workers) ->
+    ?POPCORN_INFO_MSG("Workers changed, broadcasting new workers: ~p~n", [Workers]),
+    pubsub:publish(storage, {new_storage_workers, Workers}).
 
+monitor_storage(Proc) ->
+    erlang:monitor(process,Proc),
+    receive
+       {'DOWN', Ref, process, Pid,  normal} -> ok;
+       {'DOWN', Ref, process, Pid,  Reason} ->
+            Workers = pg2:get_local_members(storage) -- [Proc],
+            lager:info("Detected down storage node - published reduced set of workers ~p", [Workers]),
+            pubsub:publish(storage, {new_storage_workers, Workers})
+    end.
+
+monitor_new_pids(Known_Workers, Current_Workers) ->
+    New_Workers = Current_Workers -- Known_Workers,
+    [spawn(?MODULE, monitor_storage, [Proc]) || Proc <- New_Workers].
+
+get_storage_pid([]) -> ?STORAGE_PID;
+get_storage_pid(List) ->
+    Index = random:uniform(length(List)),
+    lists:nth(Index, List).

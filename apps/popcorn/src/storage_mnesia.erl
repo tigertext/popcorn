@@ -30,8 +30,7 @@
 -include_lib("stdlib/include/qlc.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
 
--export([start_link/0,
-         pre_init/0]).
+-export([start_link/0, start_worker/0]).
 
 -export([init/1,
          handle_call/3,
@@ -41,44 +40,46 @@
          code_change/3]).
 
 start_link() -> gen_server:start_link(?MODULE, [], []).
-pre_init() ->
+start_worker() -> gen_server:start_link(?MODULE, [worker], []).
+
+init([]) ->
     stopped = mnesia:stop(),
     case mnesia:create_schema([node()]) of
-      ok -> io:format(" initializing schema...");
-      {error, {_Node, {already_exists,_Node}}} -> io:format(" recovering schema...")
+      ok -> ?POPCORN_INFO_MSG(" initializing schema...");
+      {error, {_Node, {already_exists,_Node}}} -> ?POPCORN_INFO_MSG(" recovering schema...")
     end,
     ok = mnesia:start(),
 
-    io:format("Ensuring required mnesia tables exist..."),
-    io:format("\n\t[popcorn_history: ~p]",
+    ?POPCORN_INFO_MSG("Ensuring required mnesia tables exist..."),
+    ?POPCORN_INFO_MSG("\n\t[popcorn_history: ~p]",
        [mnesia:create_table(known_nodes,  [{disc_copies, [node()]},
                                            {record_name, popcorn_node},
                                            {attributes,  record_info(fields, popcorn_node)}])]),
-    io:format("\n\t[popcorn_history: ~p]",
+    ?POPCORN_INFO_MSG("\n\t[popcorn_history: ~p]",
        [mnesia:create_table(popcorn_history, [{disc_copies, [node()]},
                                               {record_name, log_message},
                                               {type,        ordered_set},
                                               {index,       [#log_message.expire_at]},
                                               {attributes,  record_info(fields, log_message)}])]),
 
-    io:format("\n\t[alert_key: ~p]",
+    ?POPCORN_INFO_MSG("\n\t[alert_key: ~p]",
         [mnesia:create_table(popcorn_alert_keyset, [{disc_copies, [node()]},
                                            {record_name, alert_key},
                                            {type,        bag},
                                            {attributes,  record_info(fields, alert_key)}])]),
-    io:format("\n\t[alert_counter: ~p]",
+    ?POPCORN_INFO_MSG("\n\t[alert_counter: ~p]",
         [mnesia:create_table(popcorn_alert_keyset, [{disc_copies, [node()]},
                                            {record_name, alert_counter},
                                            {type,        set},
                                            {attributes,  record_info(fields, alert_counter)}])]),
-    io:format("\n\t[alert: ~p]",
+    ?POPCORN_INFO_MSG("\n\t[alert: ~p]",
         [mnesia:create_table(popcorn_alert, [{disc_copies, [node()]},
                                            {record_name, alert},
                                            {type,        ordered_set},
                                            {index,       [#alert.timestamp]},
                                            {attributes,  record_info(fields, alert)}])]),
 
-    io:format("\n\t[popcorn_scm: ~p]",
+    ?POPCORN_INFO_MSG("\n\t[popcorn_scm: ~p]",
         [mnesia:create_table(popcorn_release_scm, [{disc_copies, [node()]},
                                            {record_name, release_scm},
                                            {type,        ordered_set},
@@ -86,7 +87,7 @@ pre_init() ->
                                                           #release_scm.version]},
                                            {attributes,  record_info(fields, release_scm)}])]),
 
-    io:format("\n\t[popcorn_scm_mapping: ~p]",
+    ?POPCORN_INFO_MSG("\n\t[popcorn_scm_mapping: ~p]",
         [mnesia:create_table(popcorn_release_scm_mapping, [{disc_copies, [node()]},
                                            {record_name, release_scm_mapping},
                                            {type,        ordered_set},
@@ -94,33 +95,27 @@ pre_init() ->
                                                           #release_scm_mapping.version]},
                                            {attributes,  record_info(fields, release_scm_mapping)}])]),
 
-    io:format("\n\t[popcorn_counters: ~p]",
+    ?POPCORN_INFO_MSG("\n\t[popcorn_counters: ~p]",
        [mnesia:create_table(popcorn_counters, [{disc_copies, [node()]}])]),
-    io:format("\n... done!\n").
+    ?POPCORN_INFO_MSG("\n... done!\n"),
 
-init([]) ->
-    process_flag(trap_exit, true),
-
-    pg2:join('storage', self()),
-    {ok, undefined}.   %% we don't have state here, because this is only one worker process
-
-handle_call(start_phase, _From, State) ->
-    io:format("Reloading previously known nodes...\n"),
+    ?POPCORN_INFO_MSG("Reloading previously known nodes...\n"),
     lists:foreach(fun(Known_Node) ->
-        io:format("Node: ~s\n", [binary_to_list(Known_Node)]),
-        Popcorn_Node = lists:nth(1, mnesia:dirty_read(known_nodes, Known_Node)),
-        {ok, Pid} = supervisor:start_child(node_sup, []),
+        ?POPCORN_INFO_MSG("Node: ~s\n", [binary_to_list(Known_Node)]),
+        #popcorn_node{node_name = Node_Name} = Popcorn_Node = lists:nth(1, mnesia:dirty_read(known_nodes, Known_Node)),
+        {ok, Pid} = node_sup:add_child(Node_Name),
+        %{ok, Pid} = supervisor:start_child(node_sup, []),
         ok = gen_fsm:sync_send_event(Pid, {deserialize_popcorn_node, Popcorn_Node}),
         ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid})
       end, mnesia:dirty_all_keys(known_nodes)),
-    io:format(" done!\n"),
+    ?POPCORN_INFO_MSG(" done!\n"),
 
-    io:format("Ensuring counters have a default value...\n"),
-      io:format("\n\t[TOTAL_EVENT_COUNTER: ~p]",
+    ?POPCORN_INFO_MSG("Ensuring counters have a default value...\n"),
+      ?POPCORN_INFO_MSG("\n\t[TOTAL_EVENT_COUNTER: ~p]",
         [mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_EVENT_COUNTER, 0)]),
-      io:format("\n\t[TOTAL_ALERT_COUNTER: ~p]",
+      ?POPCORN_INFO_MSG("\n\t[TOTAL_ALERT_COUNTER: ~p]",
         [mnesia:dirty_update_counter(popcorn_counters, ?TOTAL_ALERT_COUNTER, 0)]),
-    io:format("\n done!\n"),
+    ?POPCORN_INFO_MSG("\n done!\n"),
 
     Severity_Counters =
       lists:map(fun({_, Severity}) ->
@@ -130,7 +125,13 @@ handle_call(start_phase, _From, State) ->
         end, popcorn_util:all_severities()),
     system_counters:set_severity_counters(Severity_Counters),
 
-    {reply, ok, State};
+    {ok, undefined};
+
+init([worker]) ->
+    process_flag(trap_exit, true),
+    pg2:join('storage', self()),
+    {ok, undefined}.   %% we don't have state here, because this is only one worker process
+
 
 handle_call({counter_value, Counter}, _From, State) ->
     ?RPS_INCREMENT(storage_counter_read),

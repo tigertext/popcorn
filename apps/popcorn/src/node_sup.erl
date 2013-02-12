@@ -22,14 +22,14 @@
 %%% @end
 %%% Created : Sun Feb 10 2013
 %%%-------------------------------------------------------------------
--module(storage_sup).
+-module(node_sup).
 
 -behaviour(supervisor).
 
 -include("popcorn.hrl").
 
 %% API
--export([start_link/0]).
+-export([start_link/0, add_child/1, monitor_node_process/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -74,18 +74,29 @@ init([]) ->
 
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
+    {ok, {SupFlags, []}}.
+
+add_child(Node_Name) ->
     Restart = permanent,
     Shutdown = 2000,
     Type = worker,
 
-    {ok, Storage_Options} = application:get_env(popcorn, storage),
-    Worker_Count          = proplists:get_value(worker_count, Storage_Options, 1),
-    Storage_Module        = list_to_atom("storage_" ++ proplists:get_value(engine, Storage_Options)),
-    Children = [{list_to_atom("storage_"++integer_to_list(Worker_Num)), {Storage_Module, start_worker, []}, Restart, Shutdown, Type, []}
-                    || Worker_Num <- lists:seq(1, Worker_Count)],
-
-    {ok, {SupFlags, Children}}.
+    ?POPCORN_INFO_MSG("Launching node_fsm child ~p~n", [Node_Name]),
+    {ok, Pid} = Child = supervisor:start_child(node_sup, 
+                                               {list_to_atom(binary_to_list(Node_Name)), {node_fsm, start_link, []}, Restart, Shutdown, Type, [node_sup]}),
+    spawn(?MODULE, monitor_node_process, [Pid]),
+    Child.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+monitor_node_process(Proc) ->
+    erlang:monitor(process,Proc),
+    receive
+       {'DOWN', _Ref, process, _Pid,  normal} -> ok;
+       {'DOWN', Ref, process, Pid,  Reason} ->
+           % TODO: alert gen_servers that have cached which nodes are launched to flush their cache
+           ?POPCORN_ERROR_MSG("~p said that ~p died by unnatural causes~n~p",[Ref,Pid,Reason])
+    end.
+

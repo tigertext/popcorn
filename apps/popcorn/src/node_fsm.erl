@@ -54,7 +54,8 @@
     'LOGGING'/3]).
 
 -record(state, {popcorn_node          :: #popcorn_node{},
-                event_counter         :: number()}).
+                event_counter         :: number(),
+                workers = []          :: list()}).
 
 start_link() -> gen_fsm:start_link(?MODULE, [], []).
 
@@ -62,13 +63,14 @@ init([]) ->
     process_flag(trap_exit, true),
 
     erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
+    pubsub:subscribe(storage, self()),
 
-    {ok, 'LOGGING', #state{event_counter = 0}}.
+    {ok, 'LOGGING', #state{event_counter = 0, workers = pg2:get_local_members(storage)}}.
 
-'LOGGING'({log_message, Popcorn_Node, Log_Message}, State) ->
+'LOGGING'({log_message, Popcorn_Node, Log_Message}, #state{workers = Workers} = State) ->
     try
         %% log the message
-        gen_server:cast(?STORAGE_PID, {new_log_message, Log_Message}),
+        gen_server:cast(?CACHED_STORAGE_PID(Workers), {new_log_message, Log_Message}),
 
         %% increment the total event counter
         ?INCREMENT_COUNTER(?TOTAL_EVENT_COUNTER),
@@ -90,8 +92,8 @@ init([]) ->
 
     {reply, ok, 'LOGGING', State#state{popcorn_node          = Popcorn_Node}};
 
-'LOGGING'({set_popcorn_node, Popcorn_Node}, _From, State) ->
-    gen_server:cast(?STORAGE_PID, {add_node, Popcorn_Node}),
+'LOGGING'({set_popcorn_node, Popcorn_Node}, _From, #state{workers = Workers} = State) ->
+    gen_server:cast(?CACHED_STORAGE_PID(Workers), {add_node, Popcorn_Node}),
 
     Node_Name        = Popcorn_Node#popcorn_node.node_name,
     Prefix           = <<"raw_logs__">>,
@@ -107,13 +109,20 @@ handle_event(decrement_counter, State_Name, State) ->
 handle_event(Event, StateName, State)                 -> {stop, {StateName, undefined_event, Event}, State}.
 handle_sync_event(Event, _From, StateName, State)     -> {stop, {StateName, undefined_event, Event}, State}.
 
-handle_info(write_counter, State_Name, State) ->
+handle_info({broadcast, {new_storage_workers, Workers}}, State_Name, State) ->
+    ?POPCORN_INFO_MSG("~p accepted new list of workers ~p", [?MODULE, Workers]),
+    {next_state, State_Name, State#state{workers = Workers}};
+
+handle_info(write_counter, State_Name, #state{workers = Workers} = State) ->
     Popcorn_Node = State#state.popcorn_node,
-    gen_server:cast(?STORAGE_PID, {increment_counter, ?NODE_EVENT_COUNTER(Popcorn_Node#popcorn_node.node_name), State#state.event_counter}),
+    %io:format("About to call with ~p ~p~n", [Popcorn_Node, State]),
+    gen_server:cast(?CACHED_STORAGE_PID(Workers), {increment_counter, ?NODE_EVENT_COUNTER(Popcorn_Node#popcorn_node.node_name), State#state.event_counter}),
     erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
 
     {next_state, State_Name, State#state{event_counter = 0}};
 
-handle_info(_Info, StateName, State)                  -> {next_state, StateName, State}.
+handle_info(_Info, StateName, State) ->
+    ?POPCORN_WARN_MSG("Unhandled info call ~p", [_Info]),
+    {next_state, StateName, State}.
 terminate(_Reason, _StateName, State)                 -> ok.
 code_change(_OldVsn, StateName, StateData, _Extra)    -> {ok, StateName, StateData}.
