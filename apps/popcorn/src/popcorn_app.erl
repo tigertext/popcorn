@@ -21,18 +21,6 @@ start(_StartType, _StartArgs) -> supervisor:start_link({local, ?MODULE}, ?MODULE
 stop(_State) -> ok.
 
 start_phase(deserialize_storage, _Start_Type, _Phase_Args) ->
-    ok.
-
-init([]) ->
-    ?POPCORN_INFO_MSG("Creating pg2 storage group"),
-    pg2:create('storage'),
-   
-    case popcorn_util:optional_env(track_rps, false) of
-        false -> ok;
-        true  -> gen_info:start_link(),
-                 rps_sup:start_link([ [{name, storage}, {module, gen_info}, {time, 5000}, {send, stats}] ])
-    end,
-
     ?POPCORN_DEBUG_MSG("#deserialize_storage starting"),
     %% pick one of the started workers and bootstrap
     ?POPCORN_INFO_MSG("Starting storage..."),
@@ -41,6 +29,18 @@ init([]) ->
     Storage_Module:start_link(),
     ?POPCORN_INFO_MSG(" done!\n"),
     ?POPCORN_DEBUG_MSG("#deserialize_storage finished"),
+    ok.
+
+init([]) ->
+    ?POPCORN_INFO_MSG("Creating pg2 storage group"),
+    pg2:create('storage'),
+
+    case popcorn_util:optional_env(track_rps, false) of
+        false -> ok;
+        true  -> gen_info:start_link(),
+                 rps_sup:start_link([ [{name, storage}, {module, gen_info}, {time, 5000}, {send, stats}] ])
+    end,
+
     io:format("CWD: ~p\n", [filename:absname("")]),
 
     io:format("Creating ets tables..."),

@@ -85,6 +85,8 @@ init([]) ->
     {next_state, 'LOGGING', State#state{event_counter = State#state.event_counter + 1}}.
 
 'LOGGING'({deserialize_popcorn_node, Popcorn_Node}, _From, State) ->
+    ?POPCORN_INFO_MSG("#deserializing #node @~s", [binary_to_list(Popcorn_Node#popcorn_node.node_name)]),
+
     Node_Name        = Popcorn_Node#popcorn_node.node_name,
     Prefix           = <<"raw_logs__">>,
 
