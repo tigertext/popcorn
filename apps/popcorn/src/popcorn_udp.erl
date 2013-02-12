@@ -30,12 +30,13 @@ start_link() ->
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
 -record(state, {socket      :: pid(),
-                known_nodes :: list()}).
+                known_nodes :: list(),
+                workers = []}).
 
 init(_) ->
     {ok, Udp_Listen_Port} = application:get_env(popcorn, udp_listen_port),
     {ok, Socket} = gen_udp:open(Udp_Listen_Port, [binary, {active, once}, {recbuf, 524288}]),
-
+    pubsub:subscribe(storage, self()),
     {ok, #state{socket      = Socket,
                 known_nodes = []}}.
 
@@ -45,12 +46,15 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+handle_info({broadcast, {new_storage_workers, Workers}}, State) ->
+    ?POPCORN_INFO_MSG("~p accepted new list of workers ~p", [?MODULE, Workers]),
+    {noreply, State#state{workers = Workers}};
 
-handle_info({udp, Socket, Host, _Port, Bin}, State) ->
+handle_info({udp, Socket, Host, _Port, Bin}, #state{known_nodes = Known_Nodes, workers = Workers} = State) ->
     ?RPS_INCREMENT(udp_received),
     try decode_protobuffs_message(Bin) of
         {Popcorn_Node, Log_Message} ->
-            Node_Added = ingest_packet(State#state.known_nodes, Popcorn_Node, Log_Message),
+            Node_Added = ingest_packet(Known_Nodes, Popcorn_Node, Log_Message, Workers),
             inet:setopts(Socket, [{active, once}]),
             case Node_Added of
                 false ->
@@ -177,8 +181,8 @@ location_check(<<>>, _, Message) ->
     {Alt_Module, <<"1">>};
 location_check(Module, Line, _) -> {Module, Line}.
 
--spec ingest_packet(list(), #popcorn_node{}, #log_message{}) -> boolean().  %% return value is whether is a new node
-ingest_packet(Known_Nodes, Popcorn_Node, Log_Message) ->
+-spec ingest_packet(list(), #popcorn_node{}, #log_message{}, list()) -> boolean().  %% return value is whether is a new node
+ingest_packet(Known_Nodes, Popcorn_Node, Log_Message, Workers) ->
     ?RPS_INCREMENT(udp),
 
     %% create the node fsm, if necessary
@@ -186,8 +190,9 @@ ingest_packet(Known_Nodes, Popcorn_Node, Log_Message) ->
       case lists:member(Popcorn_Node#popcorn_node.node_name, Known_Nodes) of
           false ->
               %% suspect this is a new node, but check the database just to be safe
-              case gen_server:call(?STORAGE_PID, {is_known_node, Popcorn_Node#popcorn_node.node_name}) of
-                  false -> {ok, Pid} = supervisor:start_child(node_sup, []),
+              case gen_server:call(?CACHED_STORAGE_PID(Workers), {is_known_node, Popcorn_Node#popcorn_node.node_name}) of
+                  false -> 
+                    {ok, Pid} = node_sup:add_child(Popcorn_Node#popcorn_node.node_name),
                            ok = gen_fsm:sync_send_event(Pid, {set_popcorn_node, Popcorn_Node}),
                            ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid}),
                            true;

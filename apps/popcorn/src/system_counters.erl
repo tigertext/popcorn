@@ -50,7 +50,8 @@
 -record(state, {cached_counters     :: list(),
                 severity_counters   :: list(),
                 dirty_counters      :: list(),
-                rps_enabled         :: boolean()}).
+                rps_enabled         :: boolean(),
+                workers = []        :: list()}).
 
 start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 increment(Which_Counter, Increment_By) -> gen_server:cast(?MODULE, {increment, Which_Counter, Increment_By}).
@@ -67,6 +68,7 @@ init([]) ->
     process_flag(trap_exit, true),
 
     ?POPCORN_DEBUG_MSG("#system_counters starting"),
+    pubsub:subscribe(storage, self()),
 
     %erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
 
@@ -84,10 +86,10 @@ handle_call({has_entries_for_severity, Severity_Num}, _From, State) ->
 handle_call(get_severity_counters, _From, State) ->
     {reply, State#state.severity_counters, State};
 
-handle_call({read_through_cache_counter_value, Counter}, _From, State) ->
+handle_call({read_through_cache_counter_value, Counter}, _From, #state{workers = Workers} = State) ->
     case proplists:get_value(Counter, State#state.cached_counters) of
         undefined ->
-            Counter_Value = gen_server:call(?STORAGE_PID, {counter_value, Counter}),
+            Counter_Value = gen_server:call(?CACHED_STORAGE_PID(Workers), {counter_value, Counter}),
             {reply, Counter_Value, State#state{cached_counters = State#state.cached_counters ++ [{Counter, Counter_Value}]}};
         Counter_Value ->
             {reply, Counter_Value, State}
@@ -132,8 +134,12 @@ handle_cast(reset_interval, State) ->
 
 handle_cast(_Msg, State)            -> {noreply, State}.
 
-handle_info(write_counter, State) ->
-    gen_server:cast(?STORAGE_PID, {increment_counters, State#state.dirty_counters}),
+handle_info({broadcast, {new_storage_workers, Workers}}, State) ->
+    ?POPCORN_INFO_MSG("~p accepted new list of workers ~p", [?MODULE, Workers]),
+    {noreply, State#state{workers = Workers}};
+
+handle_info(write_counter, #state{workers = Workers} = State) ->
+    gen_server:cast(?CACHED_STORAGE_PID(Workers), {increment_counters, State#state.dirty_counters}),
     {noreply, State#state{dirty_counters = []}};
 
 handle_info(_Msg, State)            -> {noreply, State}.
