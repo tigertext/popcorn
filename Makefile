@@ -58,4 +58,4 @@ xref:
 	${REBAR} skip_deps=true xref
 
 shell:
-		FOLSOM_PORT=5566 ${SERVER} -name ${NODE}@`hostname` -boot start_sasl -s crypto -s popcorn
+		FOLSOM_PORT=5566 ${SERVER} -name ${NODE}@`hostname` -boot start_sasl -s crypto -s lager -s popcorn
