@@ -54,15 +54,14 @@ handle_cast(_Msg, State) ->
 
 handle_info({udp, Socket, Host, _Port, Bin}, State) ->
     ?RPS_INCREMENT(udp_received),
-    try decode_protobuffs_message(State#state.retention_policy, Bin) of
-        {Popcorn_Node, Log_Message} ->
+    {Popcorn_Node, Log_Message} = decode_protobuffs_message(State#state.retention_policy, Bin),
             New_State = ingest_packet(State, Popcorn_Node, Log_Message),
             inet:setopts(Socket, [{active, once}]),
-            {noreply, New_State}
-    catch
-        error:Reason -> error_logger:error_msg("Error ingesting packet from ~p reason:~p", [Host, Reason]),
-        {noreply, State}
-    end;
+            {noreply, New_State};
+    %catch
+    %    error:Reason -> error_logger:error_msg("Error ingesting packet from ~p reason:~p", [Host, Reason]),
+    %    {noreply, State}
+    %end;
 
 handle_info(timeout, State) ->
     {noreply, State};
@@ -113,10 +112,15 @@ decode_protobuffs_message(Retention_Policy, 0, Encoded_Message) ->
                                  role      = check_undefined(Node_Role),
                                  version   = check_undefined(Node_Version)},
 
+    Popcorn_Severity = case check_undefined(Severity) of
+                          undefined -> popcorn_util:severity_to_num(none);
+                          _         -> Severity
+                       end,
+
     Log_Message  = #log_message{message_id   = ?PU:unique_id(),
                                 timestamp    = ?NOW,     %% this should be part of the protobuffs packet?
-                                expire_at    = ?NOW + proplists:get_value(Severity, Retention_Policy),
-                                severity     = check_undefined(Severity),
+                                expire_at    = ?NOW + proplists:get_value(Popcorn_Severity, Retention_Policy),
+                                severity     = Popcorn_Severity,
                                 message      = check_undefined(Message),
                                 topics       = Topics,
                                 identities   = Identities,
@@ -143,6 +147,11 @@ decode_protobuffs_message(Retention_Policy, 1, Rest) ->
 
     {Topics, Identities} = get_tags(binary_to_list(Message)),
 
+    Popcorn_Severity = case check_undefined(Severity) of
+                           undefined -> popcorn_util:severity_to_number(none);
+                           _         -> Severity
+                       end,
+
     Popcorn_Node = #popcorn_node{node_name = check_undefined(Node),
                                  role      = check_undefined(Node_Role),
                                  version   = check_undefined(Node_Version)},
@@ -152,8 +161,8 @@ decode_protobuffs_message(Retention_Policy, 1, Rest) ->
 
     Log_Message  = #log_message{message_id   = ?PU:unique_id(),
                                 timestamp    = ?NOW,     %% this should be part of the protobuffs packet?
-                                expire_at    = ?NOW + popcorn_util:retention_time_to_microsec(proplists:get_value(Severity, Retention_Policy)),
-                                severity     = check_undefined(Severity),
+                                expire_at    = ?NOW + proplists:get_value(Popcorn_Severity, Retention_Policy),
+                                severity     = Popcorn_Severity,
                                 message      = check_undefined(Message),
                                 topics       = Topics,
                                 identities   = Identities,
