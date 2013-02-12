@@ -51,6 +51,7 @@
                       severity        :: 0 | 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128,
                       message         :: binary(),
                       timestamp       :: number(),
+                      expire_at       :: number(),
                       log_nodename    :: binary(),
                       log_product     :: binary(),
                       log_version     :: binary(),
