@@ -209,12 +209,14 @@ ingest_packet(#state{known_nodes = Known_Nodes} = State, #popcorn_node{node_name
           false ->
               %% suspect this is a new node, but check the database just to be safe
               case gen_server:call(?CACHED_STORAGE_PID(Workers), {is_known_node, Node_Name}) of
-                  false -> 
+                  false ->
                     {ok, Pid} = node_sup:add_child(Node_Name),
-                           ok = gen_fsm:sync_send_event(Pid, {set_popcorn_node, Popcorn_Node}),
-                           ets:insert(current_nodes, {Node_Name, Pid}),
-                           true;
-                  _     -> false
+                    ok = gen_fsm:sync_send_event(Pid, {set_popcorn_node, Popcorn_Node}),
+                    ets:insert(current_nodes, {Node_Name, Pid}),
+                    gen_server:cast(?CACHED_STORAGE_PID(Workers), {add_node, Popcorn_Node}),
+                    true;
+                  _ ->
+                    false
               end,
               true;  %% return true so that this node is added to the known_nodes state variable
           true  -> false
