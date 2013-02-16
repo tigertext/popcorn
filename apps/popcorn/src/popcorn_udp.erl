@@ -38,7 +38,7 @@ init(_) ->
     {ok, Udp_Listen_Port} = application:get_env(popcorn, udp_listen_port),
     {ok, Socket} = gen_udp:open(Udp_Listen_Port, [binary, {active, once}, {recbuf, 524288}]),
 
-    pubsub:subscribe(storage, self()),
+    pubsub:subscribe(storage, ?MODULE, self()),
 
     {ok, Retention_Policy} = application:get_env(popcorn, log_retention),
 

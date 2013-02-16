@@ -109,7 +109,7 @@ init([]) ->
         #popcorn_node{node_name = Node_Name} = Popcorn_Node = lists:nth(1, mnesia:dirty_read(known_nodes, Known_Node)),
         {ok, Pid} = node_sup:add_child(Node_Name),
         ok = gen_fsm:sync_send_event(Pid, {deserialize_popcorn_node, Popcorn_Node}),
-        ets:insert(current_nodes, {Popcorn_Node#popcorn_node.node_name, Pid})
+        ets:insert(current_nodes, {Node_Name, Pid})
       end, mnesia:dirty_all_keys(known_nodes)),
     ?POPCORN_INFO_MSG(" done!"),
 

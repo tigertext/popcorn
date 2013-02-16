@@ -68,7 +68,7 @@ init([]) ->
     process_flag(trap_exit, true),
 
     ?POPCORN_DEBUG_MSG("#system_counters starting"),
-    pubsub:subscribe(storage, self()),
+    pubsub:subscribe(storage, ?MODULE, self()),
 
     %erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
 
