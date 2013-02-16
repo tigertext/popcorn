@@ -63,7 +63,7 @@ init([]) ->
     process_flag(trap_exit, true),
 
     erlang:send_after(?COUNTER_WRITE_INTERVAL, self(), write_counter),
-    pubsub:subscribe(storage, self()),
+    pubsub:subscribe(storage, ?MODULE, self()),
 
     {ok, 'LOGGING', #state{event_counter = 0, workers = pg2:get_local_members(storage)}}.
 

@@ -5,7 +5,7 @@
 -include("popcorn.hrl").
 
 %% API
--export([start_link/0, publish/2, subscribe/2]).
+-export([start_link/0, publish/2, subscribe/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -24,7 +24,7 @@
 
 publish(Channel, Message) -> gen_server:cast(?MODULE, {publish, Channel, Message}).
 create_channel(Channel) -> gen_server:cast(?MODULE, {create_channel, Channel}).
-subscribe(Channel, Process) -> gen_server:cast(?MODULE, {subscribe, Channel, Process}).
+subscribe(Channel, From, Process) -> gen_server:cast(?MODULE, {subscribe, Channel, From, Process}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -77,8 +77,8 @@ handle_cast({create_channel, Channel}, State) ->
     ets:new(channel_name(Channel), [bag, named_table, private, {keypos, 1}]),
     {noreply, State};
 
-handle_cast({subscribe, Channel, Process}, State) ->
-    ets:insert(channel_name(Channel), {Process}),
+handle_cast({subscribe, Channel, From, Process}, State) ->
+    ets:insert(channel_name(Channel), {From, Process}),
     {noreply, State};
 
 handle_cast({publish, Channel, Message}, State) ->
@@ -142,7 +142,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 broadcast(Message, Listeners) ->
     ?POPCORN_DEBUG_MSG("Broadcasting to ~p~n", [Listeners]),
-    [Listener ! {broadcast, Message} || {Listener} <- Listeners].
+    [Listener ! {broadcast, Message} || {_, Listener} <- Listeners].
 
 channel_name(Channel) ->
     list_to_atom("pubsub_"++atom_to_list(Channel)).

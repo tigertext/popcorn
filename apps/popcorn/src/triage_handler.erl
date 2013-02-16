@@ -63,7 +63,7 @@ clear_alert(Alert) ->
 
 init(_) ->
     Timer = erlang:send_after(?UPDATE_INTERVAL, self(), update_counters),
-    pubsub:subscribe(storage, self()),
+    pubsub:subscribe(storage, ?MODULE, self()),
     {ok, #state{timer = Timer}}.
 
 handle_call({data, Counter}, _From, #state{workers = Workers} = State) ->
