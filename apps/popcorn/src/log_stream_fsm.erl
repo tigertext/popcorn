@@ -162,6 +162,12 @@ init([]) ->
     gen_fsm:send_event_after(0, init_log_lines),
     {next_state, 'STREAMING', State#state{stream = Stream#stream{applied_filters = New_Filters}}};
 
+'STREAMING'({topic_add, Topics_To_Add}, #state{stream = Stream} = State) ->
+    {next_state, 'STREAMING', State};
+
+'STREAMING'({identity_add, Identities_To_Add}, #state{stream = Stream} = State) ->
+    {next_state, 'STREAMIMG', State};
+
 'STREAMING'(Other, State) ->
     {next_state, 'STREAMING', State}.
 

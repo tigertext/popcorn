@@ -74,6 +74,11 @@ handle_path(<<"POST">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
         New_Roles -> gen_fsm:send_event(Stream_Pid, {update_roles, New_Roles})
     end,
 
+    case proplists:get_value(<<"topics_add">>, Vals) of
+        undefined -> ok;
+        Topics_To_Add -> gen_fsm:send_event(Stream_Pid, {topic_add, Topics_To_Add})
+    end,
+
     case proplists:get_value(<<"time_filter_type">>, Vals) of
         undefined        -> ok;
         <<"stream">>     -> gen_fsm:send_event(Stream_Pid, set_time_stream);

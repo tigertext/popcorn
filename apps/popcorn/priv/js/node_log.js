@@ -18,6 +18,23 @@ $(document).ready(function() {
     History.pushState({}, '', '?' + params.join('&'));
   };
 
+  $('.topic').live('click', function(e) {
+    e.preventDefault();
+
+    $.ajax({type:'POST',
+            url:'/log/stream/' + streamId,
+            data:'topics_add=' + $(this).attr('data'),
+            success:function() { },
+            error:function(request, textstatus, error) {
+              alert('Unable to add topic to filter, response='+request.responseText+' status='+textstatus+' error='+error+' topics_add='+(this).attr('data'));
+            }});
+  });
+
+  $('.identity').live('click', function(e) {
+    e.preventDefault();
+    console.log('identity');
+  });
+
   $('.filter-role').click(function(e) {
     var rolesOn = [];
     $.each($('.filter-role'), function(k, v) {
@@ -34,7 +51,7 @@ $(document).ready(function() {
             data:'roles=' + rolesOn.join("%2C"),
             success:function() { },
             error:function(request, textstatus, error) {
-              alert('Unable to update role filter response='+request.responseText+" status="+textstatus+" error="+error+' roles='+rolesOn);
+              alert('Unable to update role filter response='+request.responseText+' status='+textstatus+' error='+error+' roles='+rolesOn);
             }});
   });
 
@@ -58,10 +75,18 @@ $(document).ready(function() {
             }});
   });
 
-  $('.filter-severity').click(function(e) {
+  $('.filter-severity').live('click', function(e) {
+    if ($(this).attr('filter-selected') == '1')  {
+      $(this).attr('filter-selected', '0');
+      $(this).find('i').remove();
+    } else {
+      $(this).attr('filter-selected', '1');
+      $(this).find('i').remove();
+      $(this).prepend($('<i />').addClass('icon-ok'));
+    }
     var severitiesOn = [];
     $.each($('.filter-severity'), function(k, v) {
-      if ($(v).prop('checked')) {
+      if ($(this).attr('filter-selected') == '1') {
         severitiesOn.push(parseInt($(this).attr('data-val'), 10));
       }
     });
