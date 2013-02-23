@@ -38,7 +38,7 @@ known_severities(_) ->
         Params = [{'label',        Severity_Name},
                   {'severity_num', integer_to_list(Severity_Number)}],
         dict:from_list(Params)
-      end, lists:reverse(popcorn_util:all_severities())).
+      end, popcorn_util:all_severities()).
 
 -spec applied_filters(dict()) -> string().
 applied_filters(Context) ->

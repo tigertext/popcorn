@@ -1,7 +1,17 @@
-var isVisible = false;
-var clickedAway = false;
+var isVisible = false,
+    clickedAway = false,
+    foundSeverities = [];
 
 $(document).ready(function() {
+  initPopovers = function() {
+    $('#filter-properties').popover({html: true,
+                                   trigger: 'click',
+                                   title: 'Filter Properties<div style="float:right;"><button class="close" id="close-filter">&times;</button></div>',
+                                   placement: 'bottom',
+                                   template: '<div class="popover filter-popover-outer"><div class="arrow"></div><div class="popover-inner filter-popover-inner"><h3 class="popover-title"></h3><div class="popover-content"><p></p></div></div></div>',
+                                   content: $('#filter-popover').html()});
+  };
+  initPopovers();
   updateHistoryState = function() {
     var cleanUrl = History.getState().cleanUrl;
     var params = [];
@@ -36,13 +46,14 @@ $(document).ready(function() {
   });
 
   $('.filter-role').click(function(e) {
-    var rolesOn = [];
-    $.each($('.filter-role'), function(k, v) {
-      if ($(v).prop('checked')) {
-        rolesOn.push($(this).attr('data-val'));
-      }
-    });
-
+    if ($(this).attr('filter-selected') == '1')  {
+      $(this).attr('filter-selected', '0');
+      $(this).find('i').remove();
+    } else {
+      $(this).attr('filter-selected', '1');
+      $(this).find('i').remove();
+      $(this).prepend($('<i />').addClass('icon-ok'));
+    }
     appliedFilters['roles'] = rolesOn;
     updateHistoryState();
 
@@ -56,12 +67,14 @@ $(document).ready(function() {
   });
 
   $('.filter-node').click(function(e) {
-    var nodesOn = [];
-    $.each($('.filter-node'), function(k, v) {
-      if ($(v).prop('checked')) {
-        nodesOn.push($(this).attr('data-val'));
-      }
-    });
+    if ($(this).attr('filter-selected') == '1')  {
+      $(this).attr('filter-selected', '0');
+      $(this).find('i').remove();
+    } else {
+      $(this).attr('filter-selected', '1');
+      $(this).find('i').remove();
+      $(this).prepend($('<i />').addClass('icon-ok'));
+    }
 
     appliedFilters['nodes'] = nodesOn;
     updateHistoryState();
@@ -106,6 +119,10 @@ $(document).ready(function() {
   $('.icon-remove').click(function(e) {
     e.preventDefault();
     $('#log-messages tr:gt(0)').remove();
+  });
+
+  $('#filter-properties').click(function(e) {
+    e.preventDefault();
   });
 
   $('.icon-pause').click(function(e) {
@@ -267,6 +284,18 @@ $(document).ready(function() {
   };
 
   showLogMessage = function(location, log_message) {
+    if (foundSeverities.indexOf(log_message.message_severity) == -1) {
+      foundSeverities.push(log_message.message_severity);
+      var severityVal = -1;
+      for (var s in knownSeverities) {
+        if (knownSeverities[s]['label'] == log_message.message_severity) {
+          severityVal = knownSeverities[s]['val'];
+        }
+      }
+      var severity = '<span class="label filter-item filter-severity" data-val="' + severityVal + '" filter-selected="1"><i class="icon-ok"></i>' + log_message.message_severity + '</span>&nbsp;';
+      $('#severities-list').append(severity);
+      $('a#filter-properties').data('popover').options.content = $('#filter-popover').html();
+    }
     var row = $('<tr />').attr('data-timestamp', log_message['timestamp']);
     var cell = $('<td />').css('padding-right', '12px');
     var more = $('<a />').attr('href', '#')
