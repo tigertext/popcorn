@@ -12,7 +12,7 @@
          number_to_severity/1,
          all_severities/0,
          random_id/0,
-         format_log_message/1,
+         format_log_message/2,
          opt/2,
          head_includes/0,
          optional_env/2,
@@ -89,10 +89,11 @@ apply_links(Identities, Topics, In) ->
     Out = re:replace(binary_to_list(In), "@" ++ Identity, "<a href=\"#\" class=\"identity\" data=\"" ++ Identity ++ "\"><span class=\"label label-inverse\">@" ++ Identity ++ "</span></a>", [global, {return, list}]),
     apply_links(lists:nthtail(1, Identities), Topics, list_to_binary(Out)).
 
--spec format_log_message(#log_message{}) -> list().
+-spec format_log_message(#log_message{}, #popcorn_node{} | undefined) -> list().
 format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_function=Function, log_line=Line, log_pid=Pid,
                                 severity=Severity, message=Message, topics=Topics, identities=Identities, log_product=Product,
-                                log_version=Version}) ->
+                                log_version=Version},
+                   Popcorn_Node) ->
   UTC_Timestamp = calendar:now_to_universal_time({Timestamp div 1000000000000, 
                                                   Timestamp div 1000000 rem 1000000,
                                                   Timestamp rem 1000000}),
@@ -112,7 +113,15 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
 
   Linked_Message = apply_links(Identities, Topics, Message),
 
+  {Role, Name} =
+    case Popcorn_Node of
+      undefined -> {undefined, undefined};
+      _ -> {Popcorn_Node#popcorn_node.role, Popcorn_Node#popcorn_node.node_name}
+    end,
+
   [{'timestamp',        Timestamp},
+   {'role',             Role},
+   {'node',             Name},
    {'topics',           {array, Topics}},
    {'identities',       {array, Identities}},
    {'time',             Formatted_Time},

@@ -5,8 +5,6 @@
 -include("include/popcorn.hrl").
 
 -export([head_includes/0,
-         known_roles/1,
-         known_nodes/1,
          known_severities/1,
          applied_filters/1,
          username/1,
@@ -14,23 +12,6 @@
 
 -spec head_includes() -> list().
 head_includes() -> popcorn_util:head_includes().
-
--spec known_roles(dict()) -> list().
-known_roles(_) ->
-    Role_Names        = lists:map(fun({Name, _}) -> Name end, ets:tab2list(current_roles)),
-    Unique_Role_Names = sets:to_list(sets:from_list(Role_Names)),
-    lists:map(fun(Role_Name) ->
-        Params = [{'role',         binary_to_list(Role_Name)}],
-        dict:from_list(Params)
-      end, Unique_Role_Names).
-
--spec known_nodes(dict()) -> list().
-known_nodes(_) ->
-    Node_Names = lists:map(fun({Name, _}) -> Name end, ets:tab2list(current_nodes)),
-    lists:map(fun(Node_Name) ->
-        Params = [{'name',         binary_to_list(Node_Name)}],
-        dict:from_list(Params)
-      end, Node_Names).
 
 -spec known_severities(dict()) -> list().
 known_severities(_) ->

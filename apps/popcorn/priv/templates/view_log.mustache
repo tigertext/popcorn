@@ -9,6 +9,7 @@
     <script src="/js/history.js/scripts/bundled/html4+html5/jquery.history.js"></script>
     <script src="/bootstrap/js/bootstrap-dropdown.js"></script>
     <script src="/bootstrap/js/bootstrap-collapse.js"></script>
+    <script src="/bootstrap/js/bootstrap-typeahead.js"></script>
     <script src="/bootstrap/js/bootstrap-tooltip.js"></script>
     <script src="/bootstrap/js/bootstrap-popover.js"></script>
     <script src="/js/bootstrap-datepicker.js"></script>
@@ -85,19 +86,20 @@
             <li class="subsection-header">
               <a href="#" class="nav-filter">Role</a>
             </li>
-            <li>
-              {{#known_roles}}
-                <span class="label filter-item filter-role" data-val="{{role}}" filter-selected="1">
-                  <i class="icon-ok"></i>
-                  {{role}}
-                </span>
-              {{/known_roles}}
+            <li id="roles-list">
             </li>
             <li class="subsection-header">
               <a href="#" class="nav-filter">Topics</a>
             </li>
+            <li id="topics-list">
+            </li>
             <li class="subsection-header">
               <a href="#" class="nav-filter">Identities</a>
+            </li>
+            <li id="identities-list">
+            </li>
+            <li>
+              <input type="text" id="identity-search" autocomplete="off" data-provide="typeahead" />
             </li>
             <li class="subsection-header">
               <a href="#" class="nav-filter">Severity</a>
@@ -107,13 +109,7 @@
             <li class="subsection-header">
               <a href="#" class="nav-filter">Node</a>
             </li>
-            <li>
-              {{#known_nodes}}
-                <span class="label filter-item filter-node" data-val="{{name}}" filter-selected="1">
-                  <i class="icon-ok"></i>
-                  {{name}}
-                </span>
-              {{/known_nodes}}
+            <li id="nodes-list">
             </li>
           </ul>
         </nav>

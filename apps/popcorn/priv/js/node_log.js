@@ -1,17 +1,26 @@
 var isVisible = false,
     clickedAway = false,
-    foundSeverities = [];
+    foundSeverities = [],
+    foundNodes = [],
+    foundRoles = [],
+    foundTopics = [],
+    foundIdentities = [];
+
+var MAX_IDENTITIES = 15;
 
 $(document).ready(function() {
   initPopovers = function() {
-    $('#filter-properties').popover({html: true,
-                                   trigger: 'click',
-                                   title: 'Filter Properties<div style="float:right;"><button class="close" id="close-filter">&times;</button></div>',
-                                   placement: 'bottom',
-                                   template: '<div class="popover filter-popover-outer"><div class="arrow"></div><div class="popover-inner filter-popover-inner"><h3 class="popover-title"></h3><div class="popover-content"><p></p></div></div></div>',
-                                   content: $('#filter-popover').html()});
+    $('#filter-properties').popover({
+      html: true,
+      trigger: 'click',
+      title: 'Filter Properties<div style="float:right;"><button class="close" id="close-filter">&times;</button></div>',
+      placement: 'bottom',
+      template: '<div class="popover filter-popover-outer"><div class="arrow"></div><div class="popover-inner filter-popover-inner"><h3 class="popover-title"></h3><div class="popover-content"><p></p></div></div></div>',
+      content: $('#filter-popover').html()});
   };
+
   initPopovers();
+
   updateHistoryState = function() {
     var cleanUrl = History.getState().cleanUrl;
     var params = [];
@@ -42,10 +51,10 @@ $(document).ready(function() {
 
   $('.identity').live('click', function(e) {
     e.preventDefault();
-    console.log('identity');
   });
 
   $('.filter-role').click(function(e) {
+    e.preventDefault();
     if ($(this).attr('filter-selected') == '1')  {
       $(this).attr('filter-selected', '0');
       $(this).find('i').remove();
@@ -89,16 +98,17 @@ $(document).ready(function() {
   });
 
   $('.filter-severity').live('click', function(e) {
+    e.preventDefault();
     if ($(this).attr('filter-selected') == '1')  {
       $(this).attr('filter-selected', '0');
-      $(this).find('i').remove();
+      $(this).find('i').removeClass('icon-ok').addClass('icon-remove');
     } else {
       $(this).attr('filter-selected', '1');
-      $(this).find('i').remove();
-      $(this).prepend($('<i />').addClass('icon-ok'));
+      $(this).find('i').removeClass('icon-remove').addClass('icon-ok');
     }
     var severitiesOn = [];
-    $.each($('.filter-severity'), function(k, v) {
+    var selectedSeverities = $('.filter-popover-inner').find('.filter-severity[filter-selected=1]');
+    $.each(selectedSeverities, function(k, v) {
       if ($(this).attr('filter-selected') == '1') {
         severitiesOn.push(parseInt($(this).attr('data-val'), 10));
       }
@@ -123,6 +133,14 @@ $(document).ready(function() {
 
   $('#filter-properties').click(function(e) {
     e.preventDefault();
+
+    $('.filter-popover-inner input#identity-search').typeahead({
+      items: 10,
+      source: function(query, process) {
+        var d = ['california', 'arkansas', 'soemthing'];
+        console.log(d);
+        return process(d);
+      }});
   });
 
   $('.icon-pause').click(function(e) {
@@ -145,6 +163,10 @@ $(document).ready(function() {
             error:function(xhr,textStatus) {
               alert('Unable to toggle pause state');
             }});
+  });
+
+  $('#close-filter').live('click', function() {
+    $('#filter-properties').popover('hide');
   });
 
   $('.close-popover').live('click', function() {
@@ -296,6 +318,45 @@ $(document).ready(function() {
       $('#severities-list').append(severity);
       $('a#filter-properties').data('popover').options.content = $('#filter-popover').html();
     }
+
+    if (foundNodes.indexOf(log_message.node) == -1) {
+      foundNodes.push(log_message.node);
+      var node = '<span class="label filter-item filter-node" data-val="' + log_message.node + '" filter-selected="1"><i class="icon-ok"></i>' + log_message.node + '</span>&nbsp;';
+      $('#nodes-list').append(node);
+      $('a#filter-properties').data('popover').options.content = $('#filter-popover').html();
+    }
+
+    if (foundRoles.indexOf(log_message.role) == -1) {
+      foundRoles.push(log_message.role);
+      var role = '<span class="label filter-item filter-role" data-val="' + log_message.role + '" filter-selected="1"><i class="icon-ok"></i>' + log_message.role + '</span>&nbsp;';
+      $('#roles-list').append(role);
+      $('a#filter-properties').data('popover').options.content = $('#filter-popover').html();
+    }
+
+    for (var idx in log_message.topics) {
+      if (foundTopics.indexOf(log_message.topics[idx]) == -1) {
+        foundTopics.push(log_message.topics[idx]);
+        var topic = '<span class="label filter-item filter-topic" data-val="' + log_message.topics[idx] + '" filter-selected="1"><i class="icon-ok"></i>' + log_message.topics[idx] + '</span>&nbsp;';
+        $('#topics-list').append(topic);
+        $('a#filter-properties').data('popover').options.content = $('#filter-popover').html();
+      }
+    }
+
+    for (var idx in log_message.identities) {
+      if (foundIdentities.indexOf(log_message.identities[idx]) == -1) {
+        foundIdentities.unshift(log_message.identities[idx]);
+        if (foundIdentities.length > MAX_IDENTITIES) {
+          var removedIdentities = foundIdentities.splice(MAX_IDENTITIES, foundIdentities.length);
+          for (var removedIdx in removedIdentities) {
+            $('.filter-identity[data-val='+removedIdentities[removedIdx]+']').remove();
+          };
+        }
+        var topic = '<span class="label filter-item filter-identity" data-val="' + log_message.identities[idx] + '" filter-selected="1"><i class="icon-ok"></i>' + log_message.identities[idx] + '</span>&nbsp;';
+        $('#identities-list').prepend(topic);
+        $('a#filter-properties').data('popover').options.content = $('#filter-popover').html();
+      }
+    }
+
     var row = $('<tr />').attr('data-timestamp', log_message['timestamp']);
     var cell = $('<td />').css('padding-right', '12px');
     var more = $('<a />').attr('href', '#')

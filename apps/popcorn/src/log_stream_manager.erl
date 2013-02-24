@@ -31,7 +31,7 @@
 -export([start_link/0,
          add_stream_pid/1,
          del_stream_pid/1,
-         new_log_message/1]).
+         new_log_message/2]).
 
 -export([init/1,
          handle_call/3,
@@ -54,9 +54,9 @@ del_stream_pid(Pid) ->
     gen_server:cast(?MODULE, {del_stream_pid, Pid}),
     ok.
 
--spec new_log_message(#log_message{}) -> ok.
-new_log_message(Log_Message) ->
-    gen_server:cast(?MODULE, {new_log_message, Log_Message}),
+-spec new_log_message(#log_message{}, #popcorn_node{}) -> ok.
+new_log_message(Log_Message, Popcorn_Node) ->
+    gen_server:cast(?MODULE, {new_log_message, Log_Message, Popcorn_Node}),
     ok.
 
 init([]) ->
@@ -77,8 +77,8 @@ handle_cast({del_stream_pid, Pid}, State) ->
 
     {noreply, State#state{current_stream_pids = Updated_Pids}};
 
-handle_cast({new_log_message, Log_Message}, State) ->
-    [gen_fsm:send_all_state_event(Pid, {new_message, newer, Log_Message}) || Pid <- State#state.current_stream_pids],
+handle_cast({new_log_message, Log_Message, Popcorn_Node}, State) ->
+    [gen_fsm:send_all_state_event(Pid, {new_message, newer, Log_Message, Popcorn_Node}) || Pid <- State#state.current_stream_pids],
     {noreply, State};
 
 handle_cast(_Msg, State)            -> {noreply, State}.
