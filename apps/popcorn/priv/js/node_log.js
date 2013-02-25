@@ -53,15 +53,14 @@ $(document).ready(function() {
     e.preventDefault();
   });
 
-  $('.filter-role').click(function(e) {
+  $('.filter-role').live('click', function(e) {
     e.preventDefault();
     if ($(this).attr('filter-selected') == '1')  {
       $(this).attr('filter-selected', '0');
-      $(this).find('i').remove();
+      $(this).find('i').removeClass('icon-ok').addClass('icon-remove');
     } else {
       $(this).attr('filter-selected', '1');
-      $(this).find('i').remove();
-      $(this).prepend($('<i />').addClass('icon-ok'));
+      $(this).find('i').removeClass('icon-remove').addClass('icon-ok');
     }
     appliedFilters['roles'] = rolesOn;
     updateHistoryState();
@@ -75,14 +74,14 @@ $(document).ready(function() {
             }});
   });
 
-  $('.filter-node').click(function(e) {
+  $('.filter-node').live('click', function(e) {
+    e.preventDefault();
     if ($(this).attr('filter-selected') == '1')  {
       $(this).attr('filter-selected', '0');
-      $(this).find('i').remove();
+      $(this).find('i').removeClass('icon-ok').addClass('icon-remove');
     } else {
       $(this).attr('filter-selected', '1');
-      $(this).find('i').remove();
-      $(this).prepend($('<i />').addClass('icon-ok'));
+      $(this).find('i').removeClass('icon-remove').addClass('icon-ok');
     }
 
     appliedFilters['nodes'] = nodesOn;
