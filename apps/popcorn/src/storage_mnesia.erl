@@ -330,7 +330,8 @@ send_recent_log_line(Pid, Count, Last_Key_Checked, Filters) ->
                            ?RPS_INCREMENT(stoage_total),
                            Log_Message = lists:nth(1, mnesia:dirty_read(popcorn_history, Key)),
                            case is_filtered_out(Log_Message, Filters) of
-                               false -> gen_fsm:send_all_state_event(Pid, {new_message, older, Log_Message}),
+                               false -> [Popcorn_Node] = mnesia:dirty_read(known_nodes, Log_Message#log_message.log_nodename),
+                                        gen_fsm:send_all_state_event(Pid, {new_message, older, Log_Message, Popcorn_Node}),
                                         send_recent_log_line(Pid, Count - 1, Key, Filters);
                                true  -> send_recent_log_line(Pid, Count, Key, Filters)
                            end

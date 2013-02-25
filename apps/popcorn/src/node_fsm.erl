@@ -76,7 +76,7 @@ init([]) ->
         ?INCREMENT_COUNTER(?TOTAL_EVENT_COUNTER),
 
         %% Notify any streams connected
-        log_stream_manager:new_log_message(Log_Message)
+        log_stream_manager:new_log_message(Log_Message, Popcorn_Node)
     catch
         _:Error ->
             io:format("Couldn't log message:~nMessage: ~p~nNode: ~p~nError: ~p~nStack: ~p~n",

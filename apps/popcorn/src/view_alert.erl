@@ -13,7 +13,7 @@ head_includes() -> popcorn_util:head_includes().
 
 -spec logs(dict()) -> [dict()].
 logs(Context) ->
-    [dict:from_list(popcorn_util:format_log_message(Log_Message))
+    [dict:from_list(popcorn_util:format_log_message(Log_Message, undefined))
      || Log_Message <- mustache:get(log_messages, Context)].
 
 -spec username(dict()) -> string().

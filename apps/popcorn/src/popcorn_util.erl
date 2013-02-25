@@ -12,7 +12,7 @@
          number_to_severity/1,
          all_severities/0,
          random_id/0,
-         format_log_message/1,
+         format_log_message/2,
          opt/2,
          head_includes/0,
          optional_env/2,
@@ -78,15 +78,22 @@ opt(<<>>, Default)      -> Default;
 opt(undefined, Default) -> Default;
 opt(Value, _)           -> Value.
 
-apply_links([], In) -> In;
-apply_links(Identities, In) ->
+-spec apply_links(list(), list(), binary()) -> binary().
+apply_links([], [], In) -> In;
+apply_links([], Topics, In) ->
+    Topic = lists:nth(1, Topics),
+    Out = re:replace(binary_to_list(In), "#" ++ Topic, "<a href=\"#\" class=\"topic\" data=\"" ++ Topic ++ "\"><span class=\"label label-info\">#" ++ Topic ++ "</span></a>", [global, {return, list}]),
+    apply_links([], lists:nthtail(1, Topics), list_to_binary(Out));
+apply_links(Identities, Topics, In) ->
     Identity = lists:nth(1, Identities),
-    Out = re:replace(binary_to_list(In), "@" ++ Identity, "<a href=\"#\">@" ++ Identity ++ "</a>", [global, {return, list}]),
-    apply_links(lists:nthtail(1, Identities), list_to_binary(Out)).
+    Out = re:replace(binary_to_list(In), "@" ++ Identity, "<a href=\"#\" class=\"identity\" data=\"" ++ Identity ++ "\"><span class=\"label label-inverse\">@" ++ Identity ++ "</span></a>", [global, {return, list}]),
+    apply_links(lists:nthtail(1, Identities), Topics, list_to_binary(Out)).
 
+-spec format_log_message(#log_message{}, #popcorn_node{} | undefined) -> list().
 format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_function=Function, log_line=Line, log_pid=Pid,
                                 severity=Severity, message=Message, topics=Topics, identities=Identities, log_product=Product,
-                                log_version=Version}) ->
+                                log_version=Version},
+                   Popcorn_Node) ->
   UTC_Timestamp = calendar:now_to_universal_time({Timestamp div 1000000000000, 
                                                   Timestamp div 1000000 rem 1000000,
                                                   Timestamp rem 1000000}),
@@ -104,9 +111,17 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
                        lists:append(["<label class='checkbox popover-label'><input type='checkbox'>#" ++ Topic ++ "</label>" || Topic <- Topics]) ++ 
                        "<br /><button class='btn btn-mini' type='button'>Apply Filter</button>",
 
-  Linked_Message = apply_links(Identities, Message),
+  Linked_Message = apply_links(Identities, Topics, Message),
+
+  {Role, Name} =
+    case Popcorn_Node of
+      undefined -> {undefined, undefined};
+      _ -> {Popcorn_Node#popcorn_node.role, Popcorn_Node#popcorn_node.node_name}
+    end,
 
   [{'timestamp',        Timestamp},
+   {'role',             Role},
+   {'node',             Name},
    {'topics',           {array, Topics}},
    {'identities',       {array, Identities}},
    {'time',             Formatted_Time},

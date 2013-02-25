@@ -68,7 +68,7 @@ handle(Req, State) ->
                                 _         -> 10
                             end),
                     Jsons =
-                        [jsonify(popcorn_util:format_log_message(Log_Message))
+                      [jsonify(popcorn_util:format_log_message(Log_Message, undefined))
                          || Log_Message <- Log_Messages],
                     Output = lists:flatten(mochijson:encode({array, Jsons})),
                     {ok, Reply} = cowboy_req:reply(200, [], Output, Req),

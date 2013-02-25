@@ -55,7 +55,7 @@
                       log_nodename    :: binary(),
                       log_product     :: binary(),
                       log_version     :: binary(),
-                      log_module      :: binary(),      %% underscore in the name is to prevent confusion with BIF and types
+                      log_module      :: binary(),
                       topics     = [] :: list(),
                       identities = [] :: list(),
                       log_function    :: binary(),

@@ -74,6 +74,11 @@ handle_path(<<"POST">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
         New_Roles -> gen_fsm:send_event(Stream_Pid, {update_roles, New_Roles})
     end,
 
+    case proplists:get_value(<<"topics_add">>, Vals) of
+        undefined -> ok;
+        Topics_To_Add -> gen_fsm:send_event(Stream_Pid, {topic_add, Topics_To_Add})
+    end,
+
     case proplists:get_value(<<"time_filter_type">>, Vals) of
         undefined        -> ok;
         <<"stream">>     -> gen_fsm:send_event(Stream_Pid, set_time_stream);
@@ -157,24 +162,24 @@ handle_loop(Req, State) ->
                 ok -> handle_loop(Req, State);
                 {error, closed} -> {ok, Req, State}
              end;
-        {old_message, Log_Message} ->
+        {old_message, Log_Message, Popcorn_Node} ->
             Enveloped   = {struct, [{"message_type", "old_message"},
-                                    {"payload",      {struct, popcorn_util:format_log_message(Log_Message)}}]},
+                                    {"payload",      {struct, popcorn_util:format_log_message(Log_Message, Popcorn_Node)}}]},
             Event       = lists:flatten(mochijson:encode(Enveloped)),
             case cowboy_req:chunk(lists:flatten(["data: ", Event, "\n\n"]), Req) of
                 ok -> handle_loop(Req, State);
                 {error, closed} -> {ok, Req, State}
             end;
-        {new_message, Log_Message} ->
+        {new_message, Log_Message, Popcorn_Node} ->
             Enveloped   = {struct, [{"message_type", "new_message"},
-                                    {"payload",      {struct, popcorn_util:format_log_message(Log_Message)}}]},
+                                    {"payload",      {struct, popcorn_util:format_log_message(Log_Message, Popcorn_Node)}}]},
             Event       = lists:flatten(mochijson:encode(Enveloped)),
             case cowboy_req:chunk(lists:flatten(["data: ", Event, "\n\n"]), Req) of
                 ok -> handle_loop(Req, State);
                 {error, closed} -> {ok, Req, State}
             end;
         Other ->
-            ?POPCORN_DEBUG_MSG("streaming log handler received unknown message: ~p", [Other]),
+            ?POPCORN_DEBUG_MSG("#http_log_handler received unknown message: ~p", [Other]),
             Event = ["data: ", "test", "\n\n"],
             ok = cowboy_req:chunk(Event, Req),
             handle_loop(Req, State)

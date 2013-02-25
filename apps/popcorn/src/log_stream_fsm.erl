@@ -162,23 +162,28 @@ init([]) ->
     gen_fsm:send_event_after(0, init_log_lines),
     {next_state, 'STREAMING', State#state{stream = Stream#stream{applied_filters = New_Filters}}};
 
+'STREAMING'({topic_add, Topics_To_Add}, #state{stream = Stream} = State) ->
+    {next_state, 'STREAMING', State};
+
+'STREAMING'({identity_add, Identities_To_Add}, #state{stream = Stream} = State) ->
+    {next_state, 'STREAMIMG', State};
+
 'STREAMING'(Other, State) ->
     {next_state, 'STREAMING', State}.
 
 'STREAMING'(Other, _From, State) ->
     {noreply, undefined, 'STREAMING', State}.
 
-handle_event({new_message, Newer_or_older, Log_Message}, State_Name, State) ->
+handle_event({new_message, Newer_or_older, Log_Message, Popcorn_Node}, State_Name, State) ->
     Stream    = State#state.stream,
     Should_Stream = Stream#stream.paused =:= false andalso
                     is_pid(Stream#stream.client_pid) andalso
                     is_filtered_out(Log_Message, Stream#stream.max_timestamp, Stream#stream.applied_filters) =:= false,
-
     case Should_Stream of
         false -> ok;
         true  -> case Newer_or_older of
-                     newer -> Stream#stream.client_pid ! {new_message, Log_Message};
-                     older -> Stream#stream.client_pid ! {old_message, Log_Message}
+                     newer -> Stream#stream.client_pid ! {new_message, Log_Message, Popcorn_Node};
+                     older -> Stream#stream.client_pid ! {old_message, Log_Message, Popcorn_Node}
                  end
     end,
 

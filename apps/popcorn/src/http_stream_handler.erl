@@ -55,7 +55,6 @@ handle_loop(Req, State) ->
                     {alert_count,   0},
                     {hashtag_count, 0},
                     {mention_count, 0}],
-            io:format("New node: ~p~n", [Data]),
             Event = lists:flatten(mochijson:encode({struct, Data})),
             chunk_event("new_node", Event, Req, State);
         {update_counters, NewCounters} ->

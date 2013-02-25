@@ -153,6 +153,30 @@ body > .container {
                 }
             }
 
+            &.section-header {
+                .gradientBar(#335e8a, #093162); 
+                border-top: 1px solid #055b85; 
+                border-bottom: 1px solid rgba(0,0,0,0.9);
+
+                a:hover {
+                    // When hovering the selected item, don't make it 
+                    // darker, instead do nothing
+                    background-color: transparent !important;
+                }
+            }
+
+            &.subsection-header {
+                .gradientBar(#6b9ecd, #4171a5); 
+                border-top: 1px solid #3d9bc8; 
+                border-bottom: 1px solid rgba(0,0,0,0.9);
+
+                a:hover {
+                    // When hovering the selected item, don't make it 
+                    // darker, instead do nothing
+                    background-color: transparent !important;
+                }
+            }
+
             a {
                 // Make the <a> elements take full width by using 
                 // display: block, increasing the click area.
@@ -180,7 +204,7 @@ body > .container {
 
 #content {
     border: 1px solid #b8c1c7;
-    border-left: 1px solid #2d3134;
+    /*border-left: 1px solid #2d3134;*/
     background-color: @white;
 
     // Add border-radius in upper-right and lower-right corners
@@ -715,7 +739,7 @@ td.load-more {
 }
 
 td.log-message {
-  max-width:621px;
+  width:893px;
   word-wrap:break-word;
   table-layout:fixed;
 }
@@ -723,4 +747,32 @@ td.log-message {
 td.message {
   word-break:break-word;
   table-layout:fixed;
+}
+
+.filter-severity {
+  min-width:70px;
+}
+
+ul.nav-filters li {
+  padding:10px;
+}
+
+ul.nav-filters li.section-header {
+  padding:0px;
+}
+
+ul.nav-filters li.subsection-header {
+  padding:0px;
+}
+
+.filter-item {
+  cursor:pointer;
+}
+
+.filter-popover-outer {
+  width:400px;
+}
+
+.filter-popover-inner {
+  width:400px;
 }
