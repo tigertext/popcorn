@@ -172,7 +172,7 @@ handle_call({get_alerts, Severities}, _From, State) ->
           end,
         Order =
             fun(A, B) ->
-                B#alert.incident > A#alert.incident
+                B#alert.incident < A#alert.incident
             end,
         qlc:eval(qlc:sort(Query, [{order, Order}]))
     end,
