@@ -36,6 +36,8 @@
 
 -define(PU, popcorn_util).
 
+-define(POPCORN_ERROR, 8).
+
 -record(stream,  {stream_id       :: string(),
                   max_timestamp   :: number() | undefined,
                   stream_pid      :: pid(),

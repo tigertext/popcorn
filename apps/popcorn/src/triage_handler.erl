@@ -11,7 +11,7 @@
 
 -define(UPDATE_INTERVAL, 10000).
 
--export([counter_data/1, all_alerts/1, alerts/2, recent_alerts/1,
+-export([counter_data/1, all_alerts/1, alerts/2, recent_alerts/1, recent_alerts/2,
          alert_count_today/0, alert_count/0, clear_alert/1,
          safe_notify/4, log_messages/3, alert_properties/1]).
 
@@ -45,7 +45,6 @@ is_nonexistance_module_line("1") -> true;
 is_nonexistance_module_line(_) -> false.
 
 location_as_strings(Counter) ->
-    io:format("Counter ~p~n", [Counter]),
     lists:zipwith(
         fun(K, V) -> {K, binary_to_list(V)} end,
         [severity, product, version, name, line], split_location(Counter)).
@@ -68,6 +67,7 @@ alerts(true = _Include_Cleared, Severities) -> gen_server:call(?MODULE, {alerts,
 alerts(_, Severities) -> gen_server:call(?MODULE, {alerts, recent, Severities}).
 
 recent_alerts(Count) -> gen_server:call(?MODULE, {alerts, Count, all}).
+recent_alerts(Count, Severities) -> gen_server:call(?MODULE, {alerts, Count, Severities}).
 
 clear_alert(Alert) ->
     Counter = base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global])),
@@ -140,7 +140,7 @@ handle_cast({triage_event, #popcorn_node{} = Node, _Node_Pid, _Log_Message, true
 handle_cast({triage_event, #popcorn_node{}, _Node_Pid, _Log_Message, false}, State) ->
     {noreply, State};
 handle_cast(Event, State) ->
-    io:format("Unexpected event: ~p~n", [Event]),
+    ?POPCORN_ERROR_MSG("Unexpected event: ~p~n", [Event]),
     {noreply, State}.
 
 handle_info({broadcast, {new_storage_workers, Workers}}, State) ->
