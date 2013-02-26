@@ -83,13 +83,21 @@ opt(Value, _)           -> Value.
 -spec apply_links(list(), list(), binary()) -> binary().
 apply_links([], [], In) -> In;
 apply_links([], Topics, In) ->
-    Topic = lists:nth(1, Topics),
-    Out = re:replace(binary_to_list(In), "#" ++ Topic, "<a href=\"#\" class=\"topic\" data=\"" ++ Topic ++ "\"><span class=\"label label-info\">#" ++ Topic ++ "</span></a>", [global, {return, list}]),
-    apply_links([], lists:nthtail(1, Topics), list_to_binary(Out));
+    Topic = list_to_binary(lists:nth(1, Topics)),
+    Symbol = <<"#">>,
+    A = <<"<a href=\"#\" class=\"topic\" data=\"">>,
+    B = <<"\"><span class=\"label label-info\">#">>,
+    C = <<"</span></a>">>,
+    Out = binary:replace(In, <<Symbol/binary, Topic/binary>>, <<A/binary, Topic/binary, B/binary, Topic/binary, C/binary>>),
+    apply_links([], lists:nthtail(1, Topics), Out);
 apply_links(Identities, Topics, In) ->
-    Identity = lists:nth(1, Identities),
-    Out = re:replace(binary_to_list(In), "@" ++ Identity, "<a href=\"#\" class=\"identity\" data=\"" ++ Identity ++ "\"><span class=\"label label-inverse\">@" ++ Identity ++ "</span></a>", [global, {return, list}]),
-    apply_links(lists:nthtail(1, Identities), Topics, list_to_binary(Out)).
+    Identity = list_to_binary(lists:nth(1, Identities)),
+    Symbol = <<"@">>,
+    A = <<"<a href=\"#\" class=\"identity\" data=\"">>,
+    B = <<"\"><span class=\"label label-inverse\">@">>,
+    C = <<"</span></a>">>,
+    Out = binary:replace(In, <<Symbol/binary, Identity/binary>>, <<A/binary, Identity/binary, B/binary, Identity/binary, C/binary>>),
+    apply_links(lists:nthtail(1, Identities), Topics, Out).
 
 -spec format_log_message(#log_message{}, #popcorn_node{} | undefined) -> list().
 format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_function=Function, log_line=Line, log_pid=Pid,
