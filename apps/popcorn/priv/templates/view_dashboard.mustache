@@ -111,8 +111,8 @@
                         <tr id="{{location}}">
                           <td><a href="/alert/{{location}}" id="{{location}}" class='btn btn-mini btn-alert-options'>...</a></td>
                           <td class="message">{{severity}} <span data-livestamp="{{datetime}}" class="datetime"></span> {{source}}<br/>{{message}}</td>
-                          <td><span class="recent">{{recent}}</span> recent / <span class="seen">{{count}}</span> seen</td>
-                          <td align="right">{{product}} {{version}}</td>
+                          <td><nobr><span class="recent">{{recent}}</span> recent</nobr><br><nobr><span class="seen">{{count}}</span> seen</nobr></td>
+                          <td align="right">{{product}}<br>{{version}}</td>
                         </tr>
                       {{/alerts}}
                     </tbody>

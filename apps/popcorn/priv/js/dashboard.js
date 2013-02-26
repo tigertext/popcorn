@@ -30,8 +30,8 @@ function updateAlertRow(table, counter) {
     "<tr id='" + rowName +"'>" +
     "<td><a id='" + rowName + "' class='btn btn-mini btn-alert-options'>...</a></td>"+
     "<td>[" + maybe(counter.severity, "alert") + " <span data-livestamp=\"" + maybe(counter.datetime) + "\" class='datetime'></span>] " + maybe(counter.name) + " line " + maybe(counter.line) + "<br/><span class='message'>" + maybe(counter.message) + "</span></td>" +
-    "<td><span class='recent'>" + maybe(counter.recent, 0) + "</span> recent / <span class='seen'>" + maybe(counter.count, 1) + "</span> seen</td>" +
-    "<td align='right'>" + maybe(counter.product) + " " + maybe(counter.version) + "</td></tr>";
+    "<td><nobr><span class='recent'>" + maybe(counter.recent, 0) + "</span> recent</nobr><br><nobr><span class='seen'>" + maybe(counter.count, 1) + "</span> seen</nobr></td>" +
+    "<td align='right'>" + maybe(counter.product) + "<br>" + maybe(counter.version) + "</td></tr>";
     $(table + ' tbody').prepend(newRow);
     register_to_context_click($('a.btn-alert-options'));
   };
