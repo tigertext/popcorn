@@ -18,7 +18,14 @@ function setNodePercents() {
   }
 };
 
+function endsWith(str, suffix) {
+   return str.indexOf(suffix, str.length - suffix.length) !== -1;
+}
+
 function updateAlertRow(table, counter) {
+  var docLocation = document.URL;
+  var showWarnings = ! endsWith(docLocation, "/"); // dont show warnings on dashboard
+  if (! showWarnings && counter.severity == "warning") return;
   var rowName = counter.location;
   if($('#' + rowName).length > 0) {
     $('#' + rowName + ' .seen').text(counter.count);
@@ -29,7 +36,7 @@ function updateAlertRow(table, counter) {
     var newRow =
     "<tr id='" + rowName +"'>" +
     "<td><a id='" + rowName + "' class='btn btn-mini btn-alert-options'>...</a></td>"+
-    "<td>[" + maybe(counter.severity, "alert") + " <span data-livestamp=\"" + maybe(counter.datetime) + "\" class='datetime'></span>] " + maybe(counter.name) + " line " + maybe(counter.line) + "<br/><span class='message'>" + maybe(counter.message) + "</span></td>" +
+    "<td>" + maybe(counter.severity, "alert") + " <span data-livestamp=\"" + maybe(counter.datetime) + "\" class='datetime'></span> " + maybe(counter.source) + "<br/><span class='message'>" + maybe(counter.message) + "</span></td>" +
     "<td><nobr><span class='recent'>" + maybe(counter.recent, 0) + "</span> recent</nobr><br><nobr><span class='seen'>" + maybe(counter.count, 1) + "</span> seen</nobr></td>" +
     "<td align='right'>" + maybe(counter.product) + "<br>" + maybe(counter.version) + "</td></tr>";
     $(table + ' tbody').prepend(newRow);
