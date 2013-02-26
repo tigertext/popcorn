@@ -46,4 +46,4 @@ known_severities(Context) ->
                   						false -> ""
                   					end}],
         dict:from_list(Params)
-      end, lists:reverse(popcorn_util:all_severities())).
+      end, lists:reverse(popcorn_util:alert_severities())). %% TODO: use a list comprehension and add a filter to remove severities that have not been seen
