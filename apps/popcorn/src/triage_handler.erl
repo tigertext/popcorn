@@ -29,9 +29,23 @@ safe_notify(Popcorn_Node, Node_Pid, Log_Message, Is_New_Node) ->
     gen_server:cast(?MODULE, {triage_event, Popcorn_Node, Node_Pid, Log_Message, Is_New_Node}).
 
 alert_properties(Alert) ->
-    location_as_strings(base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global]))).
+    Properties = location_as_strings(base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global]))),
+    case is_nonexistance_module_line(proplists:get_value(line, Properties)) of
+        true ->
+            Cleanup = proplists:delete(line, Properties),
+            proplists:delete(module, Cleanup);
+        false ->
+            Module = proplists:get_value(name, Properties),
+            Line = proplists:get_value(line, Properties),
+            source_location(Module, Line) ++ Properties
+    end.
+
+is_nonexistance_module_line("0") -> true;
+is_nonexistance_module_line("1") -> true;
+is_nonexistance_module_line(_) -> false.
 
 location_as_strings(Counter) ->
+    io:format("Counter ~p~n", [Counter]),
     lists:zipwith(
         fun(K, V) -> {K, binary_to_list(V)} end,
         [severity, product, version, name, line], split_location(Counter)).
@@ -223,13 +237,13 @@ data(#alert{location = undefined}) -> [];
 data(Alert) ->
     Basic_Properties =
       case Alert of
-        #alert{log = #log_message{message = Message, severity = SeverityNumber, timestamp = Timestamp}} ->
+        #alert{log = #log_message{message = Message, severity = SeverityNumber, timestamp = Timestamp, log_line = Line, log_module = Module}} ->
             UTC_Timestamp = calendar:now_to_universal_time({Timestamp div 1000000000000, 
                                                             Timestamp div 1000000 rem 1000000,
                                                             Timestamp rem 1000000}),
               {{Year, Month, Day}, {Hour, Minute, Second}} = UTC_Timestamp,
               Formatted_DateTime = lists:flatten(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0BZ", [Year, Month, Day, Hour, Minute, Second])),
-          [{'severity_num', SeverityNumber}, {'message', list(Message)}, {'datetime', Formatted_DateTime}];
+          source_location(Module, Line) ++ [{'severity_num', SeverityNumber}, {'message', list(Message)}, {'datetime', Formatted_DateTime}];
         #alert{} ->
           []
       end,
@@ -243,6 +257,10 @@ data(Alert) ->
      {count,    Location_Count},
      {recent,   Recent_Location_Count}
      | All_Properties].
+
+
+source_location(Module, Line) when Line =:= <<"1">>; Line =:= <<"0">> -> [];
+source_location(Module, Line) -> [{source, binary_to_list(iolist_to_binary([<<" at ">>, Module, <<" line ">>, Line]))}].
 
 list(B) when is_binary(B) -> binary_to_list(B);
 list(_) -> "".
