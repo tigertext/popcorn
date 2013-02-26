@@ -46,7 +46,7 @@
                             <a href="#dashboard"><i class="icon-list"></i> Dashboard</a>
                           </li>
                           <li>
-                            <a href="/alerts"><i class="icon-bell icon-white"></i> Alerts</a>
+                            <a href="/alerts?severities=1,2,4,8"><i class="icon-bell icon-white"></i> Alerts</a>
                           </li>
                           <li>
                             <a href="/nodes"><i class="icon-th-large icon-white"></i> Nodes</a>
@@ -110,9 +110,9 @@
                       {{#alerts}}
                         <tr id="{{location}}">
                           <td><a href="/alert/{{location}}" id="{{location}}" class='btn btn-mini btn-alert-options'>...</a></td>
-                          <td class="message">[{{severity}} <span data-livestamp="{{datetime}}" class="datetime"></span>] {{name}} line {{line}}<br/>{{message}}</td>
-                          <td><span class="recent">{{recent}}</span> recent / <span class="seen">{{count}}</span> seen</td>
-                          <td align="right">{{product}} {{version}}</td>
+                          <td class="message">{{severity}} <span data-livestamp="{{datetime}}" class="datetime"></span> {{source}}<br/>{{message}}</td>
+                          <td><nobr><span class="recent">{{recent}}</span> recent</nobr><br><nobr><span class="seen">{{count}}</span> seen</nobr></td>
+                          <td align="right">{{product}}<br>{{version}}</td>
                         </tr>
                       {{/alerts}}
                     </tbody>

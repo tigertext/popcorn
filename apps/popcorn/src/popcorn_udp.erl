@@ -198,7 +198,7 @@ location_check(<<>>, _, Message) ->
     Message4 = re:replace(Message3, "<[^>]*>'", "", [{return,binary}, global]),
     Message5 = re:replace(Message4, "[0-9]*", "", [{return,binary}, global]),
     Alt_Module = list_to_binary(popcorn_util:hexstring(erlang:md5(Message5))),
-    {Alt_Module, <<"1">>};
+    {Alt_Module, <<"0">>};
 location_check(Module, Line, _) -> {Module, Line}.
 
 -spec ingest_packet(#state{}, #popcorn_node{}, #log_message{}, list()) -> #state{}.  %% return value is whether is a new node

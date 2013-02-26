@@ -11,7 +11,7 @@
 
 -define(UPDATE_INTERVAL, 10000).
 
--export([counter_data/1, all_alerts/1, alerts/2, recent_alerts/1,
+-export([counter_data/1, all_alerts/1, alerts/2, recent_alerts/1, recent_alerts/2,
          alert_count_today/0, alert_count/0, clear_alert/1,
          safe_notify/4, log_messages/3, alert_properties/1]).
 
@@ -29,7 +29,20 @@ safe_notify(Popcorn_Node, Node_Pid, Log_Message, Is_New_Node) ->
     gen_server:cast(?MODULE, {triage_event, Popcorn_Node, Node_Pid, Log_Message, Is_New_Node}).
 
 alert_properties(Alert) ->
-    location_as_strings(base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global]))).
+    Properties = location_as_strings(base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global]))),
+    case is_nonexistance_module_line(proplists:get_value(line, Properties)) of
+        true ->
+            Cleanup = proplists:delete(line, Properties),
+            proplists:delete(module, Cleanup);
+        false ->
+            Module = proplists:get_value(name, Properties),
+            Line = proplists:get_value(line, Properties),
+            source_location(Module, Line) ++ Properties
+    end.
+
+is_nonexistance_module_line("0") -> true;
+is_nonexistance_module_line("1") -> true;
+is_nonexistance_module_line(_) -> false.
 
 location_as_strings(Counter) ->
     lists:zipwith(
@@ -54,6 +67,7 @@ alerts(true = _Include_Cleared, Severities) -> gen_server:call(?MODULE, {alerts,
 alerts(_, Severities) -> gen_server:call(?MODULE, {alerts, recent, Severities}).
 
 recent_alerts(Count) -> gen_server:call(?MODULE, {alerts, Count, all}).
+recent_alerts(Count, Severities) -> gen_server:call(?MODULE, {alerts, Count, Severities}).
 
 clear_alert(Alert) ->
     Counter = base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global])),
@@ -126,7 +140,7 @@ handle_cast({triage_event, #popcorn_node{} = Node, _Node_Pid, _Log_Message, true
 handle_cast({triage_event, #popcorn_node{}, _Node_Pid, _Log_Message, false}, State) ->
     {noreply, State};
 handle_cast(Event, State) ->
-    io:format("Unexpected event: ~p~n", [Event]),
+    ?POPCORN_ERROR_MSG("Unexpected event: ~p~n", [Event]),
     {noreply, State}.
 
 handle_info({broadcast, {new_storage_workers, Workers}}, State) ->
@@ -223,13 +237,13 @@ data(#alert{location = undefined}) -> [];
 data(Alert) ->
     Basic_Properties =
       case Alert of
-        #alert{log = #log_message{message = Message, severity = SeverityNumber, timestamp = Timestamp}} ->
+        #alert{log = #log_message{message = Message, severity = SeverityNumber, timestamp = Timestamp, log_line = Line, log_module = Module}} ->
             UTC_Timestamp = calendar:now_to_universal_time({Timestamp div 1000000000000, 
                                                             Timestamp div 1000000 rem 1000000,
                                                             Timestamp rem 1000000}),
               {{Year, Month, Day}, {Hour, Minute, Second}} = UTC_Timestamp,
               Formatted_DateTime = lists:flatten(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0BZ", [Year, Month, Day, Hour, Minute, Second])),
-          [{'severity_num', SeverityNumber}, {'message', list(Message)}, {'datetime', Formatted_DateTime}];
+          source_location(Module, Line) ++ [{'severity_num', SeverityNumber}, {'message', list(Message)}, {'datetime', Formatted_DateTime}];
         #alert{} ->
           []
       end,
@@ -243,6 +257,10 @@ data(Alert) ->
      {count,    Location_Count},
      {recent,   Recent_Location_Count}
      | All_Properties].
+
+
+source_location(Module, Line) when Line =:= <<"1">>; Line =:= <<"0">> -> [];
+source_location(Module, Line) -> [{source, binary_to_list(iolist_to_binary([<<" at ">>, Module, <<" line ">>, Line]))}].
 
 list(B) when is_binary(B) -> binary_to_list(B);
 list(_) -> "".

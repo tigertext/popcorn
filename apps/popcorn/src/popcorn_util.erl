@@ -11,6 +11,7 @@
          severity_to_number/1,
          number_to_severity/1,
          all_severities/0,
+         alert_severities/0,
          random_id/0,
          format_log_message/2,
          opt/2,
@@ -58,6 +59,7 @@ number_to_severity(N) ->
     end.
 
 all_severities() -> [{atom_to_list(L), lager_util:level_to_num(L)} || L <- lager_util:levels()].
+alert_severities() -> [{atom_to_list(L), lager_util:level_to_num(L)} || L <- [warning, error, critical, alert, emergency]].
 
 random_id() ->
     Length = 64,
