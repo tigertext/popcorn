@@ -79,7 +79,6 @@ code_change(_OldVsn, State, _Extra) ->
 
 get_tags(Message) ->
     {lists:filter(fun(Identity) ->
-         ?POPCORN_DEBUG_MSG("Identity = ~p", [Identity]),
          string:substr(Identity, 1, 5) =/= "Port<"
        end, tokenize(Message, "#")),
      tokenize(Message, "@")}.
