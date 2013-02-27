@@ -163,7 +163,7 @@ handle_call({get_alert, Key}, _From, State) ->
         {atomic, []} -> {reply, undefined, State}
     end;
 
-handle_call({get_alerts, Severities}, _From, State) ->
+handle_call({get_alerts, Severities, Sort}, _From, State) ->
     Transaction = fun() ->
         Query =
           case Severities of
@@ -172,7 +172,10 @@ handle_call({get_alerts, Severities}, _From, State) ->
           end,
         Order =
             fun(A, B) ->
-                B#alert.timestamp < A#alert.timestamp
+                case Sort of
+                    time -> B#alert.timestamp < A#alert.timestamp;
+                    count -> ?COUNTER_VALUE(B#alert.location) < ?COUNTER_VALUE(A#alert.location)
+                end
             end,
         qlc:eval(qlc:sort(Query, [{order, Order}]))
     end,

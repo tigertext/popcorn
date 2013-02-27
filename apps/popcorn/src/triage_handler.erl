@@ -11,7 +11,7 @@
 
 -define(UPDATE_INTERVAL, 10000).
 
--export([counter_data/1, all_alerts/1, alerts/2, recent_alerts/1, recent_alerts/2,
+-export([counter_data/1, all_alerts/2, alerts/3, recent_alerts/1, recent_alerts/2,
          alert_count_today/0, alert_count/0, clear_alert/1,
          safe_notify/4, log_messages/3, alert_properties/1]).
 
@@ -60,14 +60,14 @@ alert_count() -> gen_server:call(?MODULE, total_alerts).
 
 alert_count_today() -> gen_server:call(?MODULE, alerts_for_today).
 
-all_alerts(true = _Include_Cleared) -> gen_server:call(?MODULE, {alerts, all, all});
-all_alerts(_) -> gen_server:call(?MODULE, {alerts, recent, all}).
+all_alerts(true = _Include_Cleared, Sort) -> gen_server:call(?MODULE, {alerts, all, all, Sort});
+all_alerts(_, Sort) -> gen_server:call(?MODULE, {alerts, recent, all, Sort}).
 
-alerts(true = _Include_Cleared, Severities) -> gen_server:call(?MODULE, {alerts, all, Severities});
-alerts(_, Severities) -> gen_server:call(?MODULE, {alerts, recent, Severities}).
+alerts(true = _Include_Cleared, Severities, Sort) -> gen_server:call(?MODULE, {alerts, all, Severities, Sort});
+alerts(_, Severities, Sort) -> gen_server:call(?MODULE, {alerts, recent, Severities, Sort}).
 
-recent_alerts(Count) -> gen_server:call(?MODULE, {alerts, Count, all}).
-recent_alerts(Count, Severities) -> gen_server:call(?MODULE, {alerts, Count, Severities}).
+recent_alerts(Count) -> gen_server:call(?MODULE, {alerts, Count, all, time}).
+recent_alerts(Count, Severities) -> gen_server:call(?MODULE, {alerts, Count, Severities, time}).
 
 clear_alert(Alert) ->
     Counter = base64:decode(re:replace(Alert, "_", "=", [{return, binary}, global])),
@@ -93,10 +93,10 @@ handle_call(alerts_for_today, _From, State) ->
     Day_Key = day_key(),
     Day_Alerts = ?COUNTER_VALUE(Day_Key),
     {reply, Day_Alerts, State};
-handle_call({alerts, Count, Severities}, _From, #state{workers = Workers} = State) ->
+handle_call({alerts, Count, Severities, Sort}, _From, #state{workers = Workers} = State) ->
     %% storage_mnesia
     %% popcorn_udp
-    Alerts = gen_server:call(?CACHED_STORAGE_PID(Workers), {get_alerts, Severities}),
+    Alerts = gen_server:call(?CACHED_STORAGE_PID(Workers), {get_alerts, Severities, Sort}),
     {Small_List,_} = lists:split(erlang:min(Count, length(Alerts)), Alerts),
     FinalList = [data(Alert) || Alert <- Small_List],
     {reply, FinalList, State};

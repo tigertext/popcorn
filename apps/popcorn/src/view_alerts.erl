@@ -7,7 +7,8 @@
          alerts/1,
          username/1,
          known_severities/1,
-         header_button/1]).
+         header_button/1,
+         sort_button/1]).
 
 -spec head_includes() -> list().
 head_includes() -> popcorn_util:head_includes().
@@ -15,16 +16,25 @@ head_includes() -> popcorn_util:head_includes().
 alerts(Context) ->
 	Alerts =
 		case mustache:get(severities, Context) of
-			"all" -> triage_handler:all_alerts("true" == mustache:get(all, Context));
-			Ss -> triage_handler:alerts("true" == mustache:get(all, Context), Ss)
+            "all" -> triage_handler:all_alerts("true" == mustache:get(all, Context), as_atom(mustache:get(sort, Context)));
+            Ss -> triage_handler:alerts("true" == mustache:get(all, Context), Ss, as_atom(mustache:get(sort, Context)))
 		end,
 	[dict:from_list(Alert) || Alert <- Alerts].
+
+as_atom(List) -> list_to_atom(List).
 
 header_button(Context) ->
 	[dict:from_list(
 		case mustache:get(all, Context) of
 			"true" -> [{href, "/alerts"}, {label, "Recent"}];
 			_ -> [{href, "/alerts?all"}, {label, "All"}]
+		end)].
+
+sort_button(Context) ->
+	[dict:from_list(
+		case mustache:get(sort, Context) of
+			"time"  -> [{href, "/alerts?sort=count"}, {label, "Count"}];
+			"count" -> [{href, "/alerts?sort=time"}, {label, "Time"}]
 		end)].
 
 -spec username(dict()) -> string().

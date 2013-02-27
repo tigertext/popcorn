@@ -73,6 +73,9 @@
                     {{#header_button}}
                     <a class="btn btn-small" href="{{href}}">{{label}}</a>
                     {{/header_button}}
+                    {{#sort_button}}
+                    <a class="btn btn-small" href="{{href}}">{{label}}</a>
+                    {{/sort_button}}
                   </div>
                   <h1>Alerts</h1>
                 </header>
@@ -82,7 +85,7 @@
                   {{#alerts}}
                   <tr id="{{location}}">
                     <td><a href="/alert/{{location}}" class='btn btn-mini btn-details'>...</a></td>
-                    <td><a href="#" class="btn btn-mini btn-clear">Clear</a></td>
+                    <!--<td><a href="#" class="btn btn-mini btn-clear">Clear</a></td>-->
                     <td class="message">{{severity}} <span data-livestamp="{{datetime}}" class="datetime"></span> {{source}}<br/>{{message}}</td>
                     <td><nobr><span class="recent">{{recent}}</span> recent</nobr><br><nobr><span class="seen">{{count}}</span> seen</nobr></td>
                     <td align="right">{{product}}<br>{{version}}</td>

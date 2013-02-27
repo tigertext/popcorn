@@ -123,6 +123,7 @@ handle(Req, State) ->
 
         {{<<"GET">>, _}, {<<"/alerts">>, _}} ->
             {All, _} = cowboy_req:qs_val(<<"all">>, Req),
+            {Sort, _} = cowboy_req:qs_val(<<"sort">>, Req, <<"time">>),
             Severities =
                 case cowboy_req:qs_val(<<"severities">>, Req) of
                     {undefined, _} -> all;
@@ -149,6 +150,7 @@ handle(Req, State) ->
                         Context = dict:from_list([{username,    binary_to_list(session_handler:current_username(Req))},
                                                   {stream_id,   binary_to_list(Stream_Id)},
                                                   {all,         All},
+                                                  {sort,        list_to_atom(binary_to_list(Sort))},
                                                   {severities,  Severities}]),
 
                         TFun        = pcache:get(rendered_templates, view_alerts),
