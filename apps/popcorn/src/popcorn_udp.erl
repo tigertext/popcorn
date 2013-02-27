@@ -115,7 +115,7 @@ decode_protobuffs_message(Retention_Policy, 0, Encoded_Message) ->
                                  version   = check_undefined(Node_Version)},
 
     Popcorn_Severity = case check_undefined(Severity) of
-                          undefined -> popcorn_util:severity_to_num(none);
+                          undefined -> popcorn_util:severity_to_number(none);
                           _         -> Severity
                        end,
 
