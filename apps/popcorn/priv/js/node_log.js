@@ -28,51 +28,58 @@ $(document).ready(function() {
   var y = d3.scale.linear()
       .domain([0, 128])
      .rangeRound([0, h]);
-  chart = d3.select("#visualization-container").append("svg")
+  /*chart = d3.select("#visualization-container").append("svg")
             .attr('class', 'chart time-chart')
             .attr('width', w * 100)
-            .attr('height', h);
+            .attr('height', h);*/
 
   setInterval(function() {
+    appendCell = function(d) {
+      this.html(function(d) { 
+         if (d.column === 'find_more_html') {
+           var more = $('<a />').attr('href', '#')
+                                .attr('rel', 'popover')
+                                .attr('data-placement', 'bottom')
+                                .attr('data-html', true)
+                                .attr('data-content', d.value)
+                                .attr('data-template', '<div class="popover message-more-popover-outer"><div class="arrow"></div><div class="popover-inner message-more-popover-inner"><h3 class="popover-title"></h3><div class="popover-content"><p></p></div></div></div>')
+                                .attr('data-original-title', 'More Info<div style="float:right;"><button class="close close-popover">&times;</button></div>')
+                                .addClass('btn').addClass('btn-mini').addClass('show-more')
+                                .html('<i class="icon-info-sign"></i>');
+           return $('<div />').append(more).html();
+         } else {
+           return d.value;
+         }
+       });
+    };
+
     if (isDirty) {
       var minTimestamp = 0;
       if (messages.length > MAX_MESSAGES) {
-        minTimestamp = messages[MAX_MESSAGES - 1]['timestamp'];
+        minTimestamp = messages.sort(sortTimeDescending)[MAX_MESSAGES - 1]['timestamp'];
       }
+
       var columns = ['find_more_html', 'time', 'message_severity', 'message'];
       var rows = tbody.selectAll('tr')
                       .data(messages.filter(function(log_message) { return log_message.timestamp > minTimestamp; }));
+
       rows.enter().append('tr');
-      //rows.exit(function(d) { console.log(d); }).remove();
+      rows.exit().remove();
 
       var cells = rows.selectAll('td')
                       .data(function(log_message) {
                         return columns.map(function(column) {
                           return {column: column, value: log_message[column]};
                         });
-                      })
-                      .enter()
-                      .append('td')
-                      .html(function(d) { 
-                        if (d.column === 'find_more_html') {
-                          var more = $('<a />').attr('href', '#')
-                                               .attr('rel', 'popover')
-                                               .attr('data-placement', 'bottom')
-                                               .attr('data-html', true)
-                                               .attr('data-content', d.value)
-                                               .attr('data-template', '<div class="popover message-more-popover-outer"><div class="arrow"></div><div class="popover-inner message-more-popover-inner"><h3 class="popover-title"></h3><div class="popover-content"><p></p></div></div></div>')
-                                               .attr('data-original-title', 'More Info<div style="float:right;"><button class="close close-popover">&times;</button></div>')
-                                               .addClass('btn').addClass('btn-mini').addClass('show-more')
-                                               .html('<i class="icon-info-sign"></i>');
-                          return $('<div />').append(more).html();
-                        } else {
-                          return d.value;
-                        }
                       });
+
+      cells.call(appendCell);
+      cells.exit().remove();
+      cells.enter().append('td').call(appendCell);
 
       tbody.selectAll('tr').sort(sortTimeDescending);
 
-      var chartData = chart.selectAll('rect').data(timeFilterGroup.all());
+      /*var chartData = chart.selectAll('rect').data(timeFilterGroup.all());
       chartData.enter().append('rect')
                .attr('x', function(d, i) { return x(i) - .5; })
                .attr('y', function(d) { return h - y(d.value) - .5; })
@@ -84,7 +91,7 @@ $(document).ready(function() {
            .attr("y1", h - .5)
            .attr("y2", h - .5)
            .style("stroke", "#000");
-      chartData.exit().remove();
+      chartData.exit().remove(); */
 
       isDirty = false;
     }
