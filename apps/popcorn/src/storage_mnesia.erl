@@ -236,11 +236,9 @@ handle_call({get_alert_timestamps, Severities}, _From, State) ->
                                                   Timestamp div 1000000 rem 1000000,
                                                   Timestamp rem 1000000},
     Transaction = fun() ->
-            Query = qlc:q([case lists:member(Alert#alert_timestamps.severity, Severities) of
-                              true -> TS;
-                              false -> skip
-                           end || Alert = #alert_timestamps{timestamp = TS, severity = S}
-                                  <- mnesia:table(popcorn_alert_timestamps), (Starting_Timestamp == undefined orelse TS > Starting_Timestamp)]),
+            Query = qlc:q([TS || Alert = #alert_timestamps{timestamp = TS, severity = S} <- 
+                    mnesia:table(popcorn_alert_timestamps), (Starting_Timestamp == undefined orelse TS > Starting_Timestamp), 
+                      lists:member(Alert#alert_timestamps.severity, Severities)]),
         Order = fun(A, B) -> B < A end,
         Cursor = qlc:cursor(qlc:sort(Query, [{order, Order}])),
         qlc:next_answers(Cursor, 10000)

@@ -31,9 +31,9 @@ handle_path(<<"POST">>, [<<"log">>, <<"stream">>, <<"pause">>], Req, State) ->
 
     %% get the current paused state for the response
     Is_Paused = gen_fsm:sync_send_all_state_event(Stream_Pid, is_paused),
-    Response  = {struct, [{"is_paused", Is_Paused}]},
+    Response  = {[ [{<<"is_paused">>, popcorn_util:jiffy_safe(Is_Paused)}] ]},
 
-    {ok, Reply}   = cowboy_req:reply(200, [{"Content-Type", "application/json"}], lists:flatten(mochijson:encode(Response)), Req),
+    {ok, Reply}   = cowboy_req:reply(200, [{"Content-Type", "application/json"}], binary_to_list(jiffy:encode(Response)), Req),
     {ok, Reply, State};
 
 handle_path(<<"GET">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
@@ -155,25 +155,25 @@ handle_loop(Req, State) ->
         {cowboy_req, resp_sent} ->
             handle_loop(Req, State);
         clear_log ->
-            Enveloped = {struct, [{"message_type", "command"},
-                                  {"payload",      {struct, [{"name", "clear"}]}}]},
-            Event     = lists:flatten(mochijson:encode(Enveloped)),
+            Enveloped = {[ {<<"message_type">>, <<"command">>},
+                           {<<"payload">>, {[ {<<"name">>, <<"clear">>} ]}}]},
+            Event     = binary_to_list(jiffy:encode(Enveloped)),
             case cowboy_req:chunk(lists:flatten(["data: ", Event, "\n\n"]), Req) of
                 ok -> handle_loop(Req, State);
                 {error, closed} -> {ok, Req, State}
              end;
         {old_message, Log_Message, Popcorn_Node} ->
-            Enveloped   = {struct, [{"message_type", "old_message"},
-                                    {"payload",      {struct, popcorn_util:format_log_message(Log_Message, Popcorn_Node)}}]},
-            Event       = lists:flatten(mochijson:encode(Enveloped)),
+            Enveloped   = {[ {<<"message_type">>, <<"old_message">>},
+                             {<<"payload">>,      { popcorn_util:format_log_message(Log_Message, Popcorn_Node) }}]},
+            Event       = binary_to_list(jiffy:encode(Enveloped)),
             case cowboy_req:chunk(lists:flatten(["data: ", Event, "\n\n"]), Req) of
                 ok -> handle_loop(Req, State);
                 {error, closed} -> {ok, Req, State}
             end;
         {new_message, Log_Message, Popcorn_Node} ->
-            Enveloped   = {struct, [{"message_type", "new_message"},
-                                    {"payload",      {struct, popcorn_util:format_log_message(Log_Message, Popcorn_Node)}}]},
-            Event       = lists:flatten(mochijson:encode(Enveloped)),
+            Enveloped   = {[ {<<"message_type">>, <<"new_message">>},
+                             {<<"payload">>,      {popcorn_util:format_log_message(Log_Message, Popcorn_Node)}} ]},
+            Event       = binary_to_list(jiffy:encode(Enveloped)),
             case cowboy_req:chunk(lists:flatten(["data: ", Event, "\n\n"]), Req) of
                 ok -> handle_loop(Req, State);
                 {error, closed} -> {ok, Req, State}
