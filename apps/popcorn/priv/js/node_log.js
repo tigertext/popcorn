@@ -4,12 +4,127 @@ var isVisible = false,
     foundNodes = [],
     foundRoles = [],
     foundTopics = [],
-    foundIdentities = [];
+    foundIdentities = [],
+    messages = [],
+    messageFilter = crossfilter(messages),
+    timeFilterDimension = messageFilter.dimension(function(m) {
+      var d = new Date(m['timestamp']);
+      return d.getHours() + d.getMinutes() / 5;
+    }),
+    timeFilterGroup = timeFilterDimension.group(Math.floor),
+    messagesTable, tbody, chart,
+    isDirty = false,
+    REFRESH_INTERVAL = 250,
+    MAX_MESSAGES = 100;
 
 var MAX_IDENTITIES = 15;
 
 $(document).ready(function() {
+  var w = 9,
+      h = 64;
+  var x = d3.scale.linear()
+      .domain([0, 1])
+      .range([0, w]);
+  var y = d3.scale.linear()
+      .domain([0, 128])
+     .rangeRound([0, h]);
+  /*chart = d3.select("#visualization-container").append("svg")
+            .attr('class', 'chart time-chart')
+            .attr('width', w * 100)
+            .attr('height', h);*/
+
+  setInterval(function() {
+    appendCell = function(d) {
+      this.html(function(d) { 
+         if (d.column === 'find_more_html') {
+           var more = $('<a />').attr('href', '#')
+                                .attr('rel', 'popover')
+                                .attr('data-placement', 'bottom')
+                                .attr('data-html', true)
+                                .attr('data-content', d.value)
+                                .attr('data-template', '<div class="popover message-more-popover-outer"><div class="arrow"></div><div class="popover-inner message-more-popover-inner"><h3 class="popover-title"></h3><div class="popover-content"><p></p></div></div></div>')
+                                .attr('data-original-title', 'More Info<div style="float:right;"><button class="close close-popover">&times;</button></div>')
+                                .addClass('btn').addClass('btn-mini').addClass('show-more')
+                                .html('<i class="icon-info-sign"></i>');
+           return $('<div />').append(more).html();
+         } else {
+           return d.value;
+         }
+       });
+    };
+
+    if (isDirty) {
+      var minTimestamp = 0;
+      if (messages.length > MAX_MESSAGES) {
+        minTimestamp = messages.sort(sortTimeDescending)[MAX_MESSAGES - 1]['timestamp'];
+      }
+
+      var columns = ['find_more_html', 'time', 'message_severity', 'message'];
+      var rows = tbody.selectAll('tr')
+                      .data(messages.filter(function(log_message) { return log_message.timestamp > minTimestamp; }));
+
+      rows.enter().append('tr');
+      rows.exit().remove();
+
+      var cells = rows.selectAll('td')
+                      .data(function(log_message) {
+                        return columns.map(function(column) {
+                          return {column: column, value: log_message[column]};
+                        });
+                      });
+
+      cells.call(appendCell);
+      cells.exit().remove();
+      cells.enter().append('td').call(appendCell);
+
+      tbody.selectAll('tr').sort(sortTimeDescending);
+
+      /*var chartData = chart.selectAll('rect').data(timeFilterGroup.all());
+      chartData.enter().append('rect')
+               .attr('x', function(d, i) { return x(i) - .5; })
+               .attr('y', function(d) { return h - y(d.value) - .5; })
+               .attr('width', w)
+               .attr('height', function(d) { return y(d.value); });
+      chart.append("line")
+           .attr("x1", 0)
+           .attr("x2", w * 100)
+           .attr("y1", h - .5)
+           .attr("y2", h - .5)
+           .style("stroke", "#000");
+      chartData.exit().remove(); */
+
+      isDirty = false;
+    }
+  }, REFRESH_INTERVAL);
+
+  sortTimeDescending = function(a, b) {
+    return d3.descending(a['timestamp'], b['timestamp']);
+  };
+
+  $('.show-more').live('click', function(e) {
+    e.preventDefault();
+    $('.show-more').popover('hide');
+    $(this).popover('show');
+  });
+
+  messagesTable = d3.select("#logs").append("table").attr('id', 'log-messages').attr('class', 'table table-striped full-section table-hover');
+  var thead = messagesTable.append("thead");
+  theadrow = thead.append('tr');
+  theadrow.append('th');
+  theadrow.append('th').html('Time');
+  theadrow.append('th').html('Severity');
+  theadrow.append('th').html('Message');
+  tbody = messagesTable.append("tbody").attr('id', 'log-messages-body');
+
   initPopovers = function() {
+    $('#stream-properties').popover({
+      html: true,
+      trigger: 'click',
+      title: 'Stream Properties<div style="float:right;"><button class="close" id="close-stream">&times;</button></div>',
+      placement: 'bottom',
+      template: '<div class="popover stream-popover-outer"><div class="arrow"></div><div class="popover-inner stream-popover-inner"><h3 class="popover-title"></h3><div class="popover-content"><p></p></div></div></div>',
+      content: $('#stream-popover').html()});
+
     $('#filter-properties').popover({
       html: true,
       trigger: 'click',
@@ -53,7 +168,7 @@ $(document).ready(function() {
     e.preventDefault();
   });
 
-  $('.filter-role').live('click', function(e) {
+  $('.stream-role').live('click', function(e) {
     e.preventDefault();
     if ($(this).attr('filter-selected') == '1')  {
       $(this).attr('filter-selected', '0');
@@ -70,11 +185,11 @@ $(document).ready(function() {
             data:'roles=' + rolesOn.join("%2C"),
             success:function() { },
             error:function(request, textstatus, error) {
-              alert('Unable to update role filter response='+request.responseText+' status='+textstatus+' error='+error+' roles='+rolesOn);
+              alert('Unable to update role stream response='+request.responseText+' status='+textstatus+' error='+error+' roles='+rolesOn);
             }});
   });
 
-  $('.filter-node').live('click', function(e) {
+  $('.stream-node').live('click', function(e) {
     e.preventDefault();
     if ($(this).attr('filter-selected') == '1')  {
       $(this).attr('filter-selected', '0');
@@ -92,11 +207,11 @@ $(document).ready(function() {
             data:'nodes=' + nodesOn.join("%2C"),
             success:function() { },
             error:function(request, textstatus, error) {
-              alert('Unable to update node filter'+request.responseText+" "+textstatus+" "+error);
+              alert('Unable to update node stream'+request.responseText+" "+textstatus+" "+error);
             }});
   });
 
-  $('.filter-severity').live('click', function(e) {
+  $('.stream-severity').live('click', function(e) {
     e.preventDefault();
     if ($(this).attr('filter-selected') == '1')  {
       $(this).attr('filter-selected', '0');
@@ -106,7 +221,7 @@ $(document).ready(function() {
       $(this).find('i').removeClass('icon-remove').addClass('icon-ok');
     }
     var severitiesOn = [];
-    var selectedSeverities = $('.filter-popover-inner').find('.filter-severity[filter-selected=1]');
+    var selectedSeverities = $('.stream-popover-inner').find('.filter-severity[filter-selected=1]');
     $.each(selectedSeverities, function(k, v) {
       if ($(this).attr('filter-selected') == '1') {
         severitiesOn.push(parseInt($(this).attr('data-val'), 10));
@@ -130,16 +245,12 @@ $(document).ready(function() {
     $('#log-messages tr:gt(0)').remove();
   });
 
+  $('#stream-properties').click(function(e) {
+    e.preventDefault();
+  });
+
   $('#filter-properties').click(function(e) {
     e.preventDefault();
-
-    $('.filter-popover-inner input#identity-search').typeahead({
-      items: 10,
-      source: function(query, process) {
-        var d = ['california', 'arkansas', 'soemthing'];
-        console.log(d);
-        return process(d);
-      }});
   });
 
   $('.icon-pause').click(function(e) {
@@ -164,8 +275,8 @@ $(document).ready(function() {
             }});
   });
 
-  $('#close-filter').live('click', function() {
-    $('#filter-properties').popover('hide');
+  $('#close-stream').live('click', function() {
+    $('#stream-properties').popover('hide');
   });
 
   $('.close-popover').live('click', function() {
@@ -305,90 +416,10 @@ $(document).ready(function() {
   };
 
   showLogMessage = function(location, log_message) {
-    if (foundSeverities.indexOf(log_message.message_severity) == -1) {
-      foundSeverities.push(log_message.message_severity);
-      var severityVal = -1;
-      for (var s in knownSeverities) {
-        if (knownSeverities[s]['label'] == log_message.message_severity) {
-          severityVal = knownSeverities[s]['val'];
-        }
-      }
-      var severity = '<span class="label filter-item filter-severity" data-val="' + severityVal + '" filter-selected="1"><i class="icon-ok"></i>' + log_message.message_severity + '</span>&nbsp;';
-      $('#severities-list').append(severity);
-      $('a#filter-properties').data('popover').options.content = $('#filter-popover').html();
-    }
-
-    if (foundNodes.indexOf(log_message.node) == -1) {
-      foundNodes.push(log_message.node);
-      var node = '<span class="label filter-item filter-node" data-val="' + log_message.node + '" filter-selected="1"><i class="icon-ok"></i>' + log_message.node + '</span>&nbsp;';
-      $('#nodes-list').append(node);
-      $('a#filter-properties').data('popover').options.content = $('#filter-popover').html();
-    }
-
-    if (foundRoles.indexOf(log_message.role) == -1) {
-      foundRoles.push(log_message.role);
-      var role = '<span class="label filter-item filter-role" data-val="' + log_message.role + '" filter-selected="1"><i class="icon-ok"></i>' + log_message.role + '</span>&nbsp;';
-      $('#roles-list').append(role);
-      $('a#filter-properties').data('popover').options.content = $('#filter-popover').html();
-    }
-
-    for (var idx in log_message.topics) {
-      if (foundTopics.indexOf(log_message.topics[idx]) == -1) {
-        foundTopics.push(log_message.topics[idx]);
-        var topic = '<span class="label filter-item filter-topic" data-val="' + log_message.topics[idx] + '" filter-selected="1"><i class="icon-ok"></i>' + log_message.topics[idx] + '</span>&nbsp;';
-        $('#topics-list').append(topic);
-        $('a#filter-properties').data('popover').options.content = $('#filter-popover').html();
-      }
-    }
-
-    for (var idx in log_message.identities) {
-      if (foundIdentities.indexOf(log_message.identities[idx]) == -1) {
-        foundIdentities.unshift(log_message.identities[idx]);
-        if (foundIdentities.length > MAX_IDENTITIES) {
-          var removedIdentities = foundIdentities.splice(MAX_IDENTITIES, foundIdentities.length);
-          for (var removedIdx in removedIdentities) {
-            $('.filter-identity[data-val='+removedIdentities[removedIdx]+']').remove();
-          };
-        }
-        var topic = '<span class="label filter-item filter-identity" data-val="' + log_message.identities[idx] + '" filter-selected="1"><i class="icon-ok"></i>' + log_message.identities[idx] + '</span>&nbsp;';
-        $('#identities-list').prepend(topic);
-        $('a#filter-properties').data('popover').options.content = $('#filter-popover').html();
-      }
-    }
-
-    var row = $('<tr />').attr('data-timestamp', log_message['timestamp']);
-    var cell = $('<td />').css('padding-right', '12px');
-    var more = $('<a />').attr('href', '#')
-                          .attr('rel', 'popover')
-                          .attr('data-placement', 'bottom')
-                          .attr('data-html', true)
-                          .attr('data-content', log_message.find_more_html)
-                          .attr('data-original-title', 'Find Similar<div style="float:right;"><button class="close close-popover">&times;</button></div>')
-                          .addClass('btn').addClass('btn-mini').addClass('show-more')
-                          .html('...');
-    more.popover({html: true, trigger: 'manual'})
-                .click(function(e) {
-                  $('.show-more').popover('hide');
-                  $(this).popover('show');
-                  e.preventDefault();
-                });
-    cell.append(more);
-    row.append(cell);
-    row.append($('<td />').html(log_message.time));
-    row.append($('<td />').html(log_message.message_severity));
-    row.append($('<td />').addClass('log-message').html(log_message.message));
-
-    if (location == 'top') {
-      $('#log-messages tbody').prepend(row);
-    } else if (location == 'bottom') {
-      $('#log-messages tbody').append(row);
-    }
-
-    // truncate the table to 100 rows // TODO make this less static
-    while ($('#log-messages tr').length > 100) {
-      $('#log-messages tr:last').remove();
-    }
-  }
+    messages.push(log_message);
+    messageFilter.add([log_message]);
+    isDirty = true;
+  };
 });
 
 

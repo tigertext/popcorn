@@ -8,6 +8,7 @@
          known_severities/1,
          applied_filters/1,
          username/1,
+         avatar_path/1,
          streaming_url/1]).
 
 -spec head_includes() -> list().
@@ -24,13 +25,16 @@ known_severities(_) ->
 -spec applied_filters(dict()) -> string().
 applied_filters(Context) ->
     Default_Filters = dict:to_list(proplists:get_value(default_filters, dict:to_list(Context))),
-    Json = {struct, lists:map(fun({Name, Value}) ->
-                        {atom_to_list(Name), {array, Value}}
-                      end, Default_Filters)},
-    lists:flatten(mochijson:encode(Json)).
+    Json = {lists:map(fun({Name, Value}) ->
+                          {Name, popcorn_util:jiffy_safe_array(Value)}
+            end, Default_Filters)},
+    binary_to_list(jiffy:encode(Json)).
 
 -spec username(dict()) -> string().
 username(Context) -> view_generic:username(Context).
+
+-spec avatar_path(dict()) -> string().
+avatar_path(Context) -> view_generic:avatar_path(Context).
 
 -spec streaming_url(dict()) -> string().
 streaming_url(Context) ->

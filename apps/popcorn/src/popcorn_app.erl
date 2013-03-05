@@ -96,6 +96,7 @@ init([]) ->
                             {[<<"css">>, '...'],         http_static_handler, []},
                             {[<<"images">>, '...'],      http_static_handler, []},
                             {[<<"bootstrap">>, '...'],   http_static_handler, []},
+                            {[<<"crossfilter">>, '...'], http_static_handler, []},
                             {[<<"log">>, '...'],         http_log_handler, []},
                             {[<<"dashboard">>, <<"stream">>, '...'],
                                                          http_stream_handler, []},

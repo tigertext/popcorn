@@ -19,7 +19,11 @@
          optional_env/2,
          hexstring/1,
          read/1,
-         rps_enabled/0]).
+         rps_enabled/0,
+         md5_hex/1,
+         jiffy_safe/1,
+         jiffy_safe_array/1,
+         jiffy_safe_proplist/1]).
 
 node_event_counter(Node_Name) ->
     Prefix = <<"node_events__">>,
@@ -102,7 +106,7 @@ apply_links(Identities, Topics, In) ->
 -spec format_log_message(#log_message{}, #popcorn_node{} | undefined) -> list().
 format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_function=Function, log_line=Line, log_pid=Pid,
                                 severity=Severity, message=Message, topics=Topics, identities=Identities, log_product=Product,
-                                log_version=Version},
+                                log_version=Version, message_id=Message_Id, log_nodename=Node_Name},
                    Popcorn_Node) ->
   UTC_Timestamp = calendar:now_to_universal_time({Timestamp div 1000000000000, 
                                                   Timestamp div 1000000 rem 1000000,
@@ -111,15 +115,14 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
   Formatted_DateTime = lists:flatten(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0BZ", [Year, Month, Day, Hour, Minute, Second])),
   Formatted_Time     = lists:flatten(io_lib:format("~2.10.0B:~2.10.0B:~2.10.0B", [Hour, Minute, Second])),
 
-  Find_More_Html     = "<strong>Filter current list to show only messages with matching:</strong><br /><br />" ++
-                       "<label class='checkbox popover-label'><input type='checkbox'>Severity: " ++ number_to_severity(Severity) ++ "</label>" ++
-                       "<label class='checkbox popover-label'><input type='checkbox'>Module: " ++ binary_to_list(opt(Module, <<"Not set">>)) ++ "</label>" ++
-                       "<label class='checkbox popover-label'><input type='checkbox'>Function: " ++ binary_to_list(opt(Function, <<"Not set">>)) ++ "</label>" ++
-                       "<label class='checkbox popover-label'><input type='checkbox'>Line: " ++ binary_to_list(opt(Line, <<"?">>)) ++ " in " ++ binary_to_list(opt(Module, <<"not set">>)) ++ "</label>" ++
-                       "<label class='checkbox popover-label'><input type='checkbox'>Pid: " ++ binary_to_list(opt(Pid, <<"Not set">>)) ++ "</label>" ++
-                       lists:append(["<label class='checkbox popover-label'><input type='checkbox'>@" ++ Identity ++ "</label>" || Identity <- Identities]) ++
-                       lists:append(["<label class='checkbox popover-label'><input type='checkbox'>#" ++ Topic ++ "</label>" || Topic <- Topics]) ++ 
-                       "<br /><button class='btn btn-mini' type='button'>Apply Filter</button>",
+  More_Html =
+    "<strong>Message " ++ binary_to_list(Message_Id) ++ "</strong><hr />" ++
+    "<label class='popover-label'><strong>Node: </strong>" ++ binary_to_list(Node_Name) ++ "</label>" ++
+    "<label class='popover-label'><strong>Severity: </strong>" ++ number_to_severity(Severity) ++ "</label>" ++
+    "<label class='popover-label'><strong>Module: </strong>" ++ binary_to_list(opt(Module, <<"Not set">>)) ++ "</label>" ++
+    "<label class='popover-label'><strong>Function: </strong>" ++ binary_to_list(opt(Function, <<"Not set">>)) ++ "</label>" ++
+    "<label class='popover-label'><strong>Line: </strong>" ++ binary_to_list(opt(Line, <<"?">>)) ++ " in " ++ binary_to_list(opt(Module, <<"not set">>)) ++ "</label>" ++
+    "<label class='popover-label'><strong>Pid: </strong>" ++ binary_to_list(opt(Pid, <<"Not set">>)) ++ "</label>",
 
   Linked_Message = apply_links(Identities, Topics, Message),
 
@@ -129,22 +132,23 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
       _ -> {Popcorn_Node#popcorn_node.role, Popcorn_Node#popcorn_node.node_name}
     end,
 
-  [{'timestamp',        Timestamp},
-   {'role',             Role},
-   {'node',             Name},
-   {'topics',           {array, Topics}},
-   {'identities',       {array, Identities}},
-   {'time',             Formatted_Time},
-   {'datetime',         Formatted_DateTime},
-   {'find_more_html',   Find_More_Html},
-   {'log_product',      binary_to_list(opt(Product, <<"Unknown">>))},
-   {'log_version',      binary_to_list(opt(Version, <<"Unknown">>))},
-   {'log_module',       binary_to_list(opt(Module, <<"Unknown">>))},
-   {'log_function',     binary_to_list(opt(Function, <<"Unknown">>))},
-   {'log_line',         binary_to_list(opt(Line, <<"??">>))},
-   {'log_pid',          binary_to_list(opt(Pid, <<"?">>))},
-   {'message_severity', number_to_severity(Severity)},
-   {'message',          binary_to_list(Linked_Message)}].
+  [{'timestamp',        jiffy_safe(Timestamp)},
+   {'role',             jiffy_safe(opt(Role, <<"Unknown Role">>))},
+   {'node',             jiffy_safe(opt(Name, <<"Unknown Node">>))},
+   {'topics',           jiffy_safe_array(Topics)},
+   {'identities',       jiffy_safe_array(Identities)},
+   {'time',             jiffy_safe(Formatted_Time)},
+   {'datetime',         jiffy_safe(Formatted_DateTime)},
+   {'find_more_html',   jiffy_safe(More_Html)},
+   {'log_product',      jiffy_safe(opt(Product, <<"Unknown">>))},
+   {'log_version',      jiffy_safe(opt(Version, <<"Unknown">>))},
+   {'log_module',       jiffy_safe(opt(Module, <<"Unknown">>))},
+   {'log_function',     jiffy_safe(opt(Function, <<"Unknown">>))},
+   {'log_line',         jiffy_safe(opt(Line, <<"??">>))},
+   {'log_pid',          jiffy_safe(opt(Pid, <<"?">>))},
+   {'message_severity', jiffy_safe(number_to_severity(Severity))},
+   {'message_severity_raw', jiffy_safe(Severity)},
+   {'message',          jiffy_safe(Linked_Message)}].
 
 css_file() ->
     case file:read_file_info(code:priv_dir(popcorn) ++ "/css/popcorn.css") of
@@ -176,3 +180,20 @@ rps_enabled() ->
                             Rps_Config -> Rps_Config
                         end,
     proplists:get_value(enabled, Rps_Options).
+
+
+md5_hex(S) ->
+    Md5_bin  = erlang:md5(S),
+    Md5_list = binary_to_list(Md5_bin),
+    lists:flatten(list_to_hex(Md5_list)).
+list_to_hex(L) -> lists:map(fun(X) -> int_to_hex(X) end, L).
+int_to_hex(N) when N < 256 -> [hex(N div 16), hex(N rem 16)].
+hex(N) when N < 10 -> $0+N;
+hex(N) when N >= 10, N < 16 -> $a + (N-10).
+
+jiffy_safe_array([]) -> [];
+jiffy_safe_array(Values) when is_list(Values) -> [jiffy_safe(Value) || Value <- Values].
+jiffy_safe(Value) when is_integer(Value) -> Value;
+jiffy_safe(Value) when is_list(Value) -> list_to_binary(Value);
+jiffy_safe(Value) when is_binary(Value) -> Value.
+jiffy_safe_proplist(List) -> [{K, popcorn_util:jiffy_safe(V)} || {K,V} <- List].

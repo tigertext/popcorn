@@ -48,25 +48,24 @@ handle_loop(Req, State) ->
         {new_node, Node} ->
             Total_Message_Count = ?COUNTER_VALUE(?TOTAL_EVENT_COUNTER),
             Data = [{node_count, ets:info(current_nodes, size)},
-                    {node_name, Node#popcorn_node.node_name},
-                    {node_hash, re:replace(base64:encode(Node#popcorn_node.node_name), "=", "_", [{return, binary}, global])},
+                    {node_name, popcorn_util:jiffy_safe(Node#popcorn_node.node_name)},
+                    {node_hash, popcorn_util:jiffy_safe(re:replace(base64:encode(Node#popcorn_node.node_name), "=", "_", [{return, binary}, global]))},
                     {percent_of_all_events, ?PERCENT(1 / Total_Message_Count)},
                     {total_messages, 1},
                     {alert_count,   0},
                     {hashtag_count, 0},
                     {mention_count, 0}],
-            Event = lists:flatten(mochijson:encode({struct, Data})),
+            Event = binary_to_list(jiffy:encode({Data})),
             chunk_event("new_node", Event, Req, State);
         {update_counters, NewCounters} ->
-            Event =
-                lists:flatten(mochijson:encode(
-                    case lists:keytake(counter, 1, NewCounters) of
-                        false ->
-                            {struct, NewCounters};
-                        {value, {counter, Counter}, Rest} ->
-                            CounterData = triage_handler:counter_data(Counter),
-                            {struct, [{counter, {struct, CounterData}} | Rest]}
-                    end)),
+            Json = case lists:keytake(counter, 1, NewCounters) of
+                false ->
+                    {NewCounters};
+                {value, {counter, Counter}, Rest} ->
+                    CounterData = popcorn_util:jiffy_safe_proplist(triage_handler:counter_data(Counter)),
+                    {[{counter, {CounterData}} | Rest]}
+            end,
+            Event = binary_to_list(jiffy:encode(Json)),
             chunk_event("update_counters", Event, Req, State);
         Other ->
             ?POPCORN_DEBUG_MSG("streaming handler received unknown message: ~p", [Other]),
