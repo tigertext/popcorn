@@ -13,7 +13,8 @@
 
 -export([counter_data/1, all_alerts/2, alerts/3, recent_alerts/1, recent_alerts/2,
          alert_count_today/0, alert_count/0, clear_alert/1,
-         safe_notify/4, log_messages/3, alert_properties/1]).
+         safe_notify/4, log_messages/3, alert_properties/1,
+         key/5]).
 
 -include_lib("lager/include/lager.hrl").
 -include("include/popcorn.hrl").
@@ -125,6 +126,7 @@ handle_cast({triage_event, #popcorn_node{} = Node, Node_Pid,
         when Severity =< 16, Severity =/= 0, is_binary(Product), is_binary(Version), is_binary(Module), is_binary(Line) ->
     Storage_Pid = ?CACHED_STORAGE_PID(Workers),
     gen_server:cast(Storage_Pid, {new_alert, key(Severity,Product,Version,Module,Line), #alert{log=Log_Entry, incident=Incident}}),
+    gen_server:cast(Storage_Pid, {new_alert_timestamp, key(Severity,Product,Version,Module,Line), Severity, #alert{log=Log_Entry, incident=Incident}}),
     case Is_New_Node of
         true ->
             outbound_notifier:notify(new_node, as_proplist(Node)),

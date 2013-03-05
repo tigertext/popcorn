@@ -35,6 +35,7 @@ terminate(_Req, _State) ->
 guess_content_type(Filename) ->
     case filename:extension(Filename) of
         <<".ico">>  -> <<"appliaction/image">>;
+        <<".html">> -> <<"text/html">>;
         <<".js">>   -> <<"application/javascript">>;
         <<".css">>  -> <<"text/css">>;
         <<".less">> -> <<"text/less">>;

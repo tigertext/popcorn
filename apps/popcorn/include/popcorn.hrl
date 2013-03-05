@@ -95,3 +95,9 @@
         key,
         value
 }).
+
+-record(alert_timestamps, {
+        key,
+        timestamp,
+        severity
+}).
