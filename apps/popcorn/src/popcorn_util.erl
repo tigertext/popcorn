@@ -133,8 +133,8 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
     end,
 
   [{'timestamp',        jiffy_safe(Timestamp)},
-   {'role',             jiffy_safe(Role)},
-   {'node',             jiffy_safe(Name)},
+   {'role',             jiffy_safe(opt(Role, <<"Unknown Role">>))},
+   {'node',             jiffy_safe(opt(Name, <<"Unknown Node">>))},
    {'topics',           jiffy_safe_array(Topics)},
    {'identities',       jiffy_safe_array(Identities)},
    {'time',             jiffy_safe(Formatted_Time)},
