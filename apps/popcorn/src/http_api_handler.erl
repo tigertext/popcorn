@@ -42,8 +42,7 @@ handle_path(<<"POST">>, [<<"api">>, <<"mapping">>], Req, State) ->
     {Map} = json_util:get_path(JSON, [<<"mapping">>], []),
     [begin
         Record_Key = iolist_to_binary([Role, $:, Version, $:, Module]),
-        gen_server:cast(?STORAGE_PID, {new_release_scm_mapping, #release_scm_mapping{key=Record_Key, role=Role, version=Version, module_name=Module, url=Url}}),
-        io:format("K ~p ~p ~p ~p=~p~n", [Record_Key, Role, Version, Module, Url])
+        gen_server:cast(?STORAGE_PID, {new_release_scm_mapping, #release_scm_mapping{key=Record_Key, role=Role, version=Version, module_name=Module, url=Url}})
      end || {Module, Url} <- Map],
     {ok, Reply} = cowboy_req:reply(200, [], [], Req2),
     {ok, Reply, State};

@@ -112,7 +112,6 @@ handle(Req, State) ->
             ?POPCORN_DEBUG_MSG("#http_request for #alert_timestamps"),
             Timestamps = gen_server:call(pg2:get_closest_pid('storage'), {get_alert_timestamps, [8,128]}),
             Dict = lists:foldl(fun(Timestamp, Dict) -> 
-                        io:format("Formatting ~p~n", [Timestamp]),
                 Date_String = format_timestamp(date_util:epoch_to_gregorian_seconds(Timestamp)),
                 dict:update(Date_String, fun(C) -> C + 1 end, 1, Dict) 
             end, dict:new(), Timestamps),
@@ -226,9 +225,8 @@ do_jsonify({Key, Other}) -> {atom_to_binary(Key, latin1), Other}.
 
 format_timestamp(Timestamp) ->
     {{Year, Month, Day}, {Hour, Min, Sec}} = calendar:gregorian_seconds_to_datetime(Timestamp),
-    io:format("~p YEAR ~p ~p ~p -- ~p ~p~n", [Timestamp, Year, Month, Day, Hour, Min]),
-    normalize_hour(Hour).
     %io_lib:format("~B/~B/~4..0B~2B", [Month, Day, Year, Hour]).
+    normalize_hour(Hour).
 
 normalize_hour(0) -> "12pm";
 normalize_hour(Hour) when Hour > 12 ->
