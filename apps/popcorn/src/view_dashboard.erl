@@ -3,7 +3,9 @@
 
 -include("include/popcorn.hrl").
 
--export([head_includes/0,
+-export([username/1,
+         avatar_path/1,
+         head_includes/1,
          node_count/0,
          event_count/0,
          alerts/0,
@@ -12,8 +14,19 @@
          alert_count_today/0,
          alert_count/0,
          alert_lines/0,
-         known_nodes/0,
-         username/1]).
+         known_nodes/0]).
+
+-spec username(dict()) -> string().
+username(Context) ->
+  mustache:get(username, Context).
+
+-spec avatar_path(dict()) -> string().
+avatar_path(Context) ->
+  "http://www.gravatar.com/avatar/" ++ popcorn_util:md5_hex(mustache:get(username, Context)).
+
+-spec head_includes(dict()) -> list().
+head_includes(_) ->
+  popcorn_util:head_includes().
 
 -spec alert_lines() -> pos_integer().
 alert_lines() ->
@@ -21,9 +34,6 @@ alert_lines() ->
     {ok, Value} -> Value;
     _ -> 3
   end.
-
--spec head_includes() -> list().
-head_includes() -> popcorn_util:head_includes().
 
 -spec node_count() -> integer().
 node_count() -> ets:info(current_nodes, size).
@@ -64,7 +74,4 @@ known_nodes() ->
                             {'mention_count',         0}],
         dict:from_list(Node_Properties)
       end, ets:tab2list(current_nodes)).
-
--spec username(dict()) -> string().
-username(Context) -> view_generic:username(Context).
 

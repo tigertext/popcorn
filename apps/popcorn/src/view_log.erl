@@ -1,18 +1,28 @@
 -module(view_log).
 -author('marc.e.campbell@gmail.com').
+-behaviour(view_generic).
 
 -include_lib("stdlib/include/ms_transform.hrl").
 -include("include/popcorn.hrl").
 
--export([head_includes/0,
+-export([username/1,
+         avatar_path/1,
+         head_includes/1,
          known_severities/1,
          applied_filters/1,
-         username/1,
-         avatar_path/1,
          streaming_url/1]).
 
--spec head_includes() -> list().
-head_includes() -> popcorn_util:head_includes().
+-spec username(dict()) -> string().
+username(Context) ->
+  mustache:get(username, Context).
+
+-spec avatar_path(dict()) -> string().
+avatar_path(Context) ->
+  "http://www.gravatar.com/avatar/" ++ popcorn_util:md5_hex(mustache:get(username, Context)).
+
+-spec head_includes(dict()) -> list().
+head_includes(_) ->
+  popcorn_util:head_includes().
 
 -spec known_severities(dict()) -> list().
 known_severities(_) ->
@@ -29,12 +39,6 @@ applied_filters(Context) ->
                         {atom_to_list(Name), {array, Value}}
                       end, Default_Filters)},
     lists:flatten(mochijson:encode(Json)).
-
--spec username(dict()) -> string().
-username(Context) -> view_generic:username(Context).
-
--spec avatar_path(dict()) -> string().
-avatar_path(Context) -> view_generic:avatar_path(Context).
 
 -spec streaming_url(dict()) -> string().
 streaming_url(Context) ->

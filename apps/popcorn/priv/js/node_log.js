@@ -7,35 +7,67 @@ var isVisible = false,
     foundIdentities = [],
     messages = [],
     messageFilter = crossfilter(messages),
-    timeFilterDimension = messageFilter.dimension(function(m) {
-      var d = new Date(m['timestamp']);
-      return d.getHours() + d.getMinutes() / 5;
+    timeFilterDimension = messageFilter.dimension(function(log_message) {
+      return Math.floor(log_message['timestamp'] / 1000);
     }),
-    timeFilterGroup = timeFilterDimension.group(Math.floor),
-    messagesTable, tbody, chart,
-    isDirty = false,
-    REFRESH_INTERVAL = 250,
-    MAX_MESSAGES = 100;
+    timeFilterGroupByMinute = timeFilterDimension.group(function(second) {
+      return Math.floor(second / 60);
+    }),
+    messagesTable, tbody,
+    timeChart,
+    isLogMessagesDirty = false,
+    LOG_REFRESH_INTERVAL = 250,
+    CHART_REFRESH_INTERVAL = 2000,
+    MAX_MESSAGES = 500;
 
 var MAX_IDENTITIES = 15;
 
 $(document).ready(function() {
-  var w = 9,
-      h = 64;
-  var x = d3.scale.linear()
+  var timeChartColumnWidth = 15,
+      timeChartColumnHeight = 80;
+  var timeChartWidthFunction = d3.scale.linear()
       .domain([0, 1])
-      .range([0, w]);
-  var y = d3.scale.linear()
-      .domain([0, 128])
-     .rangeRound([0, h]);
-  /*chart = d3.select("#visualization-container").append("svg")
-            .attr('class', 'chart time-chart')
-            .attr('width', w * 100)
-            .attr('height', h);*/
+      .range([0, timeChartColumnWidth]);
+  var timeChartHeightFunction = d3.scale.linear()
+      .domain([0, 100])
+     .rangeRound([0, timeChartColumnHeight]);
 
+  timeChart = d3.select("#visualization-container").append("svg")
+            .attr('class', 'chart time-chart')
+            .attr('width', timeChartColumnWidth * 100)
+            .attr('height', timeChartColumnHeight);
+
+  // an interval for updating the chart
   setInterval(function() {
-    appendCell = function(d) {
+    appendColumn = function(d) {
+      this.attr('x', function(d, i) { return timeChartWidthFunction(i); })
+          .attr('y', function(d) { return timeChartColumnHeight - timeChartHeightFunction(d.value); })
+          .attr('width', timeChartColumnWidth)
+          .attr('height', function(d) { return timeChartHeightFunction(d.value); });
+    };
+
+    if (isChartDataDirty) {
+      var chartData = timeChart.selectAll('rect').data(timeFilterGroupByMinute.top(75));
+
+      chartData.call(appendColumn);
+
+      chartData.enter()
+               .append('rect')
+               .call(appendColumn);
+
+      chartData.exit().remove();
+    }
+    isChartDataDirty = false;
+  }, CHART_REFRESH_INTERVAL);
+
+  // an interval for updating the log entries
+  setInterval(function() {
+    appendMessageCell = function(d) {
       this.html(function(d) { 
+         if (d.column === 'message') {
+           $(this).addClass('log-message');
+         }
+
          if (d.column === 'find_more_html') {
            var more = $('<a />').attr('href', '#')
                                 .attr('rel', 'popover')
@@ -53,7 +85,7 @@ $(document).ready(function() {
        });
     };
 
-    if (isDirty) {
+    if (isLogMessagesDirty) {
       var minTimestamp = 0;
       if (messages.length > MAX_MESSAGES) {
         minTimestamp = messages.sort(sortTimeDescending)[MAX_MESSAGES - 1]['timestamp'];
@@ -73,29 +105,15 @@ $(document).ready(function() {
                         });
                       });
 
-      cells.call(appendCell);
+      cells.call(appendMessageCell);
       cells.exit().remove();
-      cells.enter().append('td').call(appendCell);
+      cells.enter().append('td').call(appendMessageCell);
 
       tbody.selectAll('tr').sort(sortTimeDescending);
 
-      /*var chartData = chart.selectAll('rect').data(timeFilterGroup.all());
-      chartData.enter().append('rect')
-               .attr('x', function(d, i) { return x(i) - .5; })
-               .attr('y', function(d) { return h - y(d.value) - .5; })
-               .attr('width', w)
-               .attr('height', function(d) { return y(d.value); });
-      chart.append("line")
-           .attr("x1", 0)
-           .attr("x2", w * 100)
-           .attr("y1", h - .5)
-           .attr("y2", h - .5)
-           .style("stroke", "#000");
-      chartData.exit().remove(); */
-
-      isDirty = false;
+      isLogMessagesDirty = false;
     }
-  }, REFRESH_INTERVAL);
+  }, LOG_REFRESH_INTERVAL);
 
   sortTimeDescending = function(a, b) {
     return d3.descending(a['timestamp'], b['timestamp']);
@@ -418,7 +436,8 @@ $(document).ready(function() {
   showLogMessage = function(location, log_message) {
     messages.push(log_message);
     messageFilter.add([log_message]);
-    isDirty = true;
+    isLogMessagesDirty = true;
+    isChartDataDirty = true;
   };
 });
 
