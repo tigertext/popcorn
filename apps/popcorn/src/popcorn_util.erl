@@ -19,7 +19,8 @@
          optional_env/2,
          hexstring/1,
          read/1,
-         rps_enabled/0]).
+         rps_enabled/0,
+         md5_hex/1]).
 
 node_event_counter(Node_Name) ->
     Prefix = <<"node_events__">>,
@@ -83,18 +84,26 @@ opt(Value, _)           -> Value.
 -spec apply_links(list(), list(), binary()) -> binary().
 apply_links([], [], In) -> In;
 apply_links([], Topics, In) ->
-    Topic = lists:nth(1, Topics),
-    Out = re:replace(binary_to_list(In), "#" ++ Topic, "<a href=\"#\" class=\"topic\" data=\"" ++ Topic ++ "\"><span class=\"label label-info\">#" ++ Topic ++ "</span></a>", [global, {return, list}]),
-    apply_links([], lists:nthtail(1, Topics), list_to_binary(Out));
+    Topic = list_to_binary(lists:nth(1, Topics)),
+    Symbol = <<"#">>,
+    A = <<"<a href=\"#\" class=\"topic\" data=\"">>,
+    B = <<"\"><span class=\"label label-info\">#">>,
+    C = <<"</span></a>">>,
+    Out = binary:replace(In, <<Symbol/binary, Topic/binary>>, <<A/binary, Topic/binary, B/binary, Topic/binary, C/binary>>),
+    apply_links([], lists:nthtail(1, Topics), Out);
 apply_links(Identities, Topics, In) ->
-    Identity = lists:nth(1, Identities),
-    Out = re:replace(binary_to_list(In), "@" ++ Identity, "<a href=\"#\" class=\"identity\" data=\"" ++ Identity ++ "\"><span class=\"label label-inverse\">@" ++ Identity ++ "</span></a>", [global, {return, list}]),
-    apply_links(lists:nthtail(1, Identities), Topics, list_to_binary(Out)).
+    Identity = list_to_binary(lists:nth(1, Identities)),
+    Symbol = <<"@">>,
+    A = <<"<a href=\"#\" class=\"identity\" data=\"">>,
+    B = <<"\"><span class=\"label label-inverse\">@">>,
+    C = <<"</span></a>">>,
+    Out = binary:replace(In, <<Symbol/binary, Identity/binary>>, <<A/binary, Identity/binary, B/binary, Identity/binary, C/binary>>),
+    apply_links(lists:nthtail(1, Identities), Topics, Out).
 
 -spec format_log_message(#log_message{}, #popcorn_node{} | undefined) -> list().
 format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_function=Function, log_line=Line, log_pid=Pid,
                                 severity=Severity, message=Message, topics=Topics, identities=Identities, log_product=Product,
-                                log_version=Version},
+                                log_version=Version, message_id=Message_Id, log_nodename=Node_Name},
                    Popcorn_Node) ->
   UTC_Timestamp = calendar:now_to_universal_time({Timestamp div 1000000000000, 
                                                   Timestamp div 1000000 rem 1000000,
@@ -103,15 +112,14 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
   Formatted_DateTime = lists:flatten(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0BZ", [Year, Month, Day, Hour, Minute, Second])),
   Formatted_Time     = lists:flatten(io_lib:format("~2.10.0B:~2.10.0B:~2.10.0B", [Hour, Minute, Second])),
 
-  Find_More_Html     = "<strong>Filter current list to show only messages with matching:</strong><br /><br />" ++
-                       "<label class='checkbox popover-label'><input type='checkbox'>Severity: " ++ number_to_severity(Severity) ++ "</label>" ++
-                       "<label class='checkbox popover-label'><input type='checkbox'>Module: " ++ binary_to_list(opt(Module, <<"Not set">>)) ++ "</label>" ++
-                       "<label class='checkbox popover-label'><input type='checkbox'>Function: " ++ binary_to_list(opt(Function, <<"Not set">>)) ++ "</label>" ++
-                       "<label class='checkbox popover-label'><input type='checkbox'>Line: " ++ binary_to_list(opt(Line, <<"?">>)) ++ " in " ++ binary_to_list(opt(Module, <<"not set">>)) ++ "</label>" ++
-                       "<label class='checkbox popover-label'><input type='checkbox'>Pid: " ++ binary_to_list(opt(Pid, <<"Not set">>)) ++ "</label>" ++
-                       lists:append(["<label class='checkbox popover-label'><input type='checkbox'>@" ++ Identity ++ "</label>" || Identity <- Identities]) ++
-                       lists:append(["<label class='checkbox popover-label'><input type='checkbox'>#" ++ Topic ++ "</label>" || Topic <- Topics]) ++ 
-                       "<br /><button class='btn btn-mini' type='button'>Apply Filter</button>",
+  More_Html =
+    "<strong>Message " ++ binary_to_list(Message_Id) ++ "</strong><hr />" ++
+    "<label class='popover-label'><strong>Node: </strong>" ++ binary_to_list(Node_Name) ++ "</label>" ++
+    "<label class='popover-label'><strong>Severity: </strong>" ++ number_to_severity(Severity) ++ "</label>" ++
+    "<label class='popover-label'><strong>Module: </strong>" ++ binary_to_list(opt(Module, <<"Not set">>)) ++ "</label>" ++
+    "<label class='popover-label'><strong>Function: </strong>" ++ binary_to_list(opt(Function, <<"Not set">>)) ++ "</label>" ++
+    "<label class='popover-label'><strong>Line: </strong>" ++ binary_to_list(opt(Line, <<"?">>)) ++ " in " ++ binary_to_list(opt(Module, <<"not set">>)) ++ "</label>" ++
+    "<label class='popover-label'><strong>Pid: </strong>" ++ binary_to_list(opt(Pid, <<"Not set">>)) ++ "</label>",
 
   Linked_Message = apply_links(Identities, Topics, Message),
 
@@ -128,7 +136,7 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
    {'identities',       {array, Identities}},
    {'time',             Formatted_Time},
    {'datetime',         Formatted_DateTime},
-   {'find_more_html',   Find_More_Html},
+   {'find_more_html',   More_Html},
    {'log_product',      binary_to_list(opt(Product, <<"Unknown">>))},
    {'log_version',      binary_to_list(opt(Version, <<"Unknown">>))},
    {'log_module',       binary_to_list(opt(Module, <<"Unknown">>))},
@@ -136,6 +144,7 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
    {'log_line',         binary_to_list(opt(Line, <<"??">>))},
    {'log_pid',          binary_to_list(opt(Pid, <<"?">>))},
    {'message_severity', number_to_severity(Severity)},
+   {'message_severity_raw', Severity},
    {'message',          binary_to_list(Linked_Message)}].
 
 css_file() ->
@@ -168,3 +177,13 @@ rps_enabled() ->
                             Rps_Config -> Rps_Config
                         end,
     proplists:get_value(enabled, Rps_Options).
+
+
+md5_hex(S) ->
+    Md5_bin  = erlang:md5(S),
+    Md5_list = binary_to_list(Md5_bin),
+    lists:flatten(list_to_hex(Md5_list)).
+list_to_hex(L) -> lists:map(fun(X) -> int_to_hex(X) end, L).
+int_to_hex(N) when N < 256 -> [hex(N div 16), hex(N rem 16)].
+hex(N) when N < 10 -> $0+N;
+hex(N) when N >= 10, N < 16 -> $a + (N-10).

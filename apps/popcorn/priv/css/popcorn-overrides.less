@@ -61,6 +61,9 @@ body {
 
             border: 3px solid #2c3234;
             float: left;
+
+            width: 46px;
+            height: 46px;
         }
 
         span.name {
@@ -740,6 +743,7 @@ td.load-more {
 
 td.log-message {
   width:893px;
+  max-width:893px;
   word-wrap:break-word;
   table-layout:fixed;
 }
@@ -769,10 +773,36 @@ ul.nav-filters li.subsection-header {
   cursor:pointer;
 }
 
+.stream-popover-outer {
+  width:400px;
+}
+
+.stream-popover-inner {
+  width:400px;
+}
+
 .filter-popover-outer {
   width:400px;
 }
 
 .filter-popover-inner {
   width:400px;
+}
+
+.message-more-popover-outer {
+  width:300px;
+}
+
+.message-more-popover-inner {
+  width:300px;
+}
+
+.chart rect {
+  fill: steelblue;
+  stroke: white;
+}
+
+.time-chart {
+  margin-left:20px;
+  margin-right:20px;
 }

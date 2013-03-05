@@ -78,7 +78,10 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 get_tags(Message) ->
-    {tokenize(Message, "#"), tokenize(Message, "@")}.
+    {lists:filter(fun(Identity) ->
+         string:substr(Identity, 1, 5) =/= "Port<"
+       end, tokenize(Message, "#")),
+     tokenize(Message, "@")}.
 
 tokenize(Message, Character) ->
     [string:substr(Word, 2, length(Word) -1) || Word <- string:tokens(Message, " ,;-"), string:substr(Word, 1, 1) =:= Character].
