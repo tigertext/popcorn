@@ -39,6 +39,8 @@
          terminate/2,
          code_change/3]).
 
+-define(DAY_IN_MILLIS, 24 * 60 * 60 * 1000000).
+
 start_link() -> gen_server:start_link(?MODULE, [], []).
 start_worker() -> gen_server:start_link(?MODULE, [worker], []).
 
@@ -69,6 +71,11 @@ init([]) ->
                                            {record_name, alert_key},
                                            {type,        bag},
                                            {attributes,  record_info(fields, alert_key)}])]),
+    ?POPCORN_INFO_MSG("\n\t[alert_timestamps: ~p]",
+        [mnesia:create_table(popcorn_alert_timestamps, [{disc_copies, [node()]},
+                                           {record_name, alert_timestamps},
+                                           {type,        bag},
+                                           {attributes,  record_info(fields, alert_timestamps)}])]),
     ?POPCORN_INFO_MSG("\n\t[alert_counter: ~p]",
         [mnesia:create_table(popcorn_alert_keyset, [{disc_copies, [node()]},
                                            {record_name, alert_counter},
@@ -220,6 +227,25 @@ handle_call({search_messages, {S, P, V, M, L, Page_Size, Starting_Timestamp}}, _
     {atomic, Messages} = mnesia:transaction(Transaction),
     {reply, Messages, State};
 
+%% Returns the alert timestamps, sorted, caps at 10k entries
+handle_call({get_alert_timestamps, Severities}, _From, State) ->
+    %% Calculate 24 hours previous
+    {Mega, Sec, Micro} = now(),
+    Timestamp = (Mega * 1000000 * 1000000 + Sec * 1000000 + Micro) - ?DAY_IN_MILLIS,
+    Starting_Timestamp = {Mega1, Sec1, Micro1} = {Timestamp div 1000000000000, 
+                                                  Timestamp div 1000000 rem 1000000,
+                                                  Timestamp rem 1000000},
+    Transaction = fun() ->
+            Query = qlc:q([TS || Alert = #alert_timestamps{timestamp = TS, severity = S} <- 
+                    mnesia:table(popcorn_alert_timestamps), (Starting_Timestamp == undefined orelse TS > Starting_Timestamp), 
+                      lists:member(Alert#alert_timestamps.severity, Severities)]),
+        Order = fun(A, B) -> B < A end,
+        Cursor = qlc:cursor(qlc:sort(Query, [{order, Order}])),
+        qlc:next_answers(Cursor, 10000)
+    end,
+    {atomic, Messages} = mnesia:transaction(Transaction),
+    {reply, Messages, State};
+
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
 
 handle_cast({expire_logs_matching, _}, State) ->
@@ -272,6 +298,10 @@ handle_cast({new_release_scm, Record}, State) ->
 handle_cast({new_alert, Key, #alert{} = Record}, State) ->
     ?RPS_INCREMENT(storage_total),
     mnesia:dirty_write(popcorn_alert, Record#alert{location=Key}),
+    {noreply, State};
+
+handle_cast({new_alert_timestamp, Key, Severity, #alert{timestamp = Timestamp} = Record}, State) ->
+    mnesia:dirty_write(popcorn_alert_timestamps, #alert_timestamps{key=Key, timestamp=Timestamp, severity=Severity}),
     {noreply, State};
 
 handle_cast({new_alert_key, Type, Key}, State) ->

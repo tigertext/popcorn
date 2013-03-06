@@ -70,7 +70,7 @@ handle(Req, State) ->
                     Jsons =
                       [jsonify(popcorn_util:format_log_message(Log_Message, undefined))
                          || Log_Message <- Log_Messages],
-                    Output = lists:flatten(mochijson:encode({array, Jsons})),
+                    Output = binary_to_list(jiffy:encode({Jsons})),
                     {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
                     {ok, Reply, State}
             end;
@@ -104,6 +104,29 @@ handle(Req, State) ->
                     {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
                     {ok, Reply, State}
             end;
+
+        {{<<"GET">>, _}, {<<"/data/alert_timestamps">>, _}} ->
+            %% TODO: parse params for timezone
+            %% TODO: parse params for severities chosen
+            %% TODO: update the graph live as new data comes in
+            ?POPCORN_DEBUG_MSG("#http_request for #alert_timestamps"),
+            Timestamps = gen_server:call(pg2:get_closest_pid('storage'), {get_alert_timestamps, [8,128]}),
+            Dict = lists:foldl(fun(Timestamp, Dict) -> 
+                Date_String = format_timestamp(date_util:epoch_to_gregorian_seconds(Timestamp)),
+                dict:update(Date_String, fun(C) -> C + 1 end, 1, Dict) 
+            end, dict:new(), Timestamps),
+            Now_TS = date_util:now_to_gregorian_seconds(),
+            Range = [begin
+                Last_Hour = Now_TS - 60 * 60 * (Hour-1),
+                format_timestamp(Last_Hour)
+             end || Hour <- lists:seq(1,24)],
+            Range_List = dict:to_list(Dict),
+            Output = [<<"date\tcount\n">>] ++
+                     [begin
+                        io_lib:format("~p\t~p\n", [Hour, proplists:get_value(Hour, Range_List, 0)])
+                     end || Hour <- lists:reverse(Range)],
+            {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
+            {ok, Reply, State};
 
         {{<<"GET">>, _}, {<<"/nodes">>, _}} ->
             ?POPCORN_DEBUG_MSG("#http_request for #nodes"),
@@ -195,7 +218,19 @@ handle(Req, State) ->
 
 terminate(_Req, _State) -> ok.
 
-jsonify(Vals) -> {struct, [do_jsonify(Val) || Val <- Vals]}.
+jsonify(Vals) -> {[do_jsonify(Val) || Val <- Vals]}.
 do_jsonify({Key, String}) when is_list(String) -> {atom_to_binary(Key, latin1), list_to_binary(String)};
 do_jsonify({Key, Atom}) when is_atom(Atom) -> {atom_to_binary(Key, latin1), atom_to_binary(Atom, latin1)};
 do_jsonify({Key, Other}) -> {atom_to_binary(Key, latin1), Other}.
+
+format_timestamp(Timestamp) ->
+    {{Year, Month, Day}, {Hour, Min, Sec}} = calendar:gregorian_seconds_to_datetime(Timestamp),
+    %io_lib:format("~B/~B/~4..0B~2B", [Month, Day, Year, Hour]).
+    normalize_hour(Hour).
+
+normalize_hour(0) -> "12pm";
+normalize_hour(Hour) when Hour > 12 ->
+    integer_to_list(Hour - 12) ++ "pm";
+normalize_hour(Hour) ->
+    integer_to_list(Hour) ++ "am".
+

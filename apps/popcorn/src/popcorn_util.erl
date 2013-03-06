@@ -20,7 +20,10 @@
          hexstring/1,
          read/1,
          rps_enabled/0,
-         md5_hex/1]).
+         md5_hex/1,
+         jiffy_safe/1,
+         jiffy_safe_array/1,
+         jiffy_safe_proplist/1]).
 
 node_event_counter(Node_Name) ->
     Prefix = <<"node_events__">>,
@@ -129,23 +132,23 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
       _ -> {Popcorn_Node#popcorn_node.role, Popcorn_Node#popcorn_node.node_name}
     end,
 
-  [{'timestamp',        Timestamp},
-   {'role',             Role},
-   {'node',             Name},
-   {'topics',           {array, Topics}},
-   {'identities',       {array, Identities}},
-   {'time',             Formatted_Time},
-   {'datetime',         Formatted_DateTime},
-   {'find_more_html',   More_Html},
-   {'log_product',      binary_to_list(opt(Product, <<"Unknown">>))},
-   {'log_version',      binary_to_list(opt(Version, <<"Unknown">>))},
-   {'log_module',       binary_to_list(opt(Module, <<"Unknown">>))},
-   {'log_function',     binary_to_list(opt(Function, <<"Unknown">>))},
-   {'log_line',         binary_to_list(opt(Line, <<"??">>))},
-   {'log_pid',          binary_to_list(opt(Pid, <<"?">>))},
-   {'message_severity', number_to_severity(Severity)},
-   {'message_severity_raw', Severity},
-   {'message',          binary_to_list(Linked_Message)}].
+  [{'timestamp',        jiffy_safe(Timestamp)},
+   {'role',             jiffy_safe(opt(Role, <<"Unknown Role">>))},
+   {'node',             jiffy_safe(opt(Name, <<"Unknown Node">>))},
+   {'topics',           jiffy_safe_array(Topics)},
+   {'identities',       jiffy_safe_array(Identities)},
+   {'time',             jiffy_safe(Formatted_Time)},
+   {'datetime',         jiffy_safe(Formatted_DateTime)},
+   {'find_more_html',   jiffy_safe(More_Html)},
+   {'log_product',      jiffy_safe(opt(Product, <<"Unknown">>))},
+   {'log_version',      jiffy_safe(opt(Version, <<"Unknown">>))},
+   {'log_module',       jiffy_safe(opt(Module, <<"Unknown">>))},
+   {'log_function',     jiffy_safe(opt(Function, <<"Unknown">>))},
+   {'log_line',         jiffy_safe(opt(Line, <<"??">>))},
+   {'log_pid',          jiffy_safe(opt(Pid, <<"?">>))},
+   {'message_severity', jiffy_safe(number_to_severity(Severity))},
+   {'message_severity_raw', jiffy_safe(Severity)},
+   {'message',          jiffy_safe(Linked_Message)}].
 
 css_file() ->
     case file:read_file_info(code:priv_dir(popcorn) ++ "/css/popcorn.css") of
@@ -187,3 +190,10 @@ list_to_hex(L) -> lists:map(fun(X) -> int_to_hex(X) end, L).
 int_to_hex(N) when N < 256 -> [hex(N div 16), hex(N rem 16)].
 hex(N) when N < 10 -> $0+N;
 hex(N) when N >= 10, N < 16 -> $a + (N-10).
+
+jiffy_safe_array([]) -> [];
+jiffy_safe_array(Values) when is_list(Values) -> [jiffy_safe(Value) || Value <- Values].
+jiffy_safe(Value) when is_integer(Value) -> Value;
+jiffy_safe(Value) when is_list(Value) -> list_to_binary(Value);
+jiffy_safe(Value) when is_binary(Value) -> Value.
+jiffy_safe_proplist(List) -> [{K, popcorn_util:jiffy_safe(V)} || {K,V} <- List].

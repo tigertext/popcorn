@@ -35,10 +35,10 @@ known_severities(_) ->
 -spec applied_filters(dict()) -> string().
 applied_filters(Context) ->
     Default_Filters = dict:to_list(proplists:get_value(default_filters, dict:to_list(Context))),
-    Json = {struct, lists:map(fun({Name, Value}) ->
-                        {atom_to_list(Name), {array, Value}}
-                      end, Default_Filters)},
-    lists:flatten(mochijson:encode(Json)).
+    Json = {lists:map(fun({Name, Value}) ->
+                          {Name, popcorn_util:jiffy_safe_array(Value)}
+            end, Default_Filters)},
+    binary_to_list(jiffy:encode(Json)).
 
 -spec streaming_url(dict()) -> string().
 streaming_url(Context) ->
