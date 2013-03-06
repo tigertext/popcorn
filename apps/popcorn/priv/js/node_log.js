@@ -8,16 +8,18 @@ var isVisible = false,
     messages = [],
     messageFilter = crossfilter(messages),
     timeFilterDimension = messageFilter.dimension(function(log_message) {
-      return Math.floor(log_message['timestamp'] / 1000);
+      return Math.floor(log_message['timestamp'] / 1000 / 1000);
     }),
     timeFilterGroupByMinute = timeFilterDimension.group(function(second) {
       return Math.floor(second / 60);
     }),
     messagesTable, tbody,
     timeChart,
+    maxTimestamp = 0,
     isLogMessagesDirty = false,
+    isChartDataDirty = false,
     LOG_REFRESH_INTERVAL = 250,
-    CHART_REFRESH_INTERVAL = 2000,
+    CHART_REFRESH_INTERVAL = 200,
     MAX_MESSAGES = 500;
 
 var MAX_IDENTITIES = 15;
@@ -25,13 +27,6 @@ var MAX_IDENTITIES = 15;
 $(document).ready(function() {
   var timeChartColumnWidth = 15,
       timeChartColumnHeight = 80;
-  var timeChartWidthFunction = d3.scale.linear()
-      .domain([0, 1])
-      .range([0, timeChartColumnWidth]);
-  var timeChartHeightFunction = d3.scale.linear()
-      .domain([0, 100])
-     .rangeRound([0, timeChartColumnHeight]);
-
   timeChart = d3.select("#visualization-container").append("svg")
             .attr('class', 'chart time-chart')
             .attr('width', timeChartColumnWidth * 100)
@@ -39,15 +34,26 @@ $(document).ready(function() {
 
   // an interval for updating the chart
   setInterval(function() {
+    var maxValue = 0;
+    for (var i = 0; i < timeFilterGroupByMinute.all().length; i++) {
+      if (timeFilterGroupByMinute.all()[i].value > maxValue) {
+        maxValue = timeFilterGroupByMinute.all()[i].value;
+      }
+    }
+    var timeChartColumnLocX = d3.scale.linear().domain([60, 0]).rangeRound([0, 1100]);
+    var timeChartHeightFunction = d3.scale.linear()
+                                          .domain([0, maxValue])
+                                          .rangeRound([0, timeChartColumnHeight]);
+
     appendColumn = function(d) {
-      this.attr('x', function(d, i) { return timeChartWidthFunction(i); })
+      this.attr('x', function(d, i) { return timeChartColumnLocX(Math.floor(maxTimestamp / 1000 / 1000 / 60) - d.key); })
           .attr('y', function(d) { return timeChartColumnHeight - timeChartHeightFunction(d.value); })
           .attr('width', timeChartColumnWidth)
           .attr('height', function(d) { return timeChartHeightFunction(d.value); });
     };
 
     if (isChartDataDirty) {
-      var chartData = timeChart.selectAll('rect').data(timeFilterGroupByMinute.top(75));
+      var chartData = timeChart.selectAll('rect').data(timeFilterGroupByMinute.all());
 
       chartData.call(appendColumn);
 
@@ -434,6 +440,10 @@ $(document).ready(function() {
   };
 
   showLogMessage = function(location, log_message) {
+    if (maxTimestamp < log_message.timestamp) {
+      maxTimestamp = log_message.timestamp;
+    }
+
     messages.push(log_message);
     messageFilter.add([log_message]);
     isLogMessagesDirty = true;
