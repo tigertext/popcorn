@@ -1,17 +1,28 @@
 -module(view_alerts).
 -author('elbrujohalcon@inaka.net').
+-behaviour(view_generic).
 
 -include("include/popcorn.hrl").
 
--export([head_includes/0,
+-export([username/1,
+         avatar_path/1,
+         head_includes/1,
          alerts/1,
-         username/1,
          known_severities/1,
          header_button/1,
          sort_button/1]).
 
--spec head_includes() -> list().
-head_includes() -> popcorn_util:head_includes().
+-spec username(dict()) -> string().
+username(Context) ->
+  mustache:get(username, Context).
+
+-spec avatar_path(dict()) -> string().
+avatar_path(Context) ->
+  "http://www.gravatar.com/avatar/" ++ popcorn_util:md5_hex(mustache:get(username, Context)).
+
+-spec head_includes(dict()) -> list().
+head_includes(_) ->
+  popcorn_util:head_includes().
 
 alerts(Context) ->
 	Alerts =
@@ -36,9 +47,6 @@ sort_button(Context) ->
 			"time"  -> [{href, "/alerts?sort=count"}, {label, "Count"}];
 			"count" -> [{href, "/alerts?sort=time"}, {label, "Time"}]
 		end)].
-
--spec username(dict()) -> string().
-username(Context) -> view_generic:username(Context).
 
 -spec known_severities(dict()) -> list().
 known_severities(Context) ->
