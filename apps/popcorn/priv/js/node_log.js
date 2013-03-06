@@ -5,12 +5,14 @@ var isVisible = false,
     foundRoles = [],
     foundTopics = [],
     foundIdentities = [],
-    messages = [],
-    messageFilter = crossfilter(messages),
-    timeFilterDimension = messageFilter.dimension(function(log_message) {
+    messageFilter = crossfilter([]),
+    timeExactFilterDimension = messageFilter.dimension(function(log_message) {
+      return log_message['timestamp'];
+    }),
+    timeSecondFilterDimension = messageFilter.dimension(function(log_message) {
       return Math.floor(log_message['timestamp'] / 1000 / 1000);
     }),
-    timeFilterGroupByMinute = timeFilterDimension.group(function(second) {
+    timeFilterGroupByMinute = timeSecondFilterDimension.group(function(second) {
       return Math.floor(second / 60);
     }),
     messagesTable, tbody,
@@ -93,13 +95,14 @@ $(document).ready(function() {
 
     if (isLogMessagesDirty) {
       var minTimestamp = 0;
-      if (messages.length > MAX_MESSAGES) {
-        minTimestamp = messages.sort(sortTimeDescending)[MAX_MESSAGES - 1]['timestamp'];
+      if (messageFilter.size() > MAX_MESSAGES) {
+        var topMessages = timeExactFilterDimension.top(MAX_MESSAGES);
+        minTimetamp = topMessages.slice(-1)[0]['timestamp'];
       }
 
       var columns = ['find_more_html', 'time', 'message_severity', 'message'];
       var rows = tbody.selectAll('tr')
-                      .data(messages.filter(function(log_message) { return log_message.timestamp > minTimestamp; }));
+                      .data(timeExactFilterDimension.top(MAX_MESSAGES).filter(function(log_message) { return log_message.timestamp > minTimestamp; }));
 
       rows.enter().append('tr');
       rows.exit().remove();
@@ -444,7 +447,6 @@ $(document).ready(function() {
       maxTimestamp = log_message.timestamp;
     }
 
-    messages.push(log_message);
     messageFilter.add([log_message]);
     isLogMessagesDirty = true;
     isChartDataDirty = true;
