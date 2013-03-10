@@ -13,7 +13,9 @@ var arc = d3.svg.arc().innerRadius(110 * .6).outerRadius(110),
     TIME_CHART_PERIOD = 5,   // the time period for the time d3 graph
     FLUSH_DATA_INTERVAL = 100,  // how often to flush data from the incoming array and into the data that powers the charts
     CHART_REFRESH_INTERVAL = 100, // how often to refresh the charts
-    EMPTY_SEVERITY_HASH = {1:0, 2:0, 4:0, 8:0, 16:0, 32:0, 64:0, 128:0};
+    EMPTY_SEVERITY_HASH = {1:0, 2:0, 4:0, 8:0, 16:0, 32:0, 64:0, 128:0},
+    SEVERITY_LOOKUP_HASH = {1:0, 2:1, 4:2, 8:3, 16:4, 32:5, 64:6, 128:7};
+
 
 while (timestampOffset % 5) { timestampOffset--; }
 
@@ -21,8 +23,8 @@ $(document).ready(function() {
   var timeChartColumnWidth = 15, timeChartColumnHeight = 80;
   timeChart = d3.select('#visualization-container').append('svg').attr('class', 'chart time-chart').attr('height', timeChartColumnHeight);
   severityChart = d3.select('#visualization-container').append('svg').attr('class', 'chart severity-chart');
-  roleChart = d3.select('#visualization-container').append('svg').attr('class', 'chart severity-chart');
-  nodeChart = d3.select('#visualization-container').append('svg').attr('class', 'chart severity-chart');
+  roleChart = d3.select('#visualization-container').append('svg').attr('class', 'chart role-chart');
+  nodeChart = d3.select('#visualization-container').append('svg').attr('class', 'chart node-chart');
 
   updateTimeChart = function() {
     var maxValue = 0;  // TODO get this value instead of iterating
@@ -36,7 +38,7 @@ $(document).ready(function() {
 
     appendColumn = function() {
       this.attr('x', function(d, i) { return timeChartColumnLocX(i); })
-          .attr('y', function(d) { return timeChartColumnHeight - timeChartHeightFunction(d); })
+          .attr('y', function(d) { return timeChartColumnHeight - timeChartHeightFunction(d) + 1; })
           .attr('width', timeChartColumnWidth)
           .attr('height', function(d) { return timeChartHeightFunction(d); });
     };
@@ -47,16 +49,37 @@ $(document).ready(function() {
     chartData.exit().remove();
   };
   updateSeverityChart = function() {
-    /*severityChart.data([severityFilterGroup.all()]);
-    var arcs = severityChart.selectAll("g.arc")
-      .data(donut.value(function(d) { return d.value }))
-      .enter().append("svg:g")
-      .attr("class", "arc")
-      .attr("transform", "translate(110, 110)");
+    var severityCounts = [];
+    for (var i in severitiesByPeriod) {
+      for (var j in severitiesByPeriod[i]) {
+        if (severityCounts[SEVERITY_LOOKUP_HASH[j]]) {
+          severityCounts[SEVERITY_LOOKUP_HASH[j]].value += severitiesByPeriod[i][j];
+        } else {
+          severityCounts[SEVERITY_LOOKUP_HASH[j]] = {'key': j, 'value': severitiesByPeriod[i][j]};
+        }
+      }
+    }
 
-    arcs.append("svg:path")
-      .attr("fill", function(d, i) { return color(i); })
-      .attr("d", arc);*/
+    var totalSeverityCounts = 0;
+    for (var i = 0; i < severityCounts.length; i++) {
+      totalSeverityCounts += severityCounts[i].value;
+    }
+    if (totalSeverityCounts === 0) {
+      return;
+    }
+
+    appendSegment = function() {
+      this.selectAll('path').attr('d', arc);
+    };
+
+    severityChart.data([severityCounts]);
+    var arcs = severityChart.selectAll("g.arc")
+      .data(donut.value(function(d) { return d.value; }));
+
+    arcs.call(appendSegment);
+    arcs.enter().append('svg:g').attr('class', 'arc').attr('transform', 'translate(110, 110)')
+                .append('svg:path').attr("fill", function(d, i) { return color(i); });// attr("d", arc);
+
   };
   updateRoleChart = function() {
 
