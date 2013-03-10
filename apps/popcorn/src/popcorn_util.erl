@@ -23,7 +23,10 @@
          md5_hex/1,
          jiffy_safe/1,
          jiffy_safe_array/1,
-         jiffy_safe_proplist/1]).
+         jiffy_safe_proplist/1,
+         top/0, top/1, top/2,
+         ftop/0, ftop/1, ftop/2
+     ]).
 
 node_event_counter(Node_Name) ->
     Prefix = <<"node_events__">>,
@@ -197,3 +200,58 @@ jiffy_safe(Value) when is_integer(Value) -> Value;
 jiffy_safe(Value) when is_list(Value) -> list_to_binary(Value);
 jiffy_safe(Value) when is_binary(Value) -> Value.
 jiffy_safe_proplist(List) -> [{K, popcorn_util:jiffy_safe(V)} || {K,V} <- List].
+
+-spec top() -> [tuple()].
+top() -> top(10).
+
+-spec top(pos_integer()) -> [tuple()].
+top(Length) -> top(Length, mq).
+
+-type top_field() :: function | fn | name | nm | messages | mq | reductions | rd | psize | ps.
+-spec top(pos_integer(), top_field()) -> [tuple()].
+top(Length, Sort) ->
+    lager:info("Gathering Process List..."),
+    {Time, Procs} =
+        timer:tc(
+            fun() ->
+                lists:sublist(
+                    lists:reverse(
+                        lists:sort(
+                            [{top_field(Sort,P), P}
+                             || P <- pman_process:r_processes(node()),
+                                not pman_process:is_system_process(P)])),
+                        Length)
+            end),
+    lager:info("Process List gathered in ~p secs", [round(Time/1000000)]),
+    [{Pid,
+      [{nm, top_field(nm, Pid)},
+       {mq, top_field(mq, Pid)},
+       {rd, top_field(rd, Pid)},
+       {ps, top_field(ps, Pid)},
+       {fn, top_field(fn, Pid)}]} || {_, Pid} <- Procs].
+
+top_field(mq, P) -> pman_process:msg(P);
+top_field(rd, P) -> pman_process:reds(P);
+top_field(ps, P) -> pman_process:psize(P);
+top_field(nm, P) -> pman_process:get_name(P);
+top_field(fn, P) -> pman_process:function_info(P);
+top_field(messags, P)   -> pman_process:msg(P);
+top_field(reductions, P)-> pman_process:reds(P);
+top_field(psize, P)     -> pman_process:psize(P);
+top_field(name, P)      -> pman_process:get_name(P);
+top_field(function, P)  -> pman_process:function_info(P).
+
+-spec ftop() -> ok.
+ftop() -> ftop(10).
+
+-spec ftop(pos_integer()) -> ok.
+ftop(Length) -> ftop(Length, mq).
+
+-spec ftop(pos_integer(), top_field()) -> ok.
+ftop(Length, Sort) ->
+    Data = top(Length, Sort),
+    io:format("~-15s | ~-25s | ~-7s | ~-7s | ~-7s | ~s~n", [pid, name, msgq, reds, psize, function]),
+    io:format("~100c~n", [$-]),
+    lists:foreach(
+        fun({Pid, Fields}) -> io:format("~15s | ~-25s | ~7w | ~7w | ~7w | ~w~n", [pid_to_list(Pid) | [F || {_, F} <- Fields]]) end,
+        Data).
