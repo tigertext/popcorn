@@ -75,11 +75,11 @@ init([]) ->
     %% and update the state so we can use timestamps instead of select/4 in a transaction
     Stream = State#state.stream,
     Filters = Stream#stream.applied_filters ++ [{'max_timestamp', Stream#stream.max_timestamp}],
-    gen_server:cast(?STORAGE_PID, {send_recent_matching_log_lines, self(), 100, lists:filter(fun({_, V}) -> V =/= undefined end, Filters)}),
+    gen_server:cast(?STORAGE_PID, {send_recent_matching_log_lines, self(), 500, lists:filter(fun({_, V}) -> V =/= undefined end, Filters)}),
     {next_state, 'STREAMING', State};
 
 'STREAMING'(set_time_stream, State) ->
-    %% when we set it to "current", we clear the browser, send the 100 most recent events, and then stream all going forward
+    %% when we set it to "current", we clear the browser, send the most recent events, and then stream all going forward
     Stream = State#state.stream,
     case Stream#stream.max_timestamp of
         undefined -> ok;

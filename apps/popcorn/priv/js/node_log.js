@@ -7,35 +7,73 @@ var isVisible = false,
     foundIdentities = [],
     messages = [],
     messageFilter = crossfilter(messages),
-    timeFilterDimension = messageFilter.dimension(function(m) {
-      var d = new Date(m['timestamp']);
-      return d.getHours() + d.getMinutes() / 5;
+    timeFilterDimension = messageFilter.dimension(function(log_message) {
+      return Math.floor(log_message['timestamp'] / 1000 / 1000);
     }),
-    timeFilterGroup = timeFilterDimension.group(Math.floor),
-    messagesTable, tbody, chart,
-    isDirty = false,
-    REFRESH_INTERVAL = 250,
-    MAX_MESSAGES = 100;
+    timeFilterGroupByMinute = timeFilterDimension.group(function(second) {
+      return Math.floor(second / 60);
+    }),
+    messagesTable, tbody,
+    timeChart,
+    maxTimestamp = 0,
+    isLogMessagesDirty = false,
+    isChartDataDirty = false,
+    LOG_REFRESH_INTERVAL = 250,
+    CHART_REFRESH_INTERVAL = 200,
+    MAX_MESSAGES = 500;
 
 var MAX_IDENTITIES = 15;
 
 $(document).ready(function() {
-  var w = 9,
-      h = 64;
-  var x = d3.scale.linear()
-      .domain([0, 1])
-      .range([0, w]);
-  var y = d3.scale.linear()
-      .domain([0, 128])
-     .rangeRound([0, h]);
-  /*chart = d3.select("#visualization-container").append("svg")
+  var timeChartColumnWidth = 15,
+      timeChartColumnHeight = 80;
+  timeChart = d3.select("#visualization-container").append("svg")
             .attr('class', 'chart time-chart')
-            .attr('width', w * 100)
-            .attr('height', h);*/
+            .attr('width', timeChartColumnWidth * 100)
+            .attr('height', timeChartColumnHeight);
 
+  // an interval for updating the chart
   setInterval(function() {
-    appendCell = function(d) {
+    var maxValue = 0;
+    for (var i = 0; i < timeFilterGroupByMinute.all().length; i++) {
+      if (timeFilterGroupByMinute.all()[i].value > maxValue) {
+        maxValue = timeFilterGroupByMinute.all()[i].value;
+      }
+    }
+    var timeChartColumnLocX = d3.scale.linear().domain([60, 0]).rangeRound([0, 1100]);
+    var timeChartHeightFunction = d3.scale.linear()
+                                          .domain([0, maxValue])
+                                          .rangeRound([0, timeChartColumnHeight]);
+
+    appendColumn = function(d) {
+      this.attr('x', function(d, i) { return timeChartColumnLocX(Math.floor(maxTimestamp / 1000 / 1000 / 60) - d.key); })
+          .attr('y', function(d) { return timeChartColumnHeight - timeChartHeightFunction(d.value); })
+          .attr('width', timeChartColumnWidth)
+          .attr('height', function(d) { return timeChartHeightFunction(d.value); });
+    };
+
+    if (isChartDataDirty) {
+      var chartData = timeChart.selectAll('rect').data(timeFilterGroupByMinute.all());
+
+      chartData.call(appendColumn);
+
+      chartData.enter()
+               .append('rect')
+               .call(appendColumn);
+
+      chartData.exit().remove();
+    }
+    isChartDataDirty = false;
+  }, CHART_REFRESH_INTERVAL);
+
+  // an interval for updating the log entries
+  setInterval(function() {
+    appendMessageCell = function(d) {
       this.html(function(d) { 
+         if (d.column === 'message') {
+           $(this).addClass('log-message');
+         }
+
          if (d.column === 'find_more_html') {
            var more = $('<a />').attr('href', '#')
                                 .attr('rel', 'popover')
@@ -53,7 +91,7 @@ $(document).ready(function() {
        });
     };
 
-    if (isDirty) {
+    if (isLogMessagesDirty) {
       var minTimestamp = 0;
       if (messages.length > MAX_MESSAGES) {
         minTimestamp = messages.sort(sortTimeDescending)[MAX_MESSAGES - 1]['timestamp'];
@@ -73,29 +111,15 @@ $(document).ready(function() {
                         });
                       });
 
-      cells.call(appendCell);
+      cells.call(appendMessageCell);
       cells.exit().remove();
-      cells.enter().append('td').call(appendCell);
+      cells.enter().append('td').call(appendMessageCell);
 
       tbody.selectAll('tr').sort(sortTimeDescending);
 
-      /*var chartData = chart.selectAll('rect').data(timeFilterGroup.all());
-      chartData.enter().append('rect')
-               .attr('x', function(d, i) { return x(i) - .5; })
-               .attr('y', function(d) { return h - y(d.value) - .5; })
-               .attr('width', w)
-               .attr('height', function(d) { return y(d.value); });
-      chart.append("line")
-           .attr("x1", 0)
-           .attr("x2", w * 100)
-           .attr("y1", h - .5)
-           .attr("y2", h - .5)
-           .style("stroke", "#000");
-      chartData.exit().remove(); */
-
-      isDirty = false;
+      isLogMessagesDirty = false;
     }
-  }, REFRESH_INTERVAL);
+  }, LOG_REFRESH_INTERVAL);
 
   sortTimeDescending = function(a, b) {
     return d3.descending(a['timestamp'], b['timestamp']);
@@ -416,9 +440,14 @@ $(document).ready(function() {
   };
 
   showLogMessage = function(location, log_message) {
+    if (maxTimestamp < log_message.timestamp) {
+      maxTimestamp = log_message.timestamp;
+    }
+
     messages.push(log_message);
     messageFilter.add([log_message]);
-    isDirty = true;
+    isLogMessagesDirty = true;
+    isChartDataDirty = true;
   };
 });
 
