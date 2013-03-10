@@ -25,13 +25,13 @@ $(document).ready(function() {
   nodeChart = d3.select('#visualization-container').append('svg').attr('class', 'chart severity-chart');
 
   updateTimeChart = function() {
-    var maxValue = 0;  // TODO get this value from crossfilter instead of iterating
+    var maxValue = 0;  // TODO get this value instead of iterating
     for (var i = 0; i < countsByPeriod.length; i++) {
       if (countsByPeriod[i] > maxValue) {
         maxValue = countsByPeriod[i];
       }
     }
-    var timeChartColumnLocX = d3.scale.linear().domain([60, 0]).rangeRound([0, 1100]);
+    var timeChartColumnLocX = d3.scale.linear().domain([0, 60]).rangeRound([1100, 0]);
     var timeChartHeightFunction = d3.scale.linear().domain([0, maxValue]).rangeRound([0, timeChartColumnHeight]);
 
     appendColumn = function() {
@@ -41,7 +41,7 @@ $(document).ready(function() {
           .attr('height', function(d) { return timeChartHeightFunction(d); });
     };
 
-    var chartData = timeChart.selectAll('rect').data(countsByPeriod);
+    var chartData = timeChart.selectAll('rect').data(countsByPeriod.slice(-60).reverse());
     chartData.call(appendColumn);
     chartData.enter().append('rect').call(appendColumn);
     chartData.exit().remove();
