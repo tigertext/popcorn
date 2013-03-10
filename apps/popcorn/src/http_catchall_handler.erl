@@ -224,7 +224,8 @@ do_jsonify({Key, Atom}) when is_atom(Atom) -> {atom_to_binary(Key, latin1), atom
 do_jsonify({Key, Other}) -> {atom_to_binary(Key, latin1), Other}.
 
 format_timestamp(Timestamp) ->
-    {{Year, Month, Day}, {Hour, Min, Sec}} = calendar:gregorian_seconds_to_datetime(Timestamp),
+    {{Year, Month, Day}, {Hour_GMT, Min, Sec}} = calendar:gregorian_seconds_to_datetime(Timestamp),
+    Hour = Hour_GMT - 7,
     %io_lib:format("~B/~B/~4..0B~2B", [Month, Day, Year, Hour]).
     normalize_hour(Hour).
 
