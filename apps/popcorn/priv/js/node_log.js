@@ -9,11 +9,13 @@ var pie = d3.layout.pie(),
     timeChart, severityChart, roleChart, nodeChart,
     severityChartPath,
     timestampOffset = Math.floor(new Date().getTime() / 1000);
+    fullMessagesDirty = false,
     MAX_MESSAGES_TO_SHOW = 500,
     FLUSH_PERIOD = 5,  // when grouping severity, node, role, what period to group by
     TIME_CHART_PERIOD = 5,   // the time period for the time d3 graph
     FLUSH_DATA_INTERVAL = 100,  // how often to flush data from the incoming array and into the data that powers the charts
     CHART_REFRESH_INTERVAL = 150, // how often to refresh the charts
+    MESSAGES_REFRESH_INTERVAL = 500,
     EMPTY_SEVERITY_HASH = {1:0, 2:0, 4:0, 8:0, 16:0, 32:0, 64:0, 128:0},
     SEVERITY_LOOKUP_HASH = {1:0, 2:1, 4:2, 8:3, 16:4, 32:5, 64:6, 128:7};
 
@@ -148,6 +150,13 @@ $(document).ready(function() {
     updateSeverityChart();
   }, CHART_REFRESH_INTERVAL);
 
+  setInterval(function() {
+    if (fullMessagesDirty) {
+      updateLogMessages();
+      fullMessagesDirty = true;
+    }
+  }, MESSAGES_REFRESH_INTERVAL);
+
   $('.close-popover').live('click', function() {
     $('.show-more').popover('hide');
   });
@@ -228,15 +237,14 @@ $(document).ready(function() {
   showLogMessage = function(log_message) {
     if (log_message['name'] && log_message['name'] == 'clear') {
       fullMessages = [];
-      updateLogMessages(); // TODO put this somewhere else
     } else {
       fullMessages.push(log_message);
       if (fullMessages.length > MAX_MESSAGES_TO_SHOW) {
         fullMessages.shift();
       }
-
-      updateLogMessages();  // TODO this cannot be here, it needs to be on an interval
     }
+
+    fullMessagesDirty = true;
   }
 });
 
