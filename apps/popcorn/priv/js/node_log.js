@@ -226,12 +226,17 @@ $(document).ready(function() {
   };
 
   showLogMessage = function(log_message) {
-    fullMessages.push(log_message);
-    if (fullMessages.length > MAX_MESSAGES_TO_SHOW) {
-      fullMessages.shift();
-    }
+    if (log_message['name'] && log_message['name'] == 'clear') {
+      fullMessages = [];
+      updateLogMessages(); // TODO put this somewhere else
+    } else {
+      fullMessages.push(log_message);
+      if (fullMessages.length > MAX_MESSAGES_TO_SHOW) {
+        fullMessages.shift();
+      }
 
-    updateLogMessages();  // TODO this cannot be here, it needs to be on an interval
+      updateLogMessages();  // TODO this cannot be here, it needs to be on an interval
+    }
   }
 });
 

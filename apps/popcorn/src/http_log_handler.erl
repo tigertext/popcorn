@@ -21,21 +21,6 @@ handle(Req, State) ->
 
 terminate(_Req, _State) -> ok.
 
-handle_path(<<"POST">>, [<<"log">>, <<"stream">>, <<"pause">>], Req, State) ->
-    {ok, Vals, _} = cowboy_req:body_qs(Req),
-    Stream_Id     = proplists:get_value(<<"stream_id">>, Vals),
-    Stream_Pid    = lists:nth(1, ets:select(current_log_streams, ets:fun2ms(fun(#double_stream{stream_id  = SID,
-                                                                                               stream_pid = SPID}) when SID =:= Stream_Id -> SPID end))),
-
-    gen_fsm:send_all_state_event(Stream_Pid, toggle_pause),
-
-    %% get the current paused state for the response
-    Is_Paused = gen_fsm:sync_send_all_state_event(Stream_Pid, is_paused),
-    Response  = {[ [{<<"is_paused">>, popcorn_util:jiffy_safe(Is_Paused)}] ]},
-
-    {ok, Reply}   = cowboy_req:reply(200, [{"Content-Type", "application/json"}], binary_to_list(jiffy:encode(Response)), Req),
-    {ok, Reply, State};
-
 handle_path(<<"GET">>, [<<"log">>, Stream_Id, <<"summary">>, <<"feed">>], Req, State) ->
     case ets:select(current_log_streams, ets:fun2ms(fun(#double_stream{stream_id  = SID,
                                                                 stream_pid = SPID}) when SID =:= Stream_Id -> SPID end)) of
@@ -48,7 +33,6 @@ handle_path(<<"GET">>, [<<"log">>, Stream_Id, <<"summary">>, <<"feed">>], Req, S
             {ok, Reply}  = cowboy_req:chunked_reply(200, Headers, Req),
 
             Stream_Pid    = lists:nth(1, Streams),
-
             gen_fsm:send_event(Stream_Pid, {set_client_summary_pid, self()}),
 
             handle_loop(Reply, State)
@@ -66,46 +50,10 @@ handle_path(<<"GET">>, [<<"log">>, Stream_Id, <<"messages">>, <<"feed">>], Req, 
             {ok, Reply}  = cowboy_req:chunked_reply(200, Headers, Req),
 
             Stream_Pid    = lists:nth(1, Streams),
-
             gen_fsm:send_event(Stream_Pid, {set_client_messages_pid, self()}),
 
             handle_loop(Reply, State)
     end;
-
-handle_path(<<"POST">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
-    Stream_Pid    = lists:nth(1, ets:select(current_log_streams, ets:fun2ms(fun(#double_stream{stream_id  = SID,
-                                                                                        stream_pid = SPID}) when SID =:= Stream_Id -> SPID end))),
-
-    {ok, Vals, _} = cowboy_req:body_qs(Req),
-    case proplists:get_value(<<"severities">>, Vals) of
-        undefined      -> ok;
-        New_Severities -> gen_fsm:send_event(Stream_Pid, {update_severities, New_Severities})
-    end,
-
-    case proplists:get_value(<<"nodes">>, Vals) of
-        undefined -> ok;
-        New_Nodes -> gen_fsm:send_event(Stream_Pid, {update_nodes, New_Nodes})
-    end,
-
-    case proplists:get_value(<<"roles">>, Vals) of
-        undefined -> ok;
-        New_Roles -> gen_fsm:send_event(Stream_Pid, {update_roles, New_Roles})
-    end,
-
-    case proplists:get_value(<<"topics_add">>, Vals) of
-        undefined -> ok;
-        Topics_To_Add -> gen_fsm:send_event(Stream_Pid, {topic_add, Topics_To_Add})
-    end,
-
-    case proplists:get_value(<<"time_filter_type">>, Vals) of
-        undefined        -> ok;
-        <<"stream">>     -> gen_fsm:send_event(Stream_Pid, set_time_stream);
-        <<"previous">>   -> gen_fsm:send_event(Stream_Pid, {set_time_previous, proplists:get_value(<<"max_date">>, Vals),
-                                                                               proplists:get_value(<<"max_time">>, Vals)})
-    end,
-
-    {ok, Reply} = cowboy_req:reply(204, [], [], Req),
-    {ok, Reply, State};
 
 %% convienence entry points to allow the user to pre-define the filters
 handle_path(<<"GET">>, [<<"log">>], Req, State) ->

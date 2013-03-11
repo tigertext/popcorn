@@ -69,7 +69,12 @@ init([]) ->
 handle_call(Request, _From, State)  -> {stop, {unknown_call, Request}, State}.
 
 handle_cast({add_stream_pid, Pid}, State) ->
-    {noreply, State#state{current_stream_pids = lists:append(State#state.current_stream_pids, [Pid])}};
+    case lists:member(Pid, State#state.current_stream_pids) of
+        false ->
+            {noreply, State#state{current_stream_pids = lists:append(State#state.current_stream_pids, [Pid])}};
+        true ->
+            {noreply, State}
+    end;
 
 handle_cast({del_stream_pid, Pid}, State) ->
     Stream_Pids  = State#state.current_stream_pids,
