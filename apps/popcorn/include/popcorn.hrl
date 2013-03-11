@@ -38,12 +38,20 @@
 
 -define(POPCORN_ERROR, 8).
 
--record(stream,  {stream_id       :: string(),
-                  max_timestamp   :: number() | undefined,
-                  stream_pid      :: pid(),
-                  client_pid      :: pid(),
-                  applied_filters :: list(),
-                  paused          :: boolean()}).
+-record(double_stream,  {stream_id               :: string(),
+                         max_timestamp           :: number() | undefined,
+                         stream_pid              :: pid(),
+                         client_messages_pid     :: pid(),
+                         client_summary_pid      :: pid(),
+                         applied_filters         :: list(),
+                         paused                  :: boolean()}).
+
+-record(stream,  {stream_id        :: string(),
+                  max_timestamp    :: number() | undefined,
+                  stream_pid       :: pid(),
+                  client_pid       :: pid(),
+                  applied_filters  :: list(),
+                  paused           :: boolean()}).
 
 -record(popcorn_node, {node_name :: binary(),
                        role      :: binary(),

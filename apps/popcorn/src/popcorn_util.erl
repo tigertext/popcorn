@@ -13,6 +13,7 @@
          all_severities/0,
          alert_severities/0,
          random_id/0,
+         format_summary_message/2,
          format_log_message/2,
          opt/2,
          head_includes/0,
@@ -103,8 +104,8 @@ apply_links(Identities, Topics, In) ->
     Out = binary:replace(In, <<Symbol/binary, Identity/binary>>, <<A/binary, Identity/binary, B/binary, Identity/binary, C/binary>>),
     apply_links(lists:nthtail(1, Identities), Topics, Out).
 
--spec format_log_message(#log_message{}, #popcorn_node{} | undefined) -> list().
-format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_function=Function, log_line=Line, log_pid=Pid,
+-spec format_summary_message(#log_message{}, #popcorn_node{} | undefined) -> list().
+format_summary_message(#log_message{timestamp=Timestamp, log_module=Module, log_function=Function, log_line=Line, log_pid=Pid,
                                 severity=Severity, message=Message, topics=Topics, identities=Identities, log_product=Product,
                                 log_version=Version, message_id=Message_Id, log_nodename=Node_Name},
                    Popcorn_Node) ->
@@ -121,6 +122,54 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
    {'role', jiffy_safe(opt(Role, <<"Unknown Role">>))},
    {'node', jiffy_safe(opt(Name, <<"Unknown Node">>))},
    {'severity', jiffy_safe(Severity)}].
+
+
+-spec format_log_message(#log_message{}, #popcorn_node{} | undefined) -> list().
+format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_function=Function, log_line=Line, log_pid=Pid,
+                                severity=Severity, message=Message, topics=Topics, identities=Identities, log_product=Product,
+                                log_version=Version, message_id=Message_Id, log_nodename=Node_Name},
+                   Popcorn_Node) ->
+  UTC_Timestamp = calendar:now_to_universal_time({Timestamp div 1000000000000, 
+                                                  Timestamp div 1000000 rem 1000000,
+                                                  Timestamp rem 1000000}),
+  {{Year, Month, Day}, {Hour, Minute, Second}} = UTC_Timestamp,
+  Formatted_DateTime = lists:flatten(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0BZ", [Year, Month, Day, Hour, Minute, Second])),
+  Formatted_Time     = lists:flatten(io_lib:format("~2.10.0B:~2.10.0B:~2.10.0B", [Hour, Minute, Second])),
+
+  More_Html =
+    "<strong>Message " ++ binary_to_list(Message_Id) ++ "</strong><hr />" ++
+    "<label class='popover-label'><strong>Node: </strong>" ++ binary_to_list(Node_Name) ++ "</label>" ++
+    "<label class='popover-label'><strong>Severity: </strong>" ++ number_to_severity(Severity) ++ "</label>" ++
+    "<label class='popover-label'><strong>Module: </strong>" ++ binary_to_list(opt(Module, <<"Not set">>)) ++ "</label>" ++
+    "<label class='popover-label'><strong>Function: </strong>" ++ binary_to_list(opt(Function, <<"Not set">>)) ++ "</label>" ++
+    "<label class='popover-label'><strong>Line: </strong>" ++ binary_to_list(opt(Line, <<"?">>)) ++ " in " ++ binary_to_list(opt(Module, <<"not set">>)) ++ "</label>" ++
+    "<label class='popover-label'><strong>Pid: </strong>" ++ binary_to_list(opt(Pid, <<"Not set">>)) ++ "</label>",
+
+  Linked_Message = apply_links(Identities, Topics, Message),
+
+  {Role, Name} =
+    case Popcorn_Node of
+      undefined -> {undefined, undefined};
+      _ -> {Popcorn_Node#popcorn_node.role, Popcorn_Node#popcorn_node.node_name}
+    end,
+
+  [{'timestamp',        jiffy_safe(Timestamp)},
+   {'role',             jiffy_safe(opt(Role, <<"Unknown Role">>))},
+   {'node',             jiffy_safe(opt(Name, <<"Unknown Node">>))},
+   {'topics',           jiffy_safe_array(Topics)},
+   {'identities',       jiffy_safe_array(Identities)},
+   {'time',             jiffy_safe(Formatted_Time)},
+   {'datetime',         jiffy_safe(Formatted_DateTime)},
+   {'find_more_html',   jiffy_safe(More_Html)},
+   {'log_product',      jiffy_safe(opt(Product, <<"Unknown">>))},
+   {'log_version',      jiffy_safe(opt(Version, <<"Unknown">>))},
+   {'log_module',       jiffy_safe(opt(Module, <<"Unknown">>))},
+   {'log_function',     jiffy_safe(opt(Function, <<"Unknown">>))},
+   {'log_line',         jiffy_safe(opt(Line, <<"??">>))},
+   {'log_pid',          jiffy_safe(opt(Pid, <<"?">>))},
+   {'message_severity', jiffy_safe(number_to_severity(Severity))},
+   {'message_severity_raw', jiffy_safe(Severity)},
+   {'message',          jiffy_safe(Linked_Message)}].
 
 css_file() ->
     case file:read_file_info(code:priv_dir(popcorn) ++ "/css/popcorn.css") of

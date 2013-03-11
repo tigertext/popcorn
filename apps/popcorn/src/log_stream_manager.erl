@@ -78,7 +78,7 @@ handle_cast({del_stream_pid, Pid}, State) ->
     {noreply, State#state{current_stream_pids = Updated_Pids}};
 
 handle_cast({new_log_message, Log_Message, Popcorn_Node}, State) ->
-    [gen_fsm:send_all_state_event(Pid, {new_message, newer, Log_Message, Popcorn_Node}) || Pid <- State#state.current_stream_pids],
+    [gen_fsm:send_all_state_event(Pid, {message, Log_Message, Popcorn_Node}) || Pid <- State#state.current_stream_pids],
     {noreply, State};
 
 handle_cast(_Msg, State)            -> {noreply, State}.

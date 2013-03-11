@@ -51,11 +51,6 @@
                 Logs
                 <div style="float:right;padding-right:36px;">
                     <span class="label label-important" id="disconnected" style="display:none;">Disconnected</span>
-                    <a class="btn btn-mini" href="#" id="stream-properties"><i class="icon-download" id="log-stream"></i>Stream</a>
-                    <a class="btn btn-mini" href="#" id="filter-properties"><i class="icon-filter" id="log-filter"></i>Filter</a>
-                    <a class="btn btn-mini" href="#" id="log-timestamp"><i class="icon-calendar"></i></a>
-                    <a class="btn btn-mini" href="#" id="log-clear"><i class="icon-trash"></i></a>
-                    <a class="btn btn-mini" href="#" id="log-pause"><i class="icon-pause" data-toggle="button"></i></a>
                   </div>
                 </h1>
             </header>
@@ -75,74 +70,6 @@
         </div>
     </div>
 
-    <div id="filter-popover" style="display:none;">
-      <aside>
-        <nav>
-          <ul class="nav nav-filters">
-            <li class="subsection-header">
-              <a href="#" class="nav-filter">Role</a>
-            </li>
-            <li id="roles-list">
-            </li>
-            <li class="subsection-header">
-              <a href="#" class="nav-filter">Topics</a>
-            </li>
-            <li id="topics-list">
-            </li>
-            <li class="subsection-header">
-              <a href="#" class="nav-filter">Identities</a>
-            </li>
-            <li id="identities-list">
-            </li>
-            <li class="subsection-header">
-              <a href="#" class="nav-filter">Severity</a>
-            </li>
-            <li id="severities-list">
-            </li>
-            <li class="subsection-header">
-              <a href="#" class="nav-filter">Node</a>
-            </li>
-            <li id="nodes-list">
-            </li>
-          </ul>
-        </nav>
-      </aside>
-    </div>
-
-    <div id="stream-popover" style="display:none;">
-      <aside>
-        <nav>
-          <ul class="nav nav-filters">
-            <li class="subsection-header">
-              <a href="#" class="nav-filter">Role</a>
-            </li>
-            <li id="roles-list">
-            </li>
-            <li class="subsection-header">
-              <a href="#" class="nav-filter">Topics</a>
-            </li>
-            <li id="topics-list">
-            </li>
-            <li class="subsection-header">
-              <a href="#" class="nav-filter">Identities</a>
-            </li>
-            <li id="identities-list">
-            </li>
-            <li class="subsection-header">
-              <a href="#" class="nav-filter">Severity</a>
-            </li>
-            <li id="severities-list">
-            </li>
-            <li class="subsection-header">
-              <a href="#" class="nav-filter">Node</a>
-            </li>
-            <li id="nodes-list">
-            </li>
-          </ul>
-        </nav>
-      </aside>
-    </div>
-
     <script type="text/javascript">
       var knownSeverities = [];
       {{#known_severities}}
@@ -151,15 +78,22 @@
     </script>
     <script src="/js/node_log.js" type="text/javascript"></script>
     <script type="text/javascript">
-      var streamId = "{{stream_id}}";
-      var streamSource = new EventSource("{{streaming_url}}")
-      var appliedFilters = {{applied_filters}};
+      var messagesSource = new EventSource('/log/{{stream_id}}/messages/feed');
+      var summarySource = new EventSource('/log/{{stream_id}}/summary/feed');
 
-      streamSource.onmessage = function(message) {
+      summarySource.onmessage = function(message) {
+        var parsedMessage = JSON.parse(message.data);
+        showSummaryMessage(parsedMessage['payload']);
+      };
+      summarySource.onerror = function(error) {
+        $('#disconnected').show();
+      };
+
+      messagesSource.onmessage = function(message) {
         var parsedMessage = JSON.parse(message.data);
         showLogMessage(parsedMessage['payload']);
       };
-      streamSource.onerror = function(error) {
+      messagesSource.onerror = function(error) {
         $('#disconnected').show();
       };
     </script>
