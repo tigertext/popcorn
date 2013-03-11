@@ -163,9 +163,9 @@ handle(Req, State) ->
 
                         %% create the stream object
                         Stream_Id = popcorn_util:random_id(),
-                        Stream = #stream{stream_id        = Stream_Id,
-                                         stream_pid       = Stream_Pid,
-                                         client_pid       = undefined},
+                        Stream = #stream{stream_id          = Stream_Id,
+                                         stream_pid         = Stream_Pid,
+                                         client_pid         = undefined},
 
                         %% assign to the fsm
                         gen_fsm:send_event(Stream_Pid, {connect, Stream}),

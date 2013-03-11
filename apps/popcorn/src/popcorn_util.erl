@@ -13,6 +13,7 @@
          all_severities/0,
          alert_severities/0,
          random_id/0,
+         format_summary_message/2,
          format_log_message/2,
          opt/2,
          head_includes/0,
@@ -105,6 +106,26 @@ apply_links(Identities, Topics, In) ->
     C = <<"</span></a>">>,
     Out = binary:replace(In, <<Symbol/binary, Identity/binary>>, <<A/binary, Identity/binary, B/binary, Identity/binary, C/binary>>),
     apply_links(lists:nthtail(1, Identities), Topics, Out).
+
+-spec format_summary_message(#log_message{}, #popcorn_node{} | undefined) -> list().
+format_summary_message(#log_message{timestamp=Timestamp, log_module=Module, log_function=Function, log_line=Line, log_pid=Pid,
+                                severity=Severity, message=Message, topics=Topics, identities=Identities, log_product=Product,
+                                log_version=Version, message_id=Message_Id, log_nodename=Node_Name},
+                   Popcorn_Node) ->
+  UTC_Timestamp = calendar:now_to_universal_time({Timestamp div 1000000000000, 
+                                                  Timestamp div 1000000 rem 1000000,
+                                                  Timestamp rem 1000000}),
+  {Role, Name} =
+    case Popcorn_Node of
+      undefined -> {undefined, undefined};
+      _ -> {Popcorn_Node#popcorn_node.role, Popcorn_Node#popcorn_node.node_name}
+    end,
+
+  [{'timestamp', jiffy_safe(Timestamp)},
+   {'role', jiffy_safe(opt(Role, <<"Unknown Role">>))},
+   {'node', jiffy_safe(opt(Name, <<"Unknown Node">>))},
+   {'severity', jiffy_safe(Severity)}].
+
 
 -spec format_log_message(#log_message{}, #popcorn_node{} | undefined) -> list().
 format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_function=Function, log_line=Line, log_pid=Pid,

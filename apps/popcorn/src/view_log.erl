@@ -9,8 +9,7 @@
          avatar_path/1,
          head_includes/1,
          known_severities/1,
-         applied_filters/1,
-         streaming_url/1]).
+         applied_filters/1]).
 
 -spec username(dict()) -> string().
 username(Context) ->
@@ -39,10 +38,6 @@ applied_filters(Context) ->
                           {Name, popcorn_util:jiffy_safe_array(Value)}
             end, Default_Filters)},
     binary_to_list(jiffy:encode(Json)).
-
--spec streaming_url(dict()) -> string().
-streaming_url(Context) ->
-    "/log/stream/" ++ mustache:get(stream_id, Context).
 
 get_opt_env(Mod, Var, Default) ->
     case application:get_env(Mod, Var) of

@@ -21,23 +21,8 @@ handle(Req, State) ->
 
 terminate(_Req, _State) -> ok.
 
-handle_path(<<"POST">>, [<<"log">>, <<"stream">>, <<"pause">>], Req, State) ->
-    {ok, Vals, _} = cowboy_req:body_qs(Req),
-    Stream_Id     = proplists:get_value(<<"stream_id">>, Vals),
-    Stream_Pid    = lists:nth(1, ets:select(current_log_streams, ets:fun2ms(fun(#stream{stream_id  = SID,
-                                                                                        stream_pid = SPID}) when SID =:= Stream_Id -> SPID end))),
-
-    gen_fsm:send_all_state_event(Stream_Pid, toggle_pause),
-
-    %% get the current paused state for the response
-    Is_Paused = gen_fsm:sync_send_all_state_event(Stream_Pid, is_paused),
-    Response  = {[ [{<<"is_paused">>, popcorn_util:jiffy_safe(Is_Paused)}] ]},
-
-    {ok, Reply}   = cowboy_req:reply(200, [{"Content-Type", "application/json"}], binary_to_list(jiffy:encode(Response)), Req),
-    {ok, Reply, State};
-
-handle_path(<<"GET">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
-    case ets:select(current_log_streams, ets:fun2ms(fun(#stream{stream_id  = SID,
+handle_path(<<"GET">>, [<<"log">>, Stream_Id, <<"summary">>, <<"feed">>], Req, State) ->
+    case ets:select(current_log_streams, ets:fun2ms(fun(#double_stream{stream_id  = SID,
                                                                 stream_pid = SPID}) when SID =:= Stream_Id -> SPID end)) of
         [] ->
             Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
@@ -48,46 +33,27 @@ handle_path(<<"GET">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
             {ok, Reply}  = cowboy_req:chunked_reply(200, Headers, Req),
 
             Stream_Pid    = lists:nth(1, Streams),
-
-            gen_fsm:send_event(Stream_Pid, {set_client_pid, self()}),
+            gen_fsm:send_event(Stream_Pid, {set_client_summary_pid, self()}),
 
             handle_loop(Reply, State)
     end;
 
-handle_path(<<"POST">>, [<<"log">>, <<"stream">>, Stream_Id], Req, State) ->
-    Stream_Pid    = lists:nth(1, ets:select(current_log_streams, ets:fun2ms(fun(#stream{stream_id  = SID,
-                                                                                        stream_pid = SPID}) when SID =:= Stream_Id -> SPID end))),
+handle_path(<<"GET">>, [<<"log">>, Stream_Id, <<"messages">>, <<"feed">>], Req, State) ->
+    case ets:select(current_log_streams, ets:fun2ms(fun(#double_stream{stream_id  = SID,
+                                                                stream_pid = SPID}) when SID =:= Stream_Id -> SPID end)) of
+        [] ->
+            Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
+            {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
+            {ok, Reply, State};
+        Streams ->
+            Headers      = [{"Content-Type", <<"text/event-stream">>}],
+            {ok, Reply}  = cowboy_req:chunked_reply(200, Headers, Req),
 
-    {ok, Vals, _} = cowboy_req:body_qs(Req),
-    case proplists:get_value(<<"severities">>, Vals) of
-        undefined      -> ok;
-        New_Severities -> gen_fsm:send_event(Stream_Pid, {update_severities, New_Severities})
-    end,
+            Stream_Pid    = lists:nth(1, Streams),
+            gen_fsm:send_event(Stream_Pid, {set_client_messages_pid, self()}),
 
-    case proplists:get_value(<<"nodes">>, Vals) of
-        undefined -> ok;
-        New_Nodes -> gen_fsm:send_event(Stream_Pid, {update_nodes, New_Nodes})
-    end,
-
-    case proplists:get_value(<<"roles">>, Vals) of
-        undefined -> ok;
-        New_Roles -> gen_fsm:send_event(Stream_Pid, {update_roles, New_Roles})
-    end,
-
-    case proplists:get_value(<<"topics_add">>, Vals) of
-        undefined -> ok;
-        Topics_To_Add -> gen_fsm:send_event(Stream_Pid, {topic_add, Topics_To_Add})
-    end,
-
-    case proplists:get_value(<<"time_filter_type">>, Vals) of
-        undefined        -> ok;
-        <<"stream">>     -> gen_fsm:send_event(Stream_Pid, set_time_stream);
-        <<"previous">>   -> gen_fsm:send_event(Stream_Pid, {set_time_previous, proplists:get_value(<<"max_date">>, Vals),
-                                                                               proplists:get_value(<<"max_time">>, Vals)})
-    end,
-
-    {ok, Reply} = cowboy_req:reply(204, [], [], Req),
-    {ok, Reply, State};
+            handle_loop(Reply, State)
+    end;
 
 %% convienence entry points to allow the user to pre-define the filters
 handle_path(<<"GET">>, [<<"log">>], Req, State) ->
@@ -128,18 +94,19 @@ handle_path(<<"GET">>, [<<"log">>], Req, State) ->
                  {ok, Stream_Pid} = supervisor:start_child(log_stream_sup, []),
 
                  %% create the stream object
-                 Log_Stream = #stream{stream_id        = popcorn_util:random_id(),
-                                      stream_pid       = Stream_Pid,
-                                      max_timestamp    = undefined,  %% being explicit here
-                                      client_pid       = undefined,
-                                      applied_filters  = Default_Filters,
-                                      paused           = false},
+                 Log_Stream = #double_stream{stream_id           = popcorn_util:random_id(),
+                                             stream_pid          = Stream_Pid,
+                                             max_timestamp       = undefined,  %% being explicit here
+                                             client_messages_pid = undefined,
+                                             client_summary_pid  = undefined,
+                                             applied_filters     = Default_Filters,
+                                             paused              = false},
 
                  %% assign to the fsm
                  gen_fsm:send_event(Stream_Pid, {connect, Log_Stream}),
 
                  Context = dict:from_list([{username,        binary_to_list(session_handler:current_username(Req))},
-                                           {stream_id,       binary_to_list(Log_Stream#stream.stream_id)},
+                                           {stream_id,       binary_to_list(Log_Stream#double_stream.stream_id)},
                                            {default_filters, dict:from_list(Default_Filters)}]),
 
                  TFun        = pcache:get(rendered_templates, view_log),
@@ -162,15 +129,15 @@ handle_loop(Req, State) ->
                 ok -> handle_loop(Req, State);
                 {error, closed} -> {ok, Req, State}
              end;
-        {old_message, Log_Message, Popcorn_Node} ->
-            Enveloped   = {[ {<<"message_type">>, <<"old_message">>},
-                             {<<"payload">>,      { popcorn_util:format_log_message(Log_Message, Popcorn_Node) }}]},
-            Event       = binary_to_list(jiffy:encode(Enveloped)),
+        {summary, Log_Message, Popcorn_Node} ->
+            Enveloped = {[{<<"message_type">>, <<"message_summary">>},
+                          {<<"payload">>, {popcorn_util:format_summary_message(Log_Message, Popcorn_Node)}}]},
+            Event = binary_to_list(jiffy:encode(Enveloped)),
             case cowboy_req:chunk(lists:flatten(["data: ", Event, "\n\n"]), Req) of
                 ok -> handle_loop(Req, State);
                 {error, closed} -> {ok, Req, State}
             end;
-        {new_message, Log_Message, Popcorn_Node} ->
+        {message, Log_Message, Popcorn_Node} ->
             Enveloped   = {[ {<<"message_type">>, <<"new_message">>},
                              {<<"payload">>,      {popcorn_util:format_log_message(Log_Message, Popcorn_Node)}} ]},
             Event       = binary_to_list(jiffy:encode(Enveloped)),
