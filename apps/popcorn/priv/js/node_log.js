@@ -19,16 +19,24 @@ var pie = d3.layout.pie(),
     EMPTY_SEVERITY_HASH = {1:0, 2:0, 4:0, 8:0, 16:0, 32:0, 64:0, 128:0},
     SEVERITY_LOOKUP_HASH = {1:0, 2:1, 4:2, 8:3, 16:4, 32:5, 64:6, 128:7};
 
-var arc = d3.svg.arc().innerRadius(110 * .6).outerRadius(110);
+var arc = d3.svg.arc().innerRadius(70 * .6).outerRadius(70);
+var timeChart;
+var yAxis, xAxis;
+var timeChartX, timeChartY;
+var timeChartAxisDrawn = false;
 
 while (timestampOffset % 5) { timestampOffset--; }
 
 $(document).ready(function() {
+  var timeChartColumnWidth = 15;
+  var margin = {top: 20, right: 20, bottom: 30, left: 60},
+                width = 1100 - margin.left - margin.right,
+                timeChartColumnHeight = 120 - margin.top - margin.bottom;
+
+  timeChartX = d3.scale.ordinal().rangeRoundBands([0, width], .1);
+  timeChartY = d3.scale.linear().range([timeChartColumnHeight, 0]);
+
   var timeChartColumnWidth = 15, timeChartColumnHeight = 80;
-  timeChart = d3.select('#visualization-container').append('svg').attr('class', 'chart time-chart').attr('height', timeChartColumnHeight);
-  severityChart = d3.select('#visualization-container').append('svg').attr('class', 'chart severity-chart').append('g').attr('transform', 'translate(110, 110)');
-  roleChart = d3.select('#visualization-container').append('svg').attr('class', 'chart role-chart');
-  nodeChart = d3.select('#visualization-container').append('svg').attr('class', 'chart node-chart');
 
   messagesTable = d3.select("#logs").append("table").attr('id', 'log-messages').attr('class', 'table table-striped full-section table-hover');
   var thead = messagesTable.append("thead");
@@ -39,6 +47,27 @@ $(document).ready(function() {
   theadrow.append('th').html('Message');
   tbody = messagesTable.append("tbody").attr('id', 'log-messages-body');
 
+  xAxis = d3.svg.axis()
+            .scale(timeChartX)
+            .ticks(12)
+            .orient("bottom");
+
+  yAxis = d3.svg.axis()
+            .scale(timeChartY)
+            .ticks(2)
+            .orient("left");
+
+ timeChart = d3.select("#visualization-container").append("svg")
+        .attr('class', 'chart time-chart')
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", timeChartColumnHeight + margin.top + margin.bottom)
+      .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+  severityChart = d3.select('#visualization-container').append('svg').attr('class', 'chart severity-chart').append('g').attr('transform', 'translate(110, 110)');
+  roleChart = d3.select('#visualization-container').append('svg').attr('class', 'chart role-chart');
+  nodeChart = d3.select('#visualization-container').append('svg').attr('class', 'chart node-chart');
+
   updateTimeChart = function() {
     var maxValue = 0;  // TODO get this value instead of iterating
     for (var i = 0; i < countsByPeriod.length; i++) {
@@ -46,15 +75,38 @@ $(document).ready(function() {
         maxValue = countsByPeriod[i];
       }
     }
-    var timeChartColumnLocX = d3.scale.linear().domain([0, 60]).rangeRound([1100, 0]);
+
+    var timeChartColumnLocX = d3.scale.linear().domain([0, 60]).rangeRound([width, 0]);
     var timeChartHeightFunction = d3.scale.linear().domain([0, maxValue]).rangeRound([0, timeChartColumnHeight]);
 
     appendColumn = function() {
-      this.attr('x', function(d, i) { return timeChartColumnLocX(i); })
+      this.attr('x', function(d, i) { return timeChartColumnLocX(i) - timeChartColumnWidth; })
           .attr('y', function(d) { return timeChartColumnHeight - timeChartHeightFunction(d) + 1; })
           .attr('width', timeChartColumnWidth)
           .attr('height', function(d) { return timeChartHeightFunction(d); });
     };
+
+    timeChartY.domain([0, maxValue]);
+    //timeChartX.domain(countsByPeriod.map(function(d) { console.log(d); return 60; }));
+    if (! timeChartAxisDrawn) {
+        timeChart.append("g")
+              .attr("class", "timechartxaxis axis")
+              .attr("transform", "translate(0," + timeChartColumnHeight + ")")
+              .call(xAxis);
+
+        timeChart.append("g")
+             .attr("class", "timechartyaxis axis")
+             .call(yAxis)
+           .append("text")
+             .attr("transform", "rotate(-90)")
+             .attr("y", 6)
+             .attr("dy", ".71em")
+             .style("text-anchor", "end");
+        timeChartAxisDrawn = true;
+    } else {
+       timeChart.select(".timechartyaxis").call(yAxis);
+       //timeChart.select(".timechartxaxis").call(xAxis);
+    }
 
     var chartData = timeChart.selectAll('rect').data(countsByPeriod.slice(-60).reverse());
     chartData.call(appendColumn);
@@ -153,7 +205,7 @@ $(document).ready(function() {
   setInterval(function() {
     if (fullMessagesDirty) {
       updateLogMessages();
-      fullMessagesDirty = true;
+      fullMessagesDirty = false;
     }
   }, MESSAGES_REFRESH_INTERVAL);
 
@@ -247,5 +299,3 @@ $(document).ready(function() {
     fullMessagesDirty = true;
   }
 });
-
-
