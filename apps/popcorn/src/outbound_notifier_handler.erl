@@ -1,6 +1,8 @@
 -module(outbound_notifier_handler).
 -author('elbrujohalcon@inaka.net').
 
+-include("popcorn.hrl").
+
 -behaviour(gen_server).
 
 -export([supervisor_spec/3, start_link/3]).
@@ -72,7 +74,7 @@ handle_cast(_OtherEvent, State) ->
     {noreply, State}.
 
 handle_event(Event, Data, State) ->
-    io:format("~p handled by ~p: ~p~n", [Event, State#state.mod, Data]),
+    ?POPCORN_DEBUG_MSG("~p handled by ~p: ~p~n", [Event, State#state.mod, Data]),
     try (State#state.mod):handle_event(Event, Data, State#state.mod_state) of
         {ok, NewState} ->
             {noreply, State#state{mod_state = NewState}};

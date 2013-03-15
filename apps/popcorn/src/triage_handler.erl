@@ -120,7 +120,7 @@ handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
 handle_cast({triage_event, #popcorn_node{} = Node, Node_Pid,
-              #log_message{log_product=Product, log_version=Version,
+              #log_message{log_product=Product, log_version=Version, message=Message,
                            log_module=Module, log_line=Line, severity=Severity} = Log_Entry,
               Is_New_Node}, #state{incident=Incident, workers = Workers} = State)
         when Severity =< 16, Severity =/= 0, is_binary(Product), is_binary(Version), is_binary(Module), is_binary(Line) ->
@@ -133,7 +133,7 @@ handle_cast({triage_event, #popcorn_node{} = Node, Node_Pid,
             dashboard_stream_fsm:broadcast({new_node, Node});
         false -> ok
     end,
-    update_counter(Node,Node_Pid,Severity,Product,Version,Module,Line,Storage_Pid),
+    update_counter(Node,Node_Pid,Severity,Product,Version,Module,Line,Storage_Pid,Message),
     {noreply, reset_timer(State)};
 handle_cast({triage_event, #popcorn_node{} = Node, _Node_Pid, _Log_Message, true}, State) ->
     outbound_notifier:notify(new_node, as_proplist(Node)),
@@ -183,7 +183,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-update_counter(Node, _Node_Pid, Severity, Product, Version, Module, Line, Storage_Pid) ->
+update_counter(Node, _Node_Pid, Severity, Product, Version, Module, Line, Storage_Pid, Message) ->
     Count_Key           = key(Severity,Product,Version,Module,Line),
     Recent_Counter_Key  = recent_key(Count_Key),
     Day_Key             = day_key(),
@@ -203,7 +203,7 @@ update_counter(Node, _Node_Pid, Severity, Product, Version, Module, Line, Storag
 
     case ?COUNTER_VALUE(Recent_Counter_Key) of
         1 ->
-            outbound_notifier:notify(new_alert, location_as_strings(Count_Key)),
+            outbound_notifier:notify(new_alert, location_as_strings(Count_Key) ++ [{message,binary_to_list(Message)}, {key, base64:encode(key(Severity,Product,Version,Module,Line))}]),
             ?INCREMENT_COUNTER(?TOTAL_ALERT_COUNTER);
         _ -> ok
     end,
