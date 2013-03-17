@@ -67,10 +67,13 @@ init([]) ->
 
     {ok, 'LOGGING', #state{event_counter = 0, workers = pg2:get_local_members(storage)}}.
 
-'LOGGING'({log_message, Popcorn_Node, Log_Message}, #state{workers = Workers} = State) ->
+'LOGGING'({log_message, Popcorn_Node, Log_Message, Is_New_Node}, #state{workers = Workers} = State) ->
     try
         %% log the message
         gen_server:cast(?CACHED_STORAGE_PID(Workers), {new_log_message, Log_Message}),
+
+        %% notify the triage handler
+        triage_handler:safe_notify(Popcorn_Node, self(), Log_Message, Is_New_Node),
 
         %% increment the total event counter
         ?INCREMENT_COUNTER(?TOTAL_EVENT_COUNTER),

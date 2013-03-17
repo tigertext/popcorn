@@ -225,18 +225,14 @@ ingest_packet(#state{known_nodes = Known_Nodes} = State, #popcorn_node{node_name
           true  -> false
       end,
 
-    %% let the fsm create the log
-    Node_Pid =
-        case ets:lookup(current_nodes, Node_Name) of
-            []                 ->
-                ?POPCORN_WARN_MSG("unable to find fsm for node ~p", [Node_Name]),
-                undefined;
-            [{_, Running_Pid}] ->
-                gen_fsm:send_event(Running_Pid, {log_message, Popcorn_Node, Log_Message}),
-                Running_Pid
-        end,
-
-    triage_handler:safe_notify(Popcorn_Node, Node_Pid, Log_Message, Node_Added),
+    %% let the fsm create the log and do the full ingest
+    case ets:lookup(current_nodes, Node_Name) of
+        [] ->
+            ?POPCORN_WARN_MSG("unable to find fsm for node ~p", [Node_Name]),
+            ok;
+        [{_, Running_Pid}] ->
+            gen_fsm:send_event(Running_Pid, {log_message, Popcorn_Node, Log_Message, Node_Added})
+    end,
 
     case Node_Added of
         false ->
