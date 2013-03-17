@@ -1,7 +1,10 @@
 -module(outbound_mailer).
 -author('elbrujohalcon@inaka.net').
+-author('mhald@mac.com').
 
 -behaviour(outbound_notifier_handler).
+
+-include("popcorn.hrl").
 
 -record(state, {from        :: {string() | binary(), string() | binary()},
                 recipients  :: {string() | binary(), [string() | binary()]},
@@ -50,19 +53,13 @@ init(Params) ->
             {ok, #state{from = From, recipients = Recipients, subject = Subject, body = Body, options = Options}}
     end.
 
-handle_event(Trigger, Data, State) ->
+
+handle_event(Trigger, Data, #state{options = Options, from = From, recipients = Recipients} = State) ->
     Ctx     = dict:from_list([{trigger, Trigger} | Data]),
     Body    = mustache:render(State#state.body, Ctx),
     Subject = mustache:render(State#state.subject, Ctx),
-    {FromName, From} = State#state.from,
-    {RecsName, Recs} = State#state.recipients,
-    SmtpData = ["Subject: ", Subject, "\r\n"
-                "From: ", FromName, "\r\n"
-                "To: ", RecsName, "\r\n"
-                "\r\n", Body],
-
-    {ok, _Pid} = gen_smtp_client:send({From, Recs, SmtpData}, State#state.options),
-
+    Hostname = application:get_env(popcorn, http_hostname),
+    send_email(Trigger, Data, Subject, From, Recipients, Options, Hostname),
     {ok, State}.
 
 handle_call(Call, State) -> {ok, io:format("~p:~p Call: ~p~n", [?MODULE, ?LINE, Call]), State}.
@@ -70,3 +67,16 @@ handle_call(Call, State) -> {ok, io:format("~p:~p Call: ~p~n", [?MODULE, ?LINE, 
 handle_info(Info, State) -> {io:format("~p:~p Info: ~p~n", [?MODULE, ?LINE, Info]), State}.
 
 terminate(Reason, _State) -> io:format("~p:~p Terminate: ~p~n", [?MODULE, ?LINE, Reason]).
+
+send_email(_, _, _, _, _, _, undefined) -> ok;
+send_email(Trigger, Data, Subject, FFrom, Recipients, Options, {ok, Hostname}) ->
+    Ctx  = dict:from_list([{trigger, Trigger}, {hostname, Hostname} | Data]),
+    Body = mustache:render(popcorn, ?MUSTACHE("alert_email.mustache"), Ctx),
+    {FromName, From} = FFrom,
+    {RecsName, Recs} = Recipients,
+    SmtpData = ["Subject: ", Subject, "\r\n"
+                "From: ", FromName, "\r\n"
+                "To: ", RecsName, "\r\n"
+                "Content-Type: multipart/alternative; boundary=Apple-Mail-24--712106862\r\n",
+                "\r\n", Body],
+    {ok, _Pid} = gen_smtp_client:send({From, Recs, SmtpData}, Options).

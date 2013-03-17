@@ -24,6 +24,13 @@ try_start_authed_session(IP_Address, Username, Password) ->
     end.
 
 is_session_authed_and_valid(Req) ->
+    is_session_authed_and_valid(Req, default_auth(application:get_env(popcorn, http_auth))).
+
+default_auth(undefined) -> enabled;
+default_auth({ok, Value}) -> Value.
+
+is_session_authed_and_valid(_, disabled) -> true;
+is_session_authed_and_valid(Req, enabled) ->
     try cowboy_req:cookie(<<"popcorn-session-key">>, Req) of
         {Session_Key, _} ->
             case Session_Key of
@@ -38,7 +45,9 @@ is_session_authed_and_valid(Req) ->
                false
     end.
 
-current_username(Req) ->
+current_username(Req) -> current_username(Req, default_auth(application:get_env(popcorn, http_auth))).
+current_username(_, disabled) -> <<"admin">>;
+current_username(Req, enabled) ->
     try cowboy_req:cookie(<<"popcorn-session-key">>, Req) of
         {Session_Key, _} ->
             case Session_Key of
