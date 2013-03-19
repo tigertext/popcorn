@@ -1,4 +1,4 @@
--module(view_log).
+-module(view_log_beta).
 -author('marc.e.campbell@gmail.com').
 
 -include_lib("stdlib/include/ms_transform.hrl").
