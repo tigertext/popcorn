@@ -8,7 +8,7 @@ var pie = d3.layout.pie(),
     fullMessages = [],
     timeChart, severityChart, roleChart, nodeChart,
     severityChartPath, roleChartPath, nodeChartPath,
-    timestampOffset = Math.floor(new Date().getTime() / 1000) - 3 * 60,  // we show up to 3 minutes of old data on the line graph
+    timestampOffset = Math.floor(new Date().getTime() / 1000),
     fullMessagesDirty = false,
     MAX_MESSAGES_TO_SHOW = 500,
     FLUSH_PERIOD = 5,  // when grouping severity, node, role, what period to group by
@@ -314,14 +314,11 @@ $(document).ready(function() {
     nowKey = nowKey / 5;
 
     // pull the counts
+    var lastCount = countsByPeriod[nowKey] || 0;
     for (var count in timeFilterGroupByTimeInterval.all()) {
-      var k = timeFilterGroupByTimeInterval.all()[count]['key'];
-      console.log(k);
-      while (k % 5) { k--; };
-      var lastCount = countsByPeriod[k] || 0;
       lastCount += timeFilterGroupByTimeInterval.all()[count]['value'];
-      //countsByPeriod[k] = timeFilterGroupByTimeInterval.all()[count]['value'];
     };
+    countsByPeriod[nowKey] = lastCount;
 
     // pull the severities
     var lastSeverity = severitiesByPeriod[nowKey] || $.extend({}, EMPTY_SEVERITY_HASH);
