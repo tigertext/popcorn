@@ -1,263 +1,172 @@
-var pie = d3.layout.pie(),
-    color = d3.scale.category20(),
-    incomingSummaryMessages = [],
-    countsByPeriod = [],
-    severitiesByPeriod = [],
-    nodesByPeriod = [],
-    rolesByPeriod = [],
-    fullMessages = [],
-    timeChart, severityChart, roleChart, nodeChart,
-    severityChartPath, roleChartPath, nodeChartPath,
-    timestampOffset = Math.floor(new Date().getTime() / 1000);
-    fullMessagesDirty = false,
-    MAX_MESSAGES_TO_SHOW = 500,
-    FLUSH_PERIOD = 5,  // when grouping severity, node, role, what period to group by
-    TIME_CHART_PERIOD = 5,   // the time period for the time d3 graph
-    FLUSH_DATA_INTERVAL = 100,  // how often to flush data from the incoming array and into the data that powers the charts
-    CHART_REFRESH_INTERVAL = 150, // how often to refresh the charts
-    MESSAGES_REFRESH_INTERVAL = 500,
-    EMPTY_SEVERITY_HASH = {1:0, 2:0, 4:0, 8:0, 16:0, 32:0, 64:0, 128:0},
-    SEVERITY_LOOKUP_HASH = {1:0, 2:1, 4:2, 8:3, 16:4, 32:5, 64:6, 128:7};
+var isVisible = false,
+    clickedAway = false,
+    foundSeverities = [],
+    foundNodes = [],
+    foundRoles = [],
+    foundTopics = [],
+    foundIdentities = [];
 
-var arc = d3.svg.arc().innerRadius(70 * .6).outerRadius(70);
-var timeChart;
-var yAxis, xAxis;
-var timeChartX, timeChartY;
-var timeChartAxisDrawn = false;
-
-while (timestampOffset % 5) { timestampOffset--; }
+var MAX_IDENTITIES = 15;
 
 $(document).ready(function() {
-  var timeChartColumnWidth = 15;
-  var margin = {top: 20, right: 20, bottom: 30, left: 60},
-                width = 1100 - margin.left - margin.right,
-                timeChartColumnHeight = 120 - margin.top - margin.bottom;
+  initPopovers = function() {
+    $('#filter-properties').popover({
+      html: true,
+      trigger: 'click',
+      title: 'Filter Properties<div style="float:right;"><button class="close" id="close-filter">&times;</button></div>',
+      placement: 'bottom',
+      template: '<div class="popover filter-popover-outer"><div class="arrow"></div><div class="popover-inner filter-popover-inner"><h3 class="popover-title"></h3><div class="popover-content"><p></p></div></div></div>',
+      content: $('#filter-popover').html()});
+  };
 
-  timeChartX = d3.scale.ordinal().rangeRoundBands([0, width], .1);
-  timeChartY = d3.scale.linear().range([timeChartColumnHeight, 0]);
+  initPopovers();
 
-  var timeChartColumnWidth = 15, timeChartColumnHeight = 80;
-
-  messagesTable = d3.select("#logs").append("table").attr('id', 'log-messages').attr('class', 'table table-striped full-section table-hover');
-  var thead = messagesTable.append("thead");
-  theadrow = thead.append('tr');
-  theadrow.append('th');
-  theadrow.append('th').html('Time');
-  theadrow.append('th').html('Severity');
-  theadrow.append('th').html('Message');
-  tbody = messagesTable.append("tbody").attr('id', 'log-messages-body');
-
-  xAxis = d3.svg.axis()
-            .scale(timeChartX)
-            .ticks(12)
-            .orient("bottom");
-
-  yAxis = d3.svg.axis()
-            .scale(timeChartY)
-            .ticks(2)
-            .orient("left");
-
- timeChart = d3.select("#visualization-container").append("svg")
-        .attr('class', 'chart time-chart')
-        .attr("width", width + margin.left + margin.right)
-        .attr("height", timeChartColumnHeight + margin.top + margin.bottom)
-      .append("g")
-        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
-
-  severityChart = d3.select('#visualization-container').append('svg').attr('class', 'chart severity-chart').append('g').attr('transform', 'translate(110, 110)');
-  roleChart = d3.select('#visualization-container').append('svg').attr('class', 'chart role-chart').append('g').attr('transform', 'translate(110, 110)');
-  nodeChart = d3.select('#visualization-container').append('svg').attr('class', 'chart node-chart').append('g').attr('transform', 'translate(110, 110)');
-
-  updateTimeChart = function() {
-    var maxValue = 0;  // TODO get this value instead of iterating
-    for (var i = 0; i < countsByPeriod.length; i++) {
-      if (countsByPeriod[i] > maxValue) {
-        maxValue = countsByPeriod[i];
-      }
+  updateHistoryState = function() {
+    var cleanUrl = History.getState().cleanUrl;
+    var params = [];
+    if (appliedFilters['roles'].length > 0) {
+      params.push('nodes=' + encodeURIComponent(appliedFilters['node_names']));
+    }
+    if (appliedFilters['node_names'].length > 0) {
+      params.push('nodes=' + encodeURIComponent(appliedFilters['node_names']));
+    }
+    if (appliedFilters['severities'].length > 0) {
+      params.push('severities=' + appliedFilters['severities']);
     }
 
-    var timeChartColumnLocX = d3.scale.linear().domain([0, 60]).rangeRound([width, 0]);
-    var timeChartHeightFunction = d3.scale.linear().domain([0, maxValue]).rangeRound([0, timeChartColumnHeight]);
+    History.pushState({}, '', '?' + params.join('&'));
+  };
 
-    appendColumn = function() {
-      this.attr('x', function(d, i) { return timeChartColumnLocX(i) - timeChartColumnWidth; })
-          .attr('y', function(d) { return timeChartColumnHeight - timeChartHeightFunction(d) + 1; })
-          .attr('width', timeChartColumnWidth)
-          .attr('height', function(d) { return timeChartHeightFunction(d); });
-    };
+  $('.topic').live('click', function(e) {
+    e.preventDefault();
 
-    timeChartY.domain([0, maxValue]);
-    //timeChartX.domain(countsByPeriod.map(function(d) { console.log(d); return 60; }));
-    if (! timeChartAxisDrawn) {
-        timeChart.append("g")
-              .attr("class", "timechartxaxis axis")
-              .attr("transform", "translate(0," + timeChartColumnHeight + ")")
-              .call(xAxis);
+    $.ajax({type:'POST',
+            url:'/log/stream/' + streamId,
+            data:'topics_add=' + $(this).attr('data'),
+            success:function() { },
+            error:function(request, textstatus, error) {
+              alert('Unable to add topic to filter, response='+request.responseText+' status='+textstatus+' error='+error+' topics_add='+(this).attr('data'));
+            }});
+  });
 
-        timeChart.append("g")
-             .attr("class", "timechartyaxis axis")
-             .call(yAxis)
-           .append("text")
-             .attr("transform", "rotate(-90)")
-             .attr("y", 6)
-             .attr("dy", ".71em")
-             .style("text-anchor", "end");
-        timeChartAxisDrawn = true;
+  $('.identity').live('click', function(e) {
+    e.preventDefault();
+  });
+
+  $('.filter-role').live('click', function(e) {
+    e.preventDefault();
+    if ($(this).attr('filter-selected') == '1')  {
+      $(this).attr('filter-selected', '0');
+      $(this).find('i').removeClass('icon-ok').addClass('icon-remove');
     } else {
-       timeChart.select(".timechartyaxis").call(yAxis);
-       //timeChart.select(".timechartxaxis").call(xAxis);
+      $(this).attr('filter-selected', '1');
+      $(this).find('i').removeClass('icon-remove').addClass('icon-ok');
+    }
+    appliedFilters['roles'] = rolesOn;
+    updateHistoryState();
+
+    $.ajax({type:'POST',
+            url:'/log/stream/' + streamId,
+            data:'roles=' + rolesOn.join("%2C"),
+            success:function() { },
+            error:function(request, textstatus, error) {
+              alert('Unable to update role filter response='+request.responseText+' status='+textstatus+' error='+error+' roles='+rolesOn);
+            }});
+  });
+
+  $('.filter-node').live('click', function(e) {
+    e.preventDefault();
+    if ($(this).attr('filter-selected') == '1')  {
+      $(this).attr('filter-selected', '0');
+      $(this).find('i').removeClass('icon-ok').addClass('icon-remove');
+    } else {
+      $(this).attr('filter-selected', '1');
+      $(this).find('i').removeClass('icon-remove').addClass('icon-ok');
     }
 
-    var chartData = timeChart.selectAll('rect').data(countsByPeriod.slice(-60).reverse());
-    chartData.call(appendColumn);
-    chartData.enter().append('rect').call(appendColumn);
-    chartData.exit().remove();
-  };
-  updateSeverityChart = function() {
-    var severityCounts = [0, 0, 0, 0, 0, 0, 0, 0];
-    for (var i in severitiesByPeriod) {
-      for (var j in severitiesByPeriod[i]) {
-        severityCounts[SEVERITY_LOOKUP_HASH[j]] += severitiesByPeriod[i][j];
+    appliedFilters['nodes'] = nodesOn;
+    updateHistoryState();
+
+    $.ajax({type:'POST',
+            url:'/log/stream/' + streamId,
+            data:'nodes=' + nodesOn.join("%2C"),
+            success:function() { },
+            error:function(request, textstatus, error) {
+              alert('Unable to update node filter'+request.responseText+" "+textstatus+" "+error);
+            }});
+  });
+
+  $('.filter-severity').live('click', function(e) {
+    e.preventDefault();
+    if ($(this).attr('filter-selected') == '1')  {
+      $(this).attr('filter-selected', '0');
+      $(this).find('i').removeClass('icon-ok').addClass('icon-remove');
+    } else {
+      $(this).attr('filter-selected', '1');
+      $(this).find('i').removeClass('icon-remove').addClass('icon-ok');
+    }
+    var severitiesOn = [];
+    var selectedSeverities = $('.filter-popover-inner').find('.filter-severity[filter-selected=1]');
+    $.each(selectedSeverities, function(k, v) {
+      if ($(this).attr('filter-selected') == '1') {
+        severitiesOn.push(parseInt($(this).attr('data-val'), 10));
       }
-    }
+    });
 
-    var totalSeverityCount = 0;
-    for (var i = 0; i < severityCounts.length; i++) {
-      totalSeverityCount += severityCounts[i];
-    }
+    appliedFilters['severities'] = severitiesOn;
+    updateHistoryState();
 
-    if (totalSeverityCount) {
-      if (!severityChartPath) {
-        severityChartPath = severityChart.selectAll('path').data(pie(severityCounts))
-                                         .enter().append('path')
-                                         .attr('fill', function(d, i) { return color(i); })
-                                         .attr('d', arc);
-      } else {
-        severityChartPath = severityChartPath.data(pie(severityCounts));
-        severityChartPath.attr('d', arc);
-      }
-    }
-  };
-  updateRoleChart = function() {
-    var roles = {};
-    for (var i in rolesByPeriod) {
-      for (var j in rolesByPeriod[i]) {
-         if (roles[j]) { roles[j] += rolesByPeriod[i][j]; } else { roles[j] = rolesByPeriod[i][j]; };
-      }
-    }
-    var roleCounts = [];
-    for (var role in roles) {
-      roleCounts.push(roles[role]);
-    }
-    var totalRoleCount = 0;
-    for (var i = 0; i < roleCounts.length; i++) {
-      totalRoleCount += roleCounts[i];
-    }
+    $.ajax({type:'POST',
+            url:'/log/stream/' + streamId,
+            data:'severities=' + severitiesOn.join("%2C"),
+            success:function() { },
+            error:function(request, textstatus, error) {
+              alert('Unable to update severity filter'+request.responseText+" "+textstatus+" "+error);
+            }});
+  });
 
-    if (totalRoleCount) {
-      if (!roleChartPath) {
-        roleChartPath = roleChart.selectAll('path').data(pie(roleCounts))
-                                 .enter().append('path')
-                                 .attr('fill', function(d, i) { return color(i); })
-                                 .attr('d', arc);
-      } else {
-        roleChartPath = roleChartPath.data(pie(roleCounts));
-        roleChartPath.attr('d', arc);
-      }
-    }
-  };
-  updateNodeChart = function() {
-    var nodes = {};
-    for (var i in nodesByPeriod) {
-      for (var j in nodesByPeriod[i]) {
-         if (nodes[j]) { nodes[j] += nodesByPeriod[i][j]; } else { nodes[j] = nodesByPeriod[i][j]; };
-      }
-    }
-    var nodeCounts = [];
-    for (var node in nodes) {
-      nodeCounts.push(nodes[node]);
-    }
-    var totalNodeCount = 0;
-    for (var i = 0; i < nodeCounts.length; i++) {
-      totalNodeCount += nodeCounts[i];
-    }
+  $('.icon-remove').click(function(e) {
+    e.preventDefault();
+    $('#log-messages tr:gt(0)').remove();
+  });
 
-    if (totalNodeCount) {
-      if (!nodeChartPath) {
-        nodeChartPath = nodeChart.selectAll('path').data(pie(nodeCounts))
-                                 .enter().append('path')
-                                 .attr('fill', function(d, i) { return color(i); })
-                                 .attr('d', arc);
-      } else {
-        nodeChartPath = nodeChartPath.data(pie(nodeCounts));
-        nodeChartPath.attr('d', arc);
-      }
-    }
-  };
-  updateLogMessages = function() {
-    appendMessageCell = function(d) {
-      this.html(function(d) { 
-         if (d.column === 'message') {
-           $(this).addClass('log-message');
-         }
+  $('#filter-properties').click(function(e) {
+    e.preventDefault();
 
-         if (d.column === 'find_more_html') {
-           var more = $('<a />').attr('href', '#')
-                                .attr('rel', 'popover')
-                                .attr('data-placement', 'bottom')
-                                .attr('data-html', true)
-                                .attr('data-content', d.value)
-                                .attr('data-template', '<div class="popover message-more-popover-outer"><div class="arrow"></div><div class="popover-inner message-more-popover-inner"><h3 class="popover-title"></h3><div class="popover-content"><p></p></div></div></div>')
-                                .attr('data-original-title', 'More Info<div style="float:right;"><button class="close close-popover">&times;</button></div>')
-                                .addClass('btn').addClass('btn-mini').addClass('show-more')
-                                .html('<i class="icon-info-sign"></i>');
-           return $('<div />').append(more).html();
-         } else {
-           return d.value;
-         }
-       });
-    };
+    $('.filter-popover-inner input#identity-search').typeahead({
+      items: 10,
+      source: function(query, process) {
+        var d = ['california', 'arkansas', 'soemthing'];
+        console.log(d);
+        return process(d);
+      }});
+  });
 
-    var minTimestamp = 0;
-    var columns = ['find_more_html', 'time', 'message_severity', 'message'];
-    var rows = tbody.selectAll('tr').data(fullMessages);
+  $('.icon-pause').click(function(e) {
+    e.preventDefault();
+    var data = 'stream_id=' + encodeURIComponent(streamId);
+    $.ajax({type:'POST',url:'/log/stream/pause',data:data,
+            success:function(data,textStatus,xhr) {
+              if (data['is_paused']) {
+                $('#log-pause').removeClass('icon-pause').addClass('icon-play');
+                $('#log-messages tbody').prepend($('<tr />')
+                                                 .append($('<td />').attr('colspan', '4').css('text-align', 'center')
+                                                         .html('Paused...')));
+              } else {
+                $('#log-pause').removeClass('icon-play').addClass('icon-pause');
+                $('#log-messages tbody').prepend($('<tr />')
+                                                 .append($('<td />').attr('colspan', '4').css('text-align', 'center')
+                                                         .html('Resumed')));
+              }
+            },
+            error:function(xhr,textStatus) {
+              alert('Unable to toggle pause state');
+            }});
+  });
 
-    rows.enter().append('tr');
-    rows.exit().remove();
-
-    var cells = rows.selectAll('td')
-                    .data(function(log_message) {
-                      return columns.map(function(column) {
-                        return {column: column, value: log_message[column]};
-                      });
-                    });
-
-    cells.call(appendMessageCell);
-    cells.exit().remove();
-    cells.enter().append('td').call(appendMessageCell);
-
-    tbody.selectAll('tr').sort(sortTimeDescending);
-
-    isLogMessagesDirty = false;
-  };
-
-  sortTimeDescending = function(a, b) {
-    return d3.descending(a['timestamp'], b['timestamp']);
-  };
-
-  setInterval(function() {
-    updateTimeChart();
-    updateSeverityChart();
-    updateRoleChart();
-    updateNodeChart();
-  }, CHART_REFRESH_INTERVAL);
-
-  setInterval(function() {
-    if (fullMessagesDirty) {
-      updateLogMessages();
-      fullMessagesDirty = false;
-    }
-  }, MESSAGES_REFRESH_INTERVAL);
+  $('#close-filter').live('click', function() {
+    $('#filter-properties').popover('hide');
+  });
 
   $('.close-popover').live('click', function() {
     $('.show-more').popover('hide');
@@ -270,99 +179,214 @@ $(document).ready(function() {
                      e.preventDefault();
                  });
 
-  $('.show-more').live('click', function(e) {
+  var today = new Date();
+  var defaultDate = today.getMonth() + 1 + '-' + today.getDate() + '-' + today.getFullYear();
+  var defaultTime = '';
+  if (today.getHours() < 13) {
+    if (today.getHours() < 10) {
+      defaultTime += '0';
+    }
+    defaultTime += today.getHours() + ':00 AM';
+  } else {
+    var h = today.getHours() - 12;
+    if (h < 10) {
+      defaultTime += '0';
+    }
+    defaultTime += h + ':00 PM'
+  }
+  // todo: consider making this cleaner and more maintainable... jquery's dom builder style maybe?
+  var timestampPopoverContent = '<label class="radio timestamp-radio-label">' +
+                                  '<input type="radio" name="timestamp-radio" value="current" checked></input>' +
+                                  'Current Stream' +
+                                '</label>' +
+                                '<label class="radio timestamp-radio-label">' +
+                                  '<input type="radio" name="timestamp-radio" value="previous"></input>' +
+                                  'Earlier (UTC)' +
+                                  '<div id="timespan-absolute" style="display:none;">' +
+                                    '<span class="timestamp-description">Limit</span>' +
+                                    '<div class="input-append date" id="absolute-date-start" data-date="' + defaultDate + '" data-date-format="mm-dd-yyyy">' +
+                                      '<span class="add-on"><i class="icon-th"></i></span>' +
+                                      '<input type="text" id="selected-date-value" value="' + defaultDate + '" readonly style="width:145px;"></input>' +
+                                    '</div>' +
+                                    '<div class="input-append bootstrap-timepicker-component">' +
+                                      '<span class="add-on"><i class="icon-time"></i></span>' +
+                                      '<input type="text" value="' + defaultTime + '" class="timepicker-default input-small" id="absolute-time-start" readonly></input>' +
+                                    '</div>' +
+                                  '</div>' +
+                                  '<div class="timestamp-change"><a href="#" class="btn btn-mini" id="apply-time">apply</a></div>' +
+                                '</label>';
+
+  $('#log-timestamp').popover({html: true,
+                               trigger: 'click',
+                               title: 'Message Timestamp<div style="float:right;"><button class="close" id="close-timestamp">&times;</button></div>',
+                               placement: 'bottom',
+                               content: timestampPopoverContent});
+
+  $('#log-timestamp').click(function(e) {
+    $('#absolute-date-start').datepicker();
+    $('#absolute-date-end').datepicker();
+    $('#absolute-time-start').timepicker({'defaultTime': 'current'});
     e.preventDefault();
-    $('.show-more').popover('hide');
-    $(this).popover('show');
   });
 
-  flushData = function() {
-    var messagesCopy = incomingSummaryMessages.slice(0);
-    incomingSummaryMessages = [];
-    var messageFilter = crossfilter(messagesCopy);
+  $('#close-timestamp').live('click', function(e) {
+    $('#log-timestamp').popover('hide');
+    e.preventDefault();
+  });
 
-    var severityFilterDimension = messageFilter.dimension(function(log_message) {
-      return log_message['severity'];
-    });
-    var severityFilterGroup = severityFilterDimension.group(function(severity) {
-      return severity;
-    });
-    var roleFilterDimension = messageFilter.dimension(function(log_message) {
-      return log_message['role'];
-    });
-    var roleFilterGroup = roleFilterDimension.group(function(role) {
-      return role;
-    });
-    var nodeFilterDimension = messageFilter.dimension(function(log_message) {
-      return log_message['node'];
-    });
-    var nodeFilterGroup = nodeFilterDimension.group(function(node) {
-      return node;
-    });
-    var timeSecondFilterDimension = messageFilter.dimension(function(log_message) {
-      return Math.floor(log_message['timestamp'] / 1000 / 1000);
-    });
-    var timeFilterGroupByTimeInterval = timeSecondFilterDimension.group(function(second) {
-      return Math.floor(second / TIME_CHART_PERIOD);
-    });
-
-    var key = Math.floor(new Date().getTime() / 1000) - timestampOffset;
-    while (key % 5) { key--; };
-    key = key / 5;
-
-    // pull the counts
-    var lastCount = countsByPeriod[key] || 0;
-    for (var count in timeFilterGroupByTimeInterval.all()) {
-      lastCount += timeFilterGroupByTimeInterval.all()[count]['value'];
-    };
-    countsByPeriod[key] = lastCount;
-
-    // pull the severities
-    var lastSeverity = severitiesByPeriod[key] || $.extend({}, EMPTY_SEVERITY_HASH);
-    for (var severity in severityFilterGroup.all()) {
-      var k = severityFilterGroup.all()[severity]['key'];
-      var v = severityFilterGroup.all()[severity]['value'];
-      if (lastSeverity[k]) { lastSeverity[k] += v; } else { lastSeverity[k] = v; }
-    };
-    severitiesByPeriod[key] = lastSeverity;
-
-    // pull the roles
-    var lastRole = rolesByPeriod[key] || {};
-    for (var role in roleFilterGroup.all()) {
-      var k = roleFilterGroup.all()[role]['key'];
-      var v = roleFilterGroup.all()[role]['value'];
-      if (lastRole[k]) { lastRole[k] += v; } else { lastRole[k] = v; }
+  $('#apply-time').live('click', function(e) {
+    e.preventDefault();
+    if ($('input[name=timestamp-radio]:checked').val() == 'current') {
+      $.ajax({type:'POST',url:'/log/stream/' + streamId,
+              data:'time_filter_type=stream',
+              success:function() { },
+              error:function() {
+                alert('Unable to update time filter');
+              }});
+    } else if ($('input[name=timestamp-radio]:checked').val() == 'previous') {
+      $.ajax({type:'POST',url:'/log/stream/' + streamId,
+              data:'time_filter_type=previous' +
+                   '&max_date=' + encodeURIComponent($('#selected-date-value').val()) +
+                   '&max_time=' + encodeURIComponent($('#absolute-time-start').val()),
+              success:function() { },
+              error:function() {
+                alert('Unable to update time filter');
+              }});
     }
-    rolesByPeriod[key] = lastRole;
 
-    // pull the nodes
-    var lastNode = nodesByPeriod[key] || {};
-    for (var node in nodeFilterGroup.all()) {
-      var k = nodeFilterGroup.all()[node]['key'];
-      var v = nodeFilterGroup.all()[node]['value'];
-      if (lastNode[k]) { lastNode[k] += v; } else { lastNode[k] = v; }
+  });
+
+  $('input[name=timestamp-radio]').live('change', function() {
+    if ($(this).val() == 'previous') {
+      $('#timespan-absolute').slideDown();
+      $('#timespan-relative').slideUp();
+    } else if($(this).val() == 'current') {
+      $('#timespan-relative').slideDown();
+      $('#timespan-absolute').slideUp();
     }
-    nodesByPeriod[key] = lastNode;
-  };
+  });
 
-  setInterval(function() {
-    flushData();
-  }, FLUSH_DATA_INTERVAL);
+  // select the default filters
+  for (appliedFilter in appliedFilters) {
+    var values = appliedFilters[appliedFilter];
 
-  showSummaryMessage = function(summary_message) {
-    incomingSummaryMessages.push(summary_message);
-  };
+    if (appliedFilter === 'roles') {
+      for (var i = 0; i < values.length; i++) {
+        var value = values[i];
+        $('.filter-role[data-val=\''+value+'\']').prop('checked', true);
+      }
+    } else if (appliedFilter === 'node_names') {
+      for (var i = 0; i < values.length; i++) {
+        var value = values[i];
+        $('.filter-node[data-val=\''+value+'\']').prop('checked', true);
+      }
+    } else if (appliedFilter === 'severities') {
+      for (var i = 0; i < values.length; i++) {
+        var value = values[i];
+        $('.filter-severity[data-val=\''+value+'\']').prop('checked', true);
+      }
+    }
+  }
 
-  showLogMessage = function(log_message) {
-    if (log_message['name'] && log_message['name'] == 'clear') {
-      fullMessages = [];
+  executeCommand = function(command_payload) {
+    if (command_payload['name'] == 'clear') {
+      $('#log-messages tr:gt(0)').remove();
     } else {
-      fullMessages.push(log_message);
-      if (fullMessages.length > MAX_MESSAGES_TO_SHOW) {
-        fullMessages.shift();
+      console.log('Unrecognized command: ' + command);
+    }
+  };
+
+  showNewLogMessage = function(log_message) {
+    showLogMessage('top', log_message);
+  };
+
+  showOldLogMessage = function(log_message) {
+    showLogMessage('bottom', log_message);
+  };
+
+  showLogMessage = function(location, log_message) {
+    if (foundSeverities.indexOf(log_message.message_severity) == -1) {
+      foundSeverities.push(log_message.message_severity);
+      var severityVal = -1;
+      for (var s in knownSeverities) {
+        if (knownSeverities[s]['label'] == log_message.message_severity) {
+          severityVal = knownSeverities[s]['val'];
+        }
+      }
+      var severity = '<span class="label filter-item filter-severity" data-val="' + severityVal + '" filter-selected="1"><i class="icon-ok"></i>' + log_message.message_severity + '</span>&nbsp;';
+      $('#severities-list').append(severity);
+      $('a#filter-properties').data('popover').options.content = $('#filter-popover').html();
+    }
+
+    if (foundNodes.indexOf(log_message.node) == -1) {
+      foundNodes.push(log_message.node);
+      var node = '<span class="label filter-item filter-node" data-val="' + log_message.node + '" filter-selected="1"><i class="icon-ok"></i>' + log_message.node + '</span>&nbsp;';
+      $('#nodes-list').append(node);
+      $('a#filter-properties').data('popover').options.content = $('#filter-popover').html();
+    }
+
+    if (foundRoles.indexOf(log_message.role) == -1) {
+      foundRoles.push(log_message.role);
+      var role = '<span class="label filter-item filter-role" data-val="' + log_message.role + '" filter-selected="1"><i class="icon-ok"></i>' + log_message.role + '</span>&nbsp;';
+      $('#roles-list').append(role);
+      $('a#filter-properties').data('popover').options.content = $('#filter-popover').html();
+    }
+
+    for (var idx in log_message.topics) {
+      if (foundTopics.indexOf(log_message.topics[idx]) == -1) {
+        foundTopics.push(log_message.topics[idx]);
+        var topic = '<span class="label filter-item filter-topic" data-val="' + log_message.topics[idx] + '" filter-selected="1"><i class="icon-ok"></i>' + log_message.topics[idx] + '</span>&nbsp;';
+        $('#topics-list').append(topic);
+        $('a#filter-properties').data('popover').options.content = $('#filter-popover').html();
       }
     }
 
-    fullMessagesDirty = true;
+    for (var idx in log_message.identities) {
+      if (foundIdentities.indexOf(log_message.identities[idx]) == -1) {
+        foundIdentities.unshift(log_message.identities[idx]);
+        if (foundIdentities.length > MAX_IDENTITIES) {
+          var removedIdentities = foundIdentities.splice(MAX_IDENTITIES, foundIdentities.length);
+          for (var removedIdx in removedIdentities) {
+            $('.filter-identity[data-val='+removedIdentities[removedIdx]+']').remove();
+          };
+        }
+        var topic = '<span class="label filter-item filter-identity" data-val="' + log_message.identities[idx] + '" filter-selected="1"><i class="icon-ok"></i>' + log_message.identities[idx] + '</span>&nbsp;';
+        $('#identities-list').prepend(topic);
+        $('a#filter-properties').data('popover').options.content = $('#filter-popover').html();
+      }
+    }
+
+    var row = $('<tr />').attr('data-timestamp', log_message['timestamp']);
+    var cell = $('<td />').css('padding-right', '12px');
+    var more = $('<a />').attr('href', '#')
+                          .attr('rel', 'popover')
+                          .attr('data-placement', 'bottom')
+                          .attr('data-html', true)
+                          .attr('data-content', log_message.find_more_html)
+                          .attr('data-original-title', 'Find Similar<div style="float:right;"><button class="close close-popover">&times;</button></div>')
+                          .addClass('btn').addClass('btn-mini').addClass('show-more')
+                          .html('...');
+    more.popover({html: true, trigger: 'manual'})
+                .click(function(e) {
+                  $('.show-more').popover('hide');
+                  $(this).popover('show');
+                  e.preventDefault();
+                });
+    cell.append(more);
+    row.append(cell);
+    row.append($('<td />').html(log_message.time));
+    row.append($('<td />').html(log_message.message_severity));
+    row.append($('<td />').addClass('log-message').html(log_message.message));
+
+    if (location == 'top') {
+      $('#log-messages tbody').prepend(row);
+    } else if (location == 'bottom') {
+      $('#log-messages tbody').append(row);
+    }
+
+    // truncate the table to 100 rows // TODO make this less static
+    while ($('#log-messages tr').length > 100) {
+      $('#log-messages tr:last').remove();
+    }
   }
 });

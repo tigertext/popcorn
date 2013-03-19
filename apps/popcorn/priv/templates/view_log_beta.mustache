@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Popcorn Log Analysis</title>
+    {{#head_includes}}
+      {{tag}}
+    {{/head_includes}}
+    <script src="/js/jquery.min.js"></script>
+    <script src="/js/history.js/scripts/bundled/html4+html5/jquery.history.js"></script>
+    <script src="/bootstrap/js/bootstrap-dropdown.js"></script>
+    <script src="/bootstrap/js/bootstrap-collapse.js"></script>
+    <script src="/bootstrap/js/bootstrap-typeahead.js"></script>
+    <script src="/bootstrap/js/bootstrap-tooltip.js"></script>
+    <script src="/bootstrap/js/bootstrap-popover.js"></script>
+    <script src="/js/bootstrap-datepicker.js"></script>
+    <script src="/js/bootstrap-timepicker.js"></script>
+    <script src="/js/d3.v3.min.js"></script>
+    <script src="/js/crossfilter.min.js"></script>
+  </head>
+  <body>
+    <div class="navbar navbar-static-top navbar-inverse">
+      <div class="navbar-inner">
+        <div class="container">
+          <a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </a>
+          <a class="brand" href="/">Popcorn</a>
+          <span class="tagline">a predictive & intelligent log analysis machine</span>
+
+          <div class="nav-collapse collapse" id="main-menu">
+            <div class="auth pull-right">
+              <img class="avatar" src="{{avatar_path}}" />
+              <span class="name">{{username}}</span><br/>
+              <span class="links">
+                <a href="/settings">Settings</a>
+                <a href="/logout">Logout</a>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="container">
+      <div class="row-fluid">
+        <div id="content-wrapper-full">
+          <div id="content">
+            <header>
+              <h1>
+                Logs
+                <div style="float:right;padding-right:36px;">
+                    <span class="label label-important" id="disconnected" style="display:none;">Disconnected</span>
+                  </div>
+                </h1>
+            </header>
+            <section id="visuals">
+              <div class="sub-header">
+                <h3>Visualizations</h3>
+              </div>
+              <div id="visualization-container">
+              </div>
+            </section>
+            <section id="logs">
+              <div class="sub-header">
+                <h2>Raw Logs</h2>
+              </div>
+            </section>
+          </div>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+      var knownSeverities = [];
+      {{#known_severities}}
+      knownSeverities.push({val:{{severity_num}}, label:'{{label}}'});
+      {{/known_severities}}
+    </script>
+    <script src="/js/node_log_beta.js" type="text/javascript"></script>
+    <script type="text/javascript">
+      var messagesSource = new EventSource('/log/{{stream_id}}/messages/feed');
+      var summarySource = new EventSource('/log/{{stream_id}}/summary/feed');
+
+      summarySource.onmessage = function(message) {
+        var parsedMessage = JSON.parse(message.data);
+        showSummaryMessage(parsedMessage['payload']);
+      };
+      summarySource.onerror = function(error) {
+        $('#disconnected').show();
+      };
+
+      messagesSource.onmessage = function(message) {
+        var parsedMessage = JSON.parse(message.data);
+        showLogMessage(parsedMessage['payload']);
+      };
+      messagesSource.onerror = function(error) {
+        $('#disconnected').show();
+      };
+    </script>
+  </body>
+</html>

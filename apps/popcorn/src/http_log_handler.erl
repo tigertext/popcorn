@@ -58,61 +58,81 @@ handle_path(<<"GET">>, [<<"log">>, Stream_Id, <<"messages">>, <<"feed">>], Req, 
 %% convienence entry points to allow the user to pre-define the filters
 handle_path(<<"GET">>, [<<"log">>], Req, State) ->
     case session_handler:is_session_authed_and_valid(Req) of
-        false -> Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
-                 {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
-                 {ok, Reply, State};
-        true  -> {Nodes_Param, _}      = cowboy_req:qs_val(<<"nodes">>, Req, <<>>),
-                 {Severities_Param, _} = cowboy_req:qs_val(<<"severities">>, Req, <<>>),
-                 {Roles_Param, _}      = cowboy_req:qs_val(<<"roles">>, Req, <<>>),
+        false ->
+            Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
+            {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
+            {ok, Reply, State};
+        true ->
+            {Nodes_Param, _} = cowboy_req:qs_val(<<"nodes">>, Req, <<>>),
+            {Severities_Param, _} = cowboy_req:qs_val(<<"severities">>, Req, <<>>),
+            {Roles_Param, _} = cowboy_req:qs_val(<<"roles">>, Req, <<>>),
 
-                 Nodes       = string:tokens(binary_to_list(Nodes_Param), ";"),
-                 Severities  = string:tokens(binary_to_list(Severities_Param), ";"),
-                 Roles       = string:tokens(binary_to_list(Roles_Param), ";"),
+            Nodes = string:tokens(binary_to_list(Nodes_Param), ";"),
+            Severities = string:tokens(binary_to_list(Severities_Param), ";"),
+            Roles = string:tokens(binary_to_list(Roles_Param), ";"),
 
-                 %% we show everything, unless we have applied a filter.
-                 %% so visiting /log will show ALL logs, ALL severities, ALL nodes, ALL roles, etc
-                 %% but as soon as we add "severities=debug;info" to the qs, then it's ALL of everything
-                 %% except severity, where we now have a filter applies
-                 Applied_Node_Filters = case Nodes of
-                                            [] -> lists:map(fun({N, _}) -> binary_to_list(N) end, ets:tab2list(current_nodes));
-                                            _  -> Nodes
-                                        end,
-                 Applied_Severity_Filters = case Severities of
-                                                [] -> [SN || {SN, _} <- popcorn_util:all_severities()];
-                                                _  -> Severities
-                                            end,
-                 Applied_Role_Filters = case Roles of
-                                            [] -> lists:map(fun({N, _}) -> binary_to_list(N) end, ets:tab2list(current_roles));
-                                            _  -> Roles
-                                        end,
+            %% we show everything, unless we have applied a filter.
+            %% so visiting /log will show ALL logs, ALL severities, ALL nodes, ALL roles, etc
+            %% but as soon as we add "severities=debug;info" to the qs, then it's ALL of everything
+            %% except severity, where we now have a filter applies
+            Applied_Node_Filters =
+              case Nodes of
+                  [] ->
+                      lists:map(fun({N, _}) -> binary_to_list(N) end, ets:tab2list(current_nodes));
+                  _ ->
+                      Nodes
+              end,
+            Applied_Severity_Filters =
+              case Severities of
+                  [] ->
+                      [SN || {SN, _} <- popcorn_util:all_severities()];
+                  _ ->
+                      Severities
+              end,
+            Applied_Role_Filters =
+              case Roles of
+                  [] ->
+                      lists:map(fun({N, _}) -> binary_to_list(N) end, ets:tab2list(current_roles));
+                  _ ->
+                      Roles
+              end,
 
-                 Default_Filters = [{'node_names', Applied_Node_Filters},
-                                        {'roles',  Applied_Role_Filters},
-                                        {'severities', lists:map(fun(Severity_Name) -> popcorn_util:severity_to_number(Severity_Name) end, Applied_Severity_Filters)}],
+            Default_Filters =
+              [{'node_names', Applied_Node_Filters},
+               {'roles',  Applied_Role_Filters},
+               {'severities', lists:map(fun(Severity_Name) -> popcorn_util:severity_to_number(Severity_Name) end, Applied_Severity_Filters)}],
 
-                 %% spawn the stream fsm
-                 {ok, Stream_Pid} = supervisor:start_child(log_stream_sup, []),
+            %% spawn the stream fsm
+            {ok, Stream_Pid} = supervisor:start_child(log_stream_sup, []),
 
-                 %% create the stream object
-                 Log_Stream = #double_stream{stream_id           = popcorn_util:random_id(),
-                                             stream_pid          = Stream_Pid,
-                                             max_timestamp       = undefined,  %% being explicit here
-                                             client_messages_pid = undefined,
-                                             client_summary_pid  = undefined,
-                                             applied_filters     = Default_Filters,
-                                             paused              = false},
+            %% create the stream object
+            Log_Stream = #double_stream{stream_id           = popcorn_util:random_id(),
+                                        stream_pid          = Stream_Pid,
+                                        max_timestamp       = undefined,  %% being explicit here
+                                        client_messages_pid = undefined,
+                                        client_summary_pid  = undefined,
+                                        applied_filters     = Default_Filters,
+                                        paused              = false},
 
-                 %% assign to the fsm
-                 gen_fsm:send_event(Stream_Pid, {connect, Log_Stream}),
+            %% assign to the fsm
+            gen_fsm:send_event(Stream_Pid, {connect, Log_Stream}),
 
-                 Context = dict:from_list([{username,        binary_to_list(session_handler:current_username(Req))},
-                                           {stream_id,       binary_to_list(Log_Stream#double_stream.stream_id)},
-                                           {default_filters, dict:from_list(Default_Filters)}]),
+            Context = dict:from_list([{username,        binary_to_list(session_handler:current_username(Req))},
+                                      {stream_id,       binary_to_list(Log_Stream#double_stream.stream_id)},
+                                      {default_filters, dict:from_list(Default_Filters)}]),
 
-                 TFun        = pcache:get(rendered_templates, view_log),
-                 Output      = mustache:render(view_log, TFun, Context),
-                 {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
-                 {ok, Reply, State}
+            case cowboy_req:qs_val(<<"beta">>, Req) of
+                {<<"1">>, _} ->
+                    TFun = pcache:get(rendered_templates, view_log_beta),
+                    Output = mustache:render(view_log_beta, TFun, Context),
+                    {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
+                    {ok, Reply, State};
+                _ ->
+                    TFun = pcache:get(rendered_templates, view_log),
+                    Output = mustache:render(view_log, TFun, Context),
+                    {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
+                    {ok, Reply, State}
+            end
     end.
 
 handle_loop(Req, State) ->
