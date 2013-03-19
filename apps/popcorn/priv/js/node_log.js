@@ -7,7 +7,7 @@ var pie = d3.layout.pie(),
     rolesByPeriod = [],
     fullMessages = [],
     timeChart, severityChart, roleChart, nodeChart,
-    severityChartPath,
+    severityChartPath, roleChartPath, nodeChartPath,
     timestampOffset = Math.floor(new Date().getTime() / 1000);
     fullMessagesDirty = false,
     MAX_MESSAGES_TO_SHOW = 500,
@@ -65,8 +65,8 @@ $(document).ready(function() {
         .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
   severityChart = d3.select('#visualization-container').append('svg').attr('class', 'chart severity-chart').append('g').attr('transform', 'translate(110, 110)');
-  roleChart = d3.select('#visualization-container').append('svg').attr('class', 'chart role-chart');
-  nodeChart = d3.select('#visualization-container').append('svg').attr('class', 'chart node-chart');
+  roleChart = d3.select('#visualization-container').append('svg').attr('class', 'chart role-chart').append('g').attr('transform', 'translate(110, 110)');
+  nodeChart = d3.select('#visualization-container').append('svg').attr('class', 'chart node-chart').append('g').attr('transform', 'translate(110, 110)');
 
   updateTimeChart = function() {
     var maxValue = 0;  // TODO get this value instead of iterating
@@ -139,10 +139,60 @@ $(document).ready(function() {
     }
   };
   updateRoleChart = function() {
+    var roles = {};
+    for (var i in rolesByPeriod) {
+      for (var j in rolesByPeriod[i]) {
+         if (roles[j]) { roles[j] += rolesByPeriod[i][j]; } else { roles[j] = rolesByPeriod[i][j]; };
+      }
+    }
+    var roleCounts = [];
+    for (var role in roles) {
+      roleCounts.push(roles[role]);
+    }
+    var totalRoleCount = 0;
+    for (var i = 0; i < roleCounts.length; i++) {
+      totalRoleCount += roleCounts[i];
+    }
 
+    if (totalRoleCount) {
+      if (!roleChartPath) {
+        roleChartPath = roleChart.selectAll('path').data(pie(roleCounts))
+                                 .enter().append('path')
+                                 .attr('fill', function(d, i) { return color(i); })
+                                 .attr('d', arc);
+      } else {
+        roleChartPath = roleChartPath.data(pie(roleCounts));
+        roleChartPath.attr('d', arc);
+      }
+    }
   };
   updateNodeChart = function() {
+    var nodes = {};
+    for (var i in nodesByPeriod) {
+      for (var j in nodesByPeriod[i]) {
+         if (nodes[j]) { nodes[j] += nodesByPeriod[i][j]; } else { nodes[j] = nodesByPeriod[i][j]; };
+      }
+    }
+    var nodeCounts = [];
+    for (var node in nodes) {
+      nodeCounts.push(nodes[node]);
+    }
+    var totalNodeCount = 0;
+    for (var i = 0; i < nodeCounts.length; i++) {
+      totalNodeCount += nodeCounts[i];
+    }
 
+    if (totalNodeCount) {
+      if (!nodeChartPath) {
+        nodeChartPath = nodeChart.selectAll('path').data(pie(nodeCounts))
+                                 .enter().append('path')
+                                 .attr('fill', function(d, i) { return color(i); })
+                                 .attr('d', arc);
+      } else {
+        nodeChartPath = nodeChartPath.data(pie(nodeCounts));
+        nodeChartPath.attr('d', arc);
+      }
+    }
   };
   updateLogMessages = function() {
     appendMessageCell = function(d) {
@@ -199,7 +249,7 @@ $(document).ready(function() {
     updateTimeChart();
     updateSeverityChart();
     updateRoleChart();
-    updateSeverityChart();
+    updateNodeChart();
   }, CHART_REFRESH_INTERVAL);
 
   setInterval(function() {
@@ -276,6 +326,23 @@ $(document).ready(function() {
     };
     severitiesByPeriod[key] = lastSeverity;
 
+    // pull the roles
+    var lastRole = rolesByPeriod[key] || {};
+    for (var role in roleFilterGroup.all()) {
+      var k = roleFilterGroup.all()[role]['key'];
+      var v = roleFilterGroup.all()[role]['value'];
+      if (lastRole[k]) { lastRole[k] += v; } else { lastRole[k] = v; }
+    }
+    rolesByPeriod[key] = lastRole;
+
+    // pull the nodes
+    var lastNode = nodesByPeriod[key] || {};
+    for (var node in nodeFilterGroup.all()) {
+      var k = nodeFilterGroup.all()[node]['key'];
+      var v = nodeFilterGroup.all()[node]['value'];
+      if (lastNode[k]) { lastNode[k] += v; } else { lastNode[k] = v; }
+    }
+    nodesByPeriod[key] = lastNode;
   };
 
   setInterval(function() {
