@@ -46,7 +46,7 @@ dialyze_plt: all
 #   npm install -g less
 css: popcorn.css
 popcorn.css: apps/popcorn/priv/css/popcorn.less
-	/usr/local/bin/lessc apps/popcorn/priv/css/popcorn.less > apps/popcorn/priv/css/popcorn.css
+	lessc apps/popcorn/priv/css/popcorn.less > apps/popcorn/priv/css/popcorn.css
 
 templates:
 	cp apps/popcorn/priv/templates/*.mustache apps/popcorn/ebin
