@@ -1,5 +1,5 @@
 ## Name of the node
--name popcorn@##HOSTNAME##
+-name popcorn@localhost
 
 ## Cookie for distributed erlang
 -setcookie popcorn
