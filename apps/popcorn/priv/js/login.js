@@ -23,7 +23,9 @@ $(document).ready(function() {
   });
 
   do_login = function() {
-    $.ajax({type:'POST',url:'/api/v1/login',data:$('#login-form').serialize(),
+    var data = 'username=' + encodeURIComponent($('#username').val()) +
+               '&password=' + encodeURIComponent($('#password').val());
+    $.ajax({type:'POST',url:'/api/v1/login',data:data,
             success:function(data, textStatus, xhr) {
               window.location.href = '/';
             },

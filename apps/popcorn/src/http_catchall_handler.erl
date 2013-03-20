@@ -32,6 +32,7 @@ handle(Req, State) ->
             Username = proplists:get_value(<<"username">>, Post_Vals),
             Password = proplists:get_value(<<"password">>, Post_Vals),
 
+            ?POPCORN_DEBUG_MSG("Username = ~p, Password = ~p", [Username, Password]),
             case session_handler:try_start_authed_session("", Username, Password) of
                 {error, Message}  -> {ok, Reply} = cowboy_req:reply(401, [], Message, Req),
                                      {ok, Reply, State};
@@ -154,60 +155,62 @@ handle(Req, State) ->
                 end,
             ?POPCORN_DEBUG_MSG("#http_request for alerts (~p, ~p)", [All, Severities]),
             case session_handler:is_session_authed_and_valid(Req) of
-                false -> Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
-                         {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
-                         {ok, Reply, State};
-                true  ->
-                        %% spawn the stream fsm
-                        {ok, Stream_Pid} = supervisor:start_child(dashboard_stream_sup, []),
+                false ->
+                    Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
+                    {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
+                    {ok, Reply, State};
+                true ->
+                    %% spawn the stream fsm
+                    {ok, Stream_Pid} = supervisor:start_child(dashboard_stream_sup, []),
 
-                        %% create the stream object
-                        Stream_Id = popcorn_util:random_id(),
-                        Stream = #stream{stream_id          = Stream_Id,
-                                         stream_pid         = Stream_Pid,
-                                         client_pid         = undefined},
+                    %% create the stream object
+                    Stream_Id = popcorn_util:random_id(),
+                    Stream = #stream{stream_id          = Stream_Id,
+                                     stream_pid         = Stream_Pid,
+                                     client_pid         = undefined},
 
-                        %% assign to the fsm
-                        gen_fsm:send_event(Stream_Pid, {connect, Stream}),
+                    %% assign to the fsm
+                    gen_fsm:send_event(Stream_Pid, {connect, Stream}),
 
-                        Context = dict:from_list([{username,    binary_to_list(session_handler:current_username(Req))},
-                                                  {stream_id,   binary_to_list(Stream_Id)},
-                                                  {all,         All},
-                                                  {sort,        list_to_atom(binary_to_list(Sort))},
-                                                  {severities,  Severities}]),
+                    Context = dict:from_list([{username,    binary_to_list(session_handler:current_username(Req))},
+                                              {stream_id,   binary_to_list(Stream_Id)},
+                                              {all,         All},
+                                              {sort,        list_to_atom(binary_to_list(Sort))},
+                                              {severities,  Severities}]),
 
-                        TFun        = pcache:get(rendered_templates, view_alerts),
-                        Output      = mustache:render(view_alerts, TFun, Context),
-                        {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
-                        {ok, Reply, State}
+                    TFun        = pcache:get(rendered_templates, view_alerts),
+                    Output      = mustache:render(view_alerts, TFun, Context),
+                    {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
+                    {ok, Reply, State}
             end;
 
         {{<<"GET">>, _}, {<<"/">>, _}} ->
             ?POPCORN_DEBUG_MSG("#http_request for dashboard"),
             case session_handler:is_session_authed_and_valid(Req) of
-                false -> Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
-                         {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
-                         {ok, Reply, State};
+                false ->
+                    Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
+                    {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
+                    {ok, Reply, State};
                 true  ->
-                        %% spawn the stream fsm
-                        {ok, Stream_Pid} = supervisor:start_child(dashboard_stream_sup, []),
+                    %% spawn the stream fsm
+                    {ok, Stream_Pid} = supervisor:start_child(dashboard_stream_sup, []),
 
-                        %% create the stream object
-                        Stream_Id = popcorn_util:random_id(),
-                        Stream = #stream{stream_id        = Stream_Id,
-                                         stream_pid       = Stream_Pid,
-                                         client_pid       = undefined},
+                    %% create the stream object
+                    Stream_Id = popcorn_util:random_id(),
+                    Stream = #stream{stream_id = Stream_Id,
+                                     stream_pid = Stream_Pid,
+                                     client_pid = undefined},
 
-                        %% assign to the fsm
-                        gen_fsm:send_event(Stream_Pid, {connect, Stream}),
+                    %% assign to the fsm
+                    gen_fsm:send_event(Stream_Pid, {connect, Stream}),
 
-                        Context = dict:from_list([{username,  binary_to_list(session_handler:current_username(Req))},
-                                                  {stream_id, binary_to_list(Stream_Id)}]),
+                    Context = dict:from_list([{username,  binary_to_list(session_handler:current_username(Req))},
+                                              {stream_id, binary_to_list(Stream_Id)}]),
 
-                        TFun        = pcache:get(rendered_templates, view_dashboard),
-                        Output      = mustache:render(view_dashboard, TFun, Context),
-                        {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
-                        {ok, Reply, State}
+                    TFun = pcache:get(rendered_templates, view_dashboard),
+                    Output = mustache:render(view_dashboard, TFun, Context),
+                    {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
+                    {ok, Reply, State}
             end;
 
         {{Method, _}, {Path, _}} ->
