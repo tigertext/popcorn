@@ -99,6 +99,25 @@ init([]) ->
                  end
     end;
 
+'STREAMING'({update_severities, New_Severities}, State) ->
+    Severity_Filter = lists:map(fun(S) -> list_to_integer(S) end, string:tokens(binary_to_list(New_Severities), ",")),
+    Stream          = State#state.stream,
+    Applied_Filters = Stream#double_stream.applied_filters,
+
+    Applied_Filters2 = case proplists:get_value('severities', Applied_Filters) of
+                           undefined -> Applied_Filters ++ [{'severities', Severity_Filter}];
+                           _         -> proplists:delete('severities', Applied_Filters) ++ [{'severities', Severity_Filter}]
+                       end,
+
+    update_filters(Applied_Filters2, Stream#double_stream.stream_id),
+
+    Stream2 = Stream#double_stream{applied_filters = Applied_Filters2},
+
+    Stream#double_stream.client_messages_pid ! clear_log,
+    gen_fsm:send_event_after(0, init_log_lines),
+
+    {next_state, 'STREAMING', State#state{stream = Stream2}};
+
 'STREAMING'(init_log_lines, State) ->
     %% send some log lines, based on the current state,
     %% and update the state so we can use timestamps instead of select/4 in a transaction
@@ -114,7 +133,11 @@ init([]) ->
 
 handle_event({message, Log_Message, Popcorn_Node}, State_Name, State) ->
     Stream = State#state.stream,
-    Should_Stream = is_pid(Stream#double_stream.client_messages_pid) andalso is_pid(Stream#double_stream.client_summary_pid),
+    Should_Stream =
+      Stream#double_stream.paused =:= false andalso
+      is_pid(Stream#double_stream.client_messages_pid) andalso
+      is_pid(Stream#double_stream.client_summary_pid) andalso
+      is_filtered_out(Log_Message, Stream#double_stream.max_timestamp, Stream#double_stream.applied_filters) =:= false,
 
     case Should_Stream of
         false ->
@@ -126,7 +149,16 @@ handle_event({message, Log_Message, Popcorn_Node}, State_Name, State) ->
 
     {next_state, State_Name, State};
 
+handle_event(toggle_pause, State_Name, State) ->
+    Stream = State#state.stream,
+    New_Stream = Stream#double_stream{paused = not Stream#double_stream.paused},
+    {next_state, State_Name, State#state{stream = New_Stream}};
+
 handle_event(Event, StateName, State)                 -> {stop, {StateName, undefined_event, Event}, State}.
+
+handle_sync_event(is_paused, _From, State_Name, State) ->
+    Stream = State#state.stream,
+    {reply, Stream#double_stream.paused, State_Name, State};
 
 handle_sync_event(Event, _From, StateName, State)     -> {stop, {StateName, undefined_event, Event}, State}.
 handle_info(_Info, StateName, State)                  -> {next_state, StateName, State}.
@@ -139,3 +171,13 @@ terminate(_Reason, _StateName, State)                 ->
     ok.
 code_change(_OldVsn, StateName, StateData, _Extra)    -> {ok, StateName, StateData}.
 
+update_filters(Applied_Filters, Stream_Id) ->
+    Stream = lists:nth(1, ets:select(current_log_streams, ets:fun2ms(fun(Stream2) when Stream2#double_stream.stream_id =:= Stream_Id -> Stream2 end))),
+    Stream2 = Stream#double_stream{applied_filters = Applied_Filters},
+    ets:insert(current_log_streams, Stream2).
+
+is_filtered_out(#log_message{log_nodename = Node_Name, severity = Severity, timestamp = Timestamp, log_product = Role} = Log_Message, Max_Timestamp, Filters) ->
+    is_severity_restricted(Severity, proplists:get_value('severities', Filters, [])).
+
+is_severity_restricted(Severity, Allowed_Severities) ->
+    not lists:member(Severity, Allowed_Severities).
