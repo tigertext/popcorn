@@ -18,11 +18,13 @@
 try_start_authed_session(IP_Address, Username, Password) ->
     {ok, Pid} = supervisor:start_child(connected_user_sup, []),
     case connected_user_fsm:try_auth_visit(Pid, IP_Address, Username, Password) of
-        false -> gen_fsm:send_all_state_event(Pid, destroy),
-                 {error, "Invalid Login"};
-        true  -> Session_Key = gen_fsm:sync_send_event(Pid, get_session_key),
-                 ets:insert(current_connected_users, {Session_Key, Pid}),
-                 {ok, Session_Key}
+        false ->
+            gen_fsm:send_all_state_event(Pid, destroy),
+            {error, "Invalid Login"};
+        true ->
+            Session_Key = gen_fsm:sync_send_event(Pid, get_session_key),
+            ets:insert(current_connected_users, {Session_Key, Pid}),
+            {ok, Session_Key}
     end.
 
 is_session_authed_and_valid(Req) ->
@@ -36,15 +38,20 @@ is_session_authed_and_valid(Req, enabled) ->
     try cowboy_req:cookie(<<"popcorn-session-key">>, Req) of
         {Session_Key, _} ->
             case Session_Key of
-                undefined -> false;
-                _         -> case ets:lookup(current_connected_users, Session_Key) of
-                                 [] -> false;
-                                 _  -> true
-                             end
+                undefined ->
+                    false;
+                _ ->
+                    case ets:lookup(current_connected_users, Session_Key) of
+                        []
+                            -> false;
+                        _
+                            -> true
+                    end
             end
     catch
-        A:B -> ?POPCORN_WARN_MSG("#exception in #session_handler #is_session_authed_and_valid ~p:~p", [A, B]),
-               false
+        A:B ->
+            ?POPCORN_WARN_MSG("#exception in #session_handler #is_session_authed_and_valid ~p:~p", [A, B]),
+            false
     end.
 
 current_username(Req) -> current_username(Req, default_auth(application:get_env(popcorn, http_auth))).
@@ -53,13 +60,16 @@ current_username(Req, enabled) ->
     try cowboy_req:cookie(<<"popcorn-session-key">>, Req) of
         {Session_Key, _} ->
             case Session_Key of
-                undefined -> "";
-                _         -> [{_, Pid}] = ets:lookup(current_connected_users, Session_Key),
-                             gen_fsm:sync_send_event(Pid, get_username)
+                undefined ->
+                    "";
+                _ ->
+                    [{_, Pid}] = ets:lookup(current_connected_users, Session_Key),
+                    gen_fsm:sync_send_event(Pid, get_username)
             end
     catch
-        A:B -> ?POPCORN_WARN_MSG("#exception in #session_handler #current_username ~p:~p", [A, B]),
-               ""
+        A:B ->
+            ?POPCORN_WARN_MSG("#exception in #session_handler #current_username ~p:~p", [A, B]),
+            ""
     end.
 
 return_404(Req, State) ->
