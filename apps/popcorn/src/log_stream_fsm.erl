@@ -82,7 +82,7 @@ init([]) ->
 
 'STARTING'({timeout, _From, idle_disconnect}, State) ->
     gen_fsm:start_timer(?IDLE_DISCONNECT_TIMER, idle_disconnect),
-    {next_state, 'STREAMING', State#state{idle_loops_disconnected = 0}}.
+    {next_state, 'STARTING', State#state{idle_loops_disconnected = 0}}.
 
 'STARTING'(Other, _From, State) ->
     {noreply, undefined, 'STARTING', State}.
