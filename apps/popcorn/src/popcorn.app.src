@@ -1,7 +1,7 @@
 {application, popcorn,
  [
-  {description, "Popcorn log monitor"},
-  {vsn, "0.2.1"},
+  {description, "Popcorn Log Server"},
+  {vsn, "0.1.3"},
   {registered, []},
   {start_phases, [{deserialize_storage, []}]},
   {applications, [

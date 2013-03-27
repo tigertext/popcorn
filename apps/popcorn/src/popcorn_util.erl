@@ -132,9 +132,11 @@ format_log_message(#log_message{timestamp=Timestamp, log_module=Module, log_func
                                 severity=Severity, message=Message, topics=Topics, identities=Identities, log_product=Product,
                                 log_version=Version, message_id=Message_Id, log_nodename=Node_Name},
                    Popcorn_Node) ->
-  UTC_Timestamp = calendar:now_to_universal_time({Timestamp div 1000000000000, 
-                                                  Timestamp div 1000000 rem 1000000,
-                                                  Timestamp rem 1000000}),
+
+  Millisecond_Timestamp = Timestamp * 1000,
+  UTC_Timestamp = calendar:now_to_universal_time({Millisecond_Timestamp div 1000000000000, 
+                                                  Millisecond_Timestamp div 1000000 rem 1000000,
+                                                  Millisecond_Timestamp rem 1000000}),
   {{Year, Month, Day}, {Hour, Minute, Second}} = UTC_Timestamp,
   Formatted_DateTime = lists:flatten(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0BZ", [Year, Month, Day, Hour, Minute, Second])),
   Formatted_Time     = lists:flatten(io_lib:format("~2.10.0B:~2.10.0B:~2.10.0B", [Hour, Minute, Second])),

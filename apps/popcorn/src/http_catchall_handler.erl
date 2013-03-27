@@ -15,9 +15,9 @@ handle(Req, State) ->
     case {cowboy_req:method(Req), cowboy_req:path(Req)} of
         {{<<"GET">>, _}, {<<"/logout">>, _}} ->
             ?POPCORN_DEBUG_MSG("http request for logout page"),
-            Output = mustache:render(popcorn, ?MUSTACHE("logout.mustache"), dict:from_list([])),
-            Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
-            {ok, Reply} = cowboy_req:reply(200, [], Output, Req1),
+            Req1 = session_handler:delete_session(Req),
+            Output = mustache:render(view_login),
+            {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
             {ok, Reply, State};
 
         {{<<"GET">>, _}, {<<"/login">>, _}} ->
@@ -180,6 +180,21 @@ handle(Req, State) ->
 
                     TFun        = pcache:get(rendered_templates, view_alerts),
                     Output      = mustache:render(view_alerts, TFun, Context),
+                    {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
+                    {ok, Reply, State}
+            end;
+
+        {{<<"GET">>, _}, {<<"/settings">>, _}} ->
+            ?POPCORN_DEBUG_MSG("#http_request for settings"),
+            case session_handler:is_session_authed_and_valid(Req) of
+                false ->
+                    Req1 = cowboy_req:set_resp_cookie(<<"popcorn-session-key">>, <<>>, [{path, <<"/">>}], Req),
+                    {ok, Reply} = cowboy_req:reply(301, [{"Location", "/login"}], [], Req1),
+                    {ok, Reply, State};
+                true ->
+                    Context = dict:from_list([{username, binary_to_list(session_handler:current_username(Req))}]),
+                    TFun = pcache:get(rendered_templates, view_settings),
+                    Output = mustache:render(view_settings, TFun, Context),
                     {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
                     {ok, Reply, State}
             end;
