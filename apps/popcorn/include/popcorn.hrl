@@ -72,6 +72,12 @@
                       log_line        :: integer(),
                       log_pid         :: binary()}).
 
+-record(log_client, {account_token     :: string(),
+                     client            :: string(), 
+                     client_os         :: string(),
+                     client_os_version :: string(), 
+                     client_version    :: string()}).
+
 -record(release_scm, {
         key :: binary(),
         role :: binary(),
