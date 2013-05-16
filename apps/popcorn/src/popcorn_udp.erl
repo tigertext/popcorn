@@ -86,6 +86,13 @@ get_tags(Message) ->
 tokenize(Message, Character) ->
     [string:substr(Word, 2, length(Word) -1) || Word <- string:tokens(Message, " ,;-"), string:substr(Word, 1, 1) =:= Character].
 
+-spec decode_protobuffs_message_to_list(binary(), integer()) -> list().
+decode_protobuffs_message_to_list(<<>>, _Idx) ->
+    [];
+decode_protobuffs_message_to_list(Encoded_Message, Idx) ->
+    {{Idx, Value}, Message_Rest} = protobuffs:decode(Encoded_Message, bytes),
+    [Value | decode_protobuffs_message_to_list(Message_Rest, Idx+1)].
+
 -spec decode_protobuffs_message(list(), binary()) -> {#popcorn_node{}, #log_message{}} | error.
 decode_protobuffs_message(Retention_Policy, Encoded_Message) ->
     {{1, Packet_Version},  Rest} = protobuffs:decode(Encoded_Message, bytes),
@@ -103,16 +110,10 @@ decode_protobuffs_message(Retention_Policy, Encoded_Message) ->
     end.
 
 decode_protobuffs_message(Retention_Policy, 0, Encoded_Message) ->
-    {{1, Node},           Rest1} = protobuffs:decode(Encoded_Message, bytes),
-    {{2, Node_Role},      Rest2} = protobuffs:decode(Rest1, bytes),
-    {{3, Node_Version},   Rest3} = protobuffs:decode(Rest2, bytes),
-    {{4, Severity},       Rest4} = protobuffs:decode(Rest3, bytes),
-    {{5, Message},        Rest5} = protobuffs:decode(Rest4, bytes),
-    {{6, Module},         Rest6} = protobuffs:decode(Rest5, bytes),
-    {{7, Function},       Rest7} = protobuffs:decode(Rest6, bytes),
-    {{8, Line},           Rest8} = protobuffs:decode(Rest7, bytes),
-    {{9, Pid},            <<>>}  = protobuffs:decode(Rest8, bytes),
-
+    %% io:fwrite("HERE! ~p ~n",[Encoded_Message]),
+    [Node, Node_Role, Node_Version, Severity, Message, Module, Function, Line, Pid,
+     Account_Token, Client, Client_Os, Client_Version, Os_Version] = decode_protobuffs_message_to_list(Encoded_Message,1),
+    
     {Topics, Identities} = get_tags(binary_to_list(Message)),
 
     Popcorn_Node = #popcorn_node{node_name = check_undefined(Node),
@@ -147,15 +148,12 @@ decode_protobuffs_message(Retention_Policy, 0, Encoded_Message) ->
     {Popcorn_Node, Log_Message};
 
 decode_protobuffs_message(Retention_Policy, 1, Rest) ->
-    {{2, Node},           Rest1} = protobuffs:decode(Rest, bytes),
-    {{3, Node_Role},      Rest2} = protobuffs:decode(Rest1, bytes),
-    {{4, Node_Version},   Rest3} = protobuffs:decode(Rest2, bytes),
-    {{5, Severity},       Rest4} = protobuffs:decode(Rest3, bytes),
-    {{6, Message},        Rest5} = protobuffs:decode(Rest4, bytes),
-    {{7, Module},         Rest6} = protobuffs:decode(Rest5, bytes),
-    {{8, Function},       Rest7} = protobuffs:decode(Rest6, bytes),
-    {{9, Line},           Rest8} = protobuffs:decode(Rest7, bytes),
-    {{10, Pid},           <<>>}  = protobuffs:decode(Rest8, bytes),
+    io:fwrite("The incoming protobuffer decoded  ~p ~n",[decode_protobuffs_message_to_list(Rest,2)]),
+    [Node, Node_Role, Node_Version, Severity, Message, Module, Function, Line, Pid,
+     Account_Token, Client, Client_Os, Client_Version, Os_Version] = decode_protobuffs_message_to_list(Rest,2),
+    
+    %% the info is not save, but should be in Account_Token,
+    %% Client, Client_Os, Client_Version, Os_Version
 
     {Topics, Identities} = get_tags(binary_to_list(Message)),
 
@@ -168,7 +166,6 @@ decode_protobuffs_message(Retention_Policy, 1, Rest) ->
                          undefined -> 7200000000;
                          TTL       -> TTL
                      end,
-
     Popcorn_Node = #popcorn_node{node_name = check_undefined(Node),
                                  role      = check_undefined(Node_Role),
                                  version   = check_undefined(Node_Version)},
@@ -194,16 +191,8 @@ decode_protobuffs_message(Retention_Policy, 1, Rest) ->
     {Popcorn_Node, Log_Message};
 
 decode_protobuffs_message(Retention_Policy, 2, Rest) ->
-    {{2, Node}, Rest1} = protobuffs:decode(Rest, bytes),
-    {{3, Node_Role}, Rest2} = protobuffs:decode(Rest1, bytes),
-    {{4, Node_Version}, Rest3} = protobuffs:decode(Rest2, bytes),
-    {{5, Severity}, Rest4} = protobuffs:decode(Rest3, bytes),
-    {{6, Message}, Rest5} = protobuffs:decode(Rest4, bytes),
-    {{7, Module}, Rest6} = protobuffs:decode(Rest5, bytes),
-    {{8, Function}, Rest7} = protobuffs:decode(Rest6, bytes),
-    {{9, Line}, Rest8} = protobuffs:decode(Rest7, bytes),
-    {{10, Pid}, Rest9} = protobuffs:decode(Rest8, bytes),
-    {{11, Timestamp}, <<>>} = protobuffs:decode(Rest9, float),
+    [Node, Node_Role, Node_Version, Severity, Message,
+     Module, Function, Line, Pid, Timestamp] = decode_protobuffs_message_to_list(Rest,2),
 
     {Topics, Identities} = get_tags(binary_to_list(Message)),
 
@@ -223,6 +212,7 @@ decode_protobuffs_message(Retention_Policy, 2, Rest) ->
 
     %% Ensure we have a module and line so we can perform rollup
     {Module2, Line2} = location_check(Module, Line, Message),
+
 
     Log_Message  = #log_message{message_id   = ?PU:unique_id(),
                                 timestamp    = Timestamp,
