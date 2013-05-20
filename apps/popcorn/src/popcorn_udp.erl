@@ -87,18 +87,12 @@ get_tags(Message) ->
 tokenize(Message, Character) ->
     [string:substr(Word, 2, length(Word) -1) || Word <- string:tokens(Message, " ,;-"), string:substr(Word, 1, 1) =:= Character].
 
--spec decode_protobuffs_message_to_list(binary(), integer()) -> list().
-decode_protobuffs_message_to_list(<<>>, _Idx) ->
-    [];
-decode_protobuffs_message_to_list(Encoded_Message, Idx) ->
-    {{Idx, Value}, Message_Rest} = protobuffs:decode(Encoded_Message, bytes),
-    [Value | decode_protobuffs_message_to_list(Message_Rest, Idx+1)].
-
 -spec decode_protobuffs_message(list(), binary()) -> {#popcorn_node{}, #log_message{}} | error.
 decode_protobuffs_message(Retention_Policy, Encoded_Message) ->
 
     LogMessageProto = popcorn_pb:decode_log_message_proto(Encoded_Message),
     
+    %% I'm pretty sure the message is a string on the other side. 
     {Topics, Identities} = get_tags(binary_to_list(LogMessageProto#log_message_proto.message)),
 
     Popcorn_Node = #popcorn_node{node_name = check_undefined(LogMessageProto#log_message_proto.node),
