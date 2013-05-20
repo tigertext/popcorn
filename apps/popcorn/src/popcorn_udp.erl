@@ -92,12 +92,14 @@ decode_protobuffs_message(Retention_Policy, Encoded_Message) ->
 
     LogMessageProto = popcorn_pb:decode_log_message_proto(Encoded_Message),
     
-    %% I'm pretty sure the message is a string on the other side. 
-    {Topics, Identities} = get_tags(binary_to_list(LogMessageProto#log_message_proto.message)),
+    io:fwrite("~p ~n", [LogMessageProto]),
 
-    Popcorn_Node = #popcorn_node{node_name = check_undefined(LogMessageProto#log_message_proto.node),
-                                 role      = check_undefined(LogMessageProto#log_message_proto.node_role),
-                                 version   = check_undefined(LogMessageProto#log_message_proto.node_version)},
+    %% I'm pretty sure the message is a string on the other side. 
+    {Topics, Identities} = get_tags(LogMessageProto#log_message_proto.message),
+
+    Popcorn_Node = #popcorn_node{node_name = check_undefined(list_to_binary(LogMessageProto#log_message_proto.node)),
+                                 role      = check_undefined(list_to_binary(LogMessageProto#log_message_proto.node_role)),
+                                 version   = check_undefined(list_to_binary(LogMessageProto#log_message_proto.node_version))},
 
     Popcorn_Severity = case check_undefined(LogMessageProto#log_message_proto.severity) of
                           undefined -> popcorn_util:severity_to_number(none);
@@ -116,13 +118,13 @@ decode_protobuffs_message(Retention_Policy, Encoded_Message) ->
                                 message      = check_undefined(LogMessageProto#log_message_proto.message),
                                 topics       = Topics,
                                 identities   = Identities,
-                                log_nodename = Popcorn_Node#popcorn_node.node_name,
-                                log_product  = Popcorn_Node#popcorn_node.role,
+                                log_nodename = list_to_binary(Popcorn_Node#popcorn_node.node_name),
+                                log_product  = list_to_binary(Popcorn_Node#popcorn_node.role),
                                 log_version  = Popcorn_Node#popcorn_node.version,
-                                log_module   = check_undefined(LogMessageProto#log_message_proto.module),
-                                log_function = check_undefined(LogMessageProto#log_message_proto.function),
-                                log_line     = check_undefined(LogMessageProto#log_message_proto.line),
-                                log_pid      = check_undefined(LogMessageProto#log_message_proto.pid)},
+                                log_module   = check_undefined(list_to_binary(LogMessageProto#log_message_proto.module)),
+                                log_function = check_undefined(list_to_binary(LogMessageProto#log_message_proto.function)),
+                                log_line     = check_undefined(list_to_binary(LogMessageProto#log_message_proto.line)),
+                                log_pid      = check_undefined(list_to_binary(LogMessageProto#log_message_proto.pid))},
 
 
     {Popcorn_Node, Log_Message}.
