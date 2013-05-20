@@ -6,6 +6,7 @@
 
 -include("include/popcorn.hrl").
 
+-include_lib("popcorn_proto/include/popcorn_pb.hrl").
 %% ------------------------------------------------------------------
 %% API Function Exports
 %% ------------------------------------------------------------------
@@ -95,34 +96,18 @@ decode_protobuffs_message_to_list(Encoded_Message, Idx) ->
 
 -spec decode_protobuffs_message(list(), binary()) -> {#popcorn_node{}, #log_message{}} | error.
 decode_protobuffs_message(Retention_Policy, Encoded_Message) ->
-    {{1, Packet_Version},  Rest} = protobuffs:decode(Encoded_Message, bytes),
 
-    case Packet_Version of
-        1 -> 
-            decode_protobuffs_message(Retention_Policy, 1, Rest);
-        2 ->
-            decode_protobuffs_message(Retention_Policy, 2, Rest);
-        No_Version when is_binary(No_Version) ->
-            decode_protobuffs_message(Retention_Policy, 0, Encoded_Message);
-        Other ->
-            ?POPCORN_ERROR_MSG("#unknown packet #version: ~p", [Other]),
-            error
-    end.
-
-decode_protobuffs_message(Retention_Policy, 0, Encoded_Message) ->
-    %% io:fwrite("HERE! ~p ~n",[Encoded_Message]),
-    [Node, Node_Role, Node_Version, Severity, Message, Module, Function, Line, Pid,
-     Account_Token, Client, Client_Os, Client_Version, Os_Version] = decode_protobuffs_message_to_list(Encoded_Message,1),
+    LogMessageProto = popcorn_pb:decode_log_message_proto(Encoded_Message),
     
-    {Topics, Identities} = get_tags(binary_to_list(Message)),
+    {Topics, Identities} = get_tags(binary_to_list(LogMessageProto#log_message_proto.message)),
 
-    Popcorn_Node = #popcorn_node{node_name = check_undefined(Node),
-                                 role      = check_undefined(Node_Role),
-                                 version   = check_undefined(Node_Version)},
+    Popcorn_Node = #popcorn_node{node_name = check_undefined(LogMessageProto#log_message_proto.node),
+                                 role      = check_undefined(LogMessageProto#log_message_proto.node_role),
+                                 version   = check_undefined(LogMessageProto#log_message_proto.node_version)},
 
-    Popcorn_Severity = case check_undefined(Severity) of
+    Popcorn_Severity = case check_undefined(LogMessageProto#log_message_proto.severity) of
                           undefined -> popcorn_util:severity_to_number(none);
-                          _         -> Severity
+                          _         -> LogMessageProto#log_message_proto.severity
                        end,
 
     Time_To_Expire = case proplists:get_value(Popcorn_Severity, Retention_Policy) of
@@ -134,100 +119,17 @@ decode_protobuffs_message(Retention_Policy, 0, Encoded_Message) ->
                                 timestamp    = ?NOW,     %% this should be part of the protobuffs packet?
                                 expire_at    = ?NOW + Time_To_Expire,
                                 severity     = Popcorn_Severity,
-                                message      = check_undefined(Message),
+                                message      = check_undefined(LogMessageProto#log_message_proto.message),
                                 topics       = Topics,
                                 identities   = Identities,
                                 log_nodename = Popcorn_Node#popcorn_node.node_name,
                                 log_product  = Popcorn_Node#popcorn_node.role,
                                 log_version  = Popcorn_Node#popcorn_node.version,
-                                log_module   = check_undefined(Module),
-                                log_function = check_undefined(Function),
-                                log_line     = check_undefined(Line),
-                                log_pid      = check_undefined(Pid)},
+                                log_module   = check_undefined(LogMessageProto#log_message_proto.module),
+                                log_function = check_undefined(LogMessageProto#log_message_proto.function),
+                                log_line     = check_undefined(LogMessageProto#log_message_proto.line),
+                                log_pid      = check_undefined(LogMessageProto#log_message_proto.pid)},
 
-    {Popcorn_Node, Log_Message};
-
-decode_protobuffs_message(Retention_Policy, 1, Rest) ->
-    io:fwrite("The incoming protobuffer decoded  ~p ~n",[decode_protobuffs_message_to_list(Rest,2)]),
-    [Node, Node_Role, Node_Version, Severity, Message, Module, Function, Line, Pid,
-     Account_Token, Client, Client_Os, Client_Version, Os_Version] = decode_protobuffs_message_to_list(Rest,2),
-    
-    %% the info is not save, but should be in Account_Token,
-    %% Client, Client_Os, Client_Version, Os_Version
-
-    {Topics, Identities} = get_tags(binary_to_list(Message)),
-
-    Popcorn_Severity = case check_undefined(Severity) of
-                           undefined -> popcorn_util:severity_to_number(none);
-                           _         -> Severity
-                       end,
-
-    Time_To_Expire = case proplists:get_value(Popcorn_Severity, Retention_Policy) of
-                         undefined -> 7200000000;
-                         TTL       -> TTL
-                     end,
-    Popcorn_Node = #popcorn_node{node_name = check_undefined(Node),
-                                 role      = check_undefined(Node_Role),
-                                 version   = check_undefined(Node_Version)},
-
-    %% Ensure we have a module and line so we can perform rollup
-    {Module2, Line2} = location_check(Module, Line, Message),
-
-    Log_Message  = #log_message{message_id   = ?PU:unique_id(),
-                                timestamp    = ?NOW,     %% this should be part of the protobuffs packet?
-                                expire_at    = ?NOW + Time_To_Expire,
-                                severity     = Popcorn_Severity,
-                                message      = check_undefined(Message),
-                                topics       = Topics,
-                                identities   = Identities,
-                                log_nodename = Popcorn_Node#popcorn_node.node_name,
-                                log_product  = Popcorn_Node#popcorn_node.role,
-                                log_version  = Popcorn_Node#popcorn_node.version,
-                                log_module   = check_undefined(Module2),
-                                log_function = check_undefined(Function),
-                                log_line     = check_undefined(Line2),
-                                log_pid      = check_undefined(Pid)},
-
-    {Popcorn_Node, Log_Message};
-
-decode_protobuffs_message(Retention_Policy, 2, Rest) ->
-    [Node, Node_Role, Node_Version, Severity, Message,
-     Module, Function, Line, Pid, Timestamp] = decode_protobuffs_message_to_list(Rest,2),
-
-    {Topics, Identities} = get_tags(binary_to_list(Message)),
-
-    Popcorn_Severity = case check_undefined(Severity) of
-                           undefined -> popcorn_util:severity_to_number(none);
-                           _         -> Severity
-                       end,
-
-    Time_To_Expire = case proplists:get_value(Popcorn_Severity, Retention_Policy) of
-                         undefined -> 7200000000;
-                         TTL       -> TTL
-                     end,
-
-    Popcorn_Node = #popcorn_node{node_name = check_undefined(Node),
-                                 role      = check_undefined(Node_Role),
-                                 version   = check_undefined(Node_Version)},
-
-    %% Ensure we have a module and line so we can perform rollup
-    {Module2, Line2} = location_check(Module, Line, Message),
-
-
-    Log_Message  = #log_message{message_id   = ?PU:unique_id(),
-                                timestamp    = Timestamp,
-                                expire_at    = Timestamp + Time_To_Expire,
-                                severity     = Popcorn_Severity,
-                                message      = check_undefined(Message),
-                                topics       = Topics,
-                                identities   = Identities,
-                                log_nodename = Popcorn_Node#popcorn_node.node_name,
-                                log_product  = Popcorn_Node#popcorn_node.role,
-                                log_version  = Popcorn_Node#popcorn_node.version,
-                                log_module   = check_undefined(Module2),
-                                log_function = check_undefined(Function),
-                                log_line     = check_undefined(Line2),
-                                log_pid      = check_undefined(Pid)},
 
     {Popcorn_Node, Log_Message}.
 
