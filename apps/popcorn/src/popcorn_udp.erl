@@ -92,8 +92,6 @@ decode_protobuffs_message(Retention_Policy, Encoded_Message) ->
 
     LogMessageProto = popcorn_pb:decode_log_message_proto(Encoded_Message),
     
-    io:fwrite("~p ~n", [LogMessageProto]),
-
     %% I'm pretty sure the message is a string on the other side. 
     {Topics, Identities} = get_tags(LogMessageProto#log_message_proto.message),
 
