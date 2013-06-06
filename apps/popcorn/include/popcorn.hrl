@@ -72,6 +72,7 @@
                       log_line        :: integer(),
                       log_pid         :: binary()}).
 
+
 -record(release_scm, {
         key :: binary(),
         role :: binary(),
